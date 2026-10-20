@@ -29,14 +29,46 @@ npm install
 npm run build
 ```
 
-## Executar
+## Executar com Docker (recomendado)
+
+```bash
+cp .env.example .env
+php artisan key:generate
+docker compose up -d --build
+docker compose exec app php artisan migrate
+```
+
+Acesse a aplicação em http://localhost:8000.
+
+### Comandos úteis
+
+```bash
+# Subir / parar / status / logs
+docker compose up -d --build
+docker compose down
+docker compose ps
+docker compose logs -f app nginx mysql redis queue
+
+# Migrations e seeders
+docker compose exec app php artisan migrate
+docker compose exec app php artisan migrate:fresh --seed
+
+# Rebuild após alterar o Dockerfile
+docker compose up -d --build
+
+# Serviços opcionais (perfis)
+docker compose --profile mailpit up -d mailpit   # UI em http://localhost:8025
+docker compose --profile reverb up -d reverb     # ativado no Prompt 12
+```
+
+> MySQL e Redis não são expostos fora da rede Docker por padrão.
+
+## Executar sem Docker
 
 ```bash
 php artisan serve
 npm run dev
 ```
-
-O ambiente Docker completo (Nginx, MySQL, Redis, Reverb) será configurado no Prompt 02.
 
 ## Testes
 
