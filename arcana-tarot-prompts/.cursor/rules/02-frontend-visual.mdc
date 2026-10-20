@@ -1,0 +1,22 @@
+---
+description: Regras para Blade, Bootstrap e identidade visual do Arcana Tarot
+globs: ["resources/views/**/*.blade.php", "resources/css/**/*.css", "resources/js/**/*.js"]
+alwaysApply: false
+---
+- Use Blade, Bootstrap 5.3 e JavaScript sem introduzir React/Vue ou outro framework SPA sem autorização explícita.
+- Identidade visual: mística, elegante, premium e legível; azul-noite, roxo profundo, dourado discreto e marfim.
+- Considere Cormorant Garamond ou Cinzel para títulos e Inter/Manrope para textos, com fallbacks seguros.
+- Evite excesso de brilhos, animações, símbolos e gradientes; priorize hierarquia visual e confiança.
+- Todas as páginas devem ser responsivas, acessíveis por teclado e ter contraste legível.
+- Use componentes Blade reutilizáveis para navegação, alertas, botões, cartões e estados vazios.
+- Estados online, offline e ocupado devem ter rótulo textual além da cor.
+- Nunca renderize conteúdo de usuário como HTML confiável; escape por padrão e sanitize anexos/entradas quando necessário.
+- Não exponha dados de saldo ou consulta de outro cliente.
+- Não coloque segredos ou lógica financeira crítica no JavaScript.
+
+- No chat, renderize cartas de Tarot como mensagens visuais próprias, com imagem responsiva, nome do baralho/carta e data; não trate conteúdo de mensagem como HTML.
+- O seletor no chat deve mostrar somente cartas/baralhos ativos e somente para o atendente autorizado; a interface nunca substitui a validação do servidor.
+- Preview e exibição de imagens devem usar endpoints autorizados, sem URLs diretas para caminhos internos de storage.
+
+- A CTA “Trabalhe conosco” deve ser fácil de localizar e responsiva; seu formulário precisa de labels, mensagens de validação acessíveis e aviso de privacidade.
+- Interfaces de comissão devem separar percentual atual de percentual histórico; não oferecer edição de ganhos acumulados.

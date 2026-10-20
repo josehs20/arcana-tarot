@@ -1,0 +1,23 @@
+---
+description: Regras globais obrigatórias para desenvolvimento do Arcana Tarot
+alwaysApply: true
+---
+# Arcana Tarot — regras globais
+
+- Trabalhe somente no escopo do prompt atual. Não execute prompts futuros automaticamente.
+- Antes de editar, inspecione a estrutura, dependências, scripts e testes existentes.
+- Preserve funcionalidades corretas e evite reescritas amplas sem justificativa.
+- Use Laravel conventions, código legível, validação no servidor, políticas de autorização e injeção de dependências quando apropriado.
+- Não exponha segredos, tokens, dados pessoais ou conteúdo de chats em logs.
+- Nunca considere ocultar um botão como controle de autorização; valide permissões no servidor.
+- Nunca confie em preço, saldo, duração, status ou identidade enviados pelo navegador sem validação no servidor.
+- Use migrations para alterações de esquema e factories/seeders para dados de demonstração.
+- Não edite arquivos gerados ou dependências vendorizadas diretamente.
+- Não remova testes existentes nem reduza sua cobertura para fazer os testes passarem.
+- Execute os testes relevantes e informe resultados reais. Nunca afirme que executou comandos que não executou.
+- Não implemente integrações de pagamento reais com credenciais fictícias.
+- Em cada etapa, informe: resumo, arquivos criados/alterados, comandos executados, testes e pendências.
+- Se houver ambiguidade importante, escolha a opção mais simples e segura compatível com o MVP e documente a decisão.
+
+- Candidaturas públicas são dados pessoais: minimize coleta, limite acesso administrativo e nunca conceda papel de atendente automaticamente após submissão/aprovação.
+- Comissões devem derivar da cobrança oficial, usar taxa congelada por consulta e lançamentos auditáveis; nunca editar ganhos históricos.

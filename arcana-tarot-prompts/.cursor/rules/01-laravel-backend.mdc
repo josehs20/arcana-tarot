@@ -1,0 +1,23 @@
+---
+description: Padrões para backend Laravel, domínio e banco de dados
+globs: ["app/**/*.php", "routes/**/*.php", "database/**/*.php"]
+alwaysApply: false
+---
+- Use PHP compatível com PHP 8.4 e Laravel 13, confirmando as versões instaladas no projeto.
+- Mantenha controllers enxutos; use Form Requests para validação e Policies/Gates para autorização quando apropriado.
+- Regras críticas de negócio devem residir no servidor e ser reutilizáveis por HTTP, filas e eventos.
+- Use transações de banco de dados para operações que alterem múltiplos registros relacionados.
+- Para operações financeiras, implemente idempotência e bloqueio/serialização apropriados contra concorrência.
+- Armazene valores monetários em unidades inteiras da menor unidade monetária (centavos) ou em tipo decimal preciso; nunca use float para dinheiro.
+- Registre créditos e débitos em lançamentos imutáveis; não dependa apenas de um campo de saldo.
+- Defina índices e chaves estrangeiras para consultas e integridade referencial.
+- Não permita que o cliente defina preço, saldo, duração cobrada ou total de uma transação.
+- Não retorne dados privados desnecessários nas APIs/respostas.
+- Use enums/constantes ou transições explícitas para estados controlados.
+
+- Imagens de cartas devem ficar em storage privado; nunca aceite caminhos de arquivos fornecidos pelo navegador.
+- Use `tarot_decks` e `tarot_cards` ou nomes coerentes com o padrão existente; mantenha as mensagens históricas consistentes após inativação/edição do catálogo.
+- Mensagens de carta são registros tipados persistidos no banco, não anexos arbitrários ou URLs confiadas ao cliente.
+
+- A revisão de candidaturas deve usar estados explícitos, autorização administrativa, auditoria do revisor e validação server-side.
+- Percentuais de comissão devem ter limite validado de 0 a 100; a taxa histórica deve ser snapshot e lançamentos idempotentes. Não calcule comissão a partir de dados enviados pelo browser.

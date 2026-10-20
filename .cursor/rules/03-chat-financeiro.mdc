@@ -1,0 +1,28 @@
+---
+description: Regras críticas para chat, sessões e créditos
+globs: ["app/**/*.php", "routes/**/*.php", "resources/js/**/*.js", "resources/views/**/*chat*"]
+alwaysApply: false
+---
+- O navegador nunca é a fonte oficial para início/fim de sessão, duração cobrada ou saldo.
+- Só iniciar cobrança depois que o atendente aceitar e o servidor confirmar a sessão.
+- Um atendente pode ter no máximo uma consulta ativa no MVP.
+- Estados do atendente: online, offline e ocupado. Ocupado é derivado de uma sessão ativa; o servidor controla as transições.
+- Clientes só podem acessar suas próprias consultas e conversas; atendentes só as consultas atribuídas a eles; administradores seguem permissões explícitas.
+- O histórico de mensagens deve ser persistido no MySQL.
+- Autorize canais privados do Reverb/Echo no servidor e confira a participação na consulta.
+- Operações financeiras devem ser transacionais, idempotentes e auditáveis.
+- Não liberar créditos com base em retorno do navegador; validar a confirmação do provedor no servidor.
+- Defina e documente a regra de arredondamento/cobrança por minuto antes de implementar.
+- Reconexão WebSocket não deve criar outra sessão nem duplicar débitos.
+- Se o saldo acabar, encerrar a sessão de forma segura e idempotente.
+- Falha de conexão deve seguir uma política explícita; não continue cobrando indefinidamente sem controle.
+- Não permitir saldo negativo.
+
+- As cartas enviadas são mensagens tipadas persistidas no MySQL; salvar a mensagem antes de transmitir o evento de tempo real.
+- No MVP, apenas o atendente atribuído à consulta ativa pode selecionar e enviar uma carta do catálogo ativo; o cliente recebe a mensagem visual.
+- A imagem enviada deve ter snapshot/caminho imutável gerado pelo servidor para preservar o histórico quando a carta original for editada ou inativada.
+- Entregue imagens por rota protegida que valide a participação do usuário na consulta; nunca divulgue caminhos internos do storage nem aceite URL/caminho de imagem do navegador.
+- A mensagem de carta e o acesso à sua imagem seguem as mesmas regras de autorização e retenção do histórico do chat.
+
+- Comissão do atendente é calculada no servidor sobre o valor monetário oficial da consulta, com snapshot da taxa na abertura da sessão; nunca assumir equivalência crédito/real sem regra documentada.
+- Comissão deve ser registrada de forma idempotente e imutável; alterações/estornos entram como lançamentos adicionais auditados.
