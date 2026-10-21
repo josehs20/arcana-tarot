@@ -333,10 +333,11 @@ Modelo proposto (a ser implementado no Prompt 13):
 
 ### 6.7 Candidaturas ("Trabalhe conosco")
 
-- Formulário público com **coleta mínima** (nome, e-mail, telefone opcional, experiência, mensagem) e aviso de privacidade.
-- Estados explícitos: `pending` → `approved` | `rejected`, com `reviewed_by` e `reviewed_at`.
-- Aprovação **não** cria usuário nem papel de atendente; o admin cria o acesso separadamente (D-010).
-- Acesso às candidaturas restrito a administradores; dados pessoais não vão para logs.
+- Formulário público com **coleta mínima** (nome, e-mail, telefone/WhatsApp, cidade/UF, experiência, abordagem e especialidades/portfólio opcionais), consentimento e aviso de privacidade.
+- Estados explícitos: `pending` → `under_review` → `approved` | `rejected`, com `reviewed_by`, `review_started_at`, `reviewed_at` e auditoria das transições.
+- Duplicidade por e-mail com reaplicação após 30 dias de uma rejeição; mensagem clara ao candidato.
+- Aprovação **não** cria usuário nem papel de atendente; o admin cria o acesso separadamente (D-010/D-019).
+- Acesso às candidaturas restrito a administradores; dados pessoais, notas e payloads não vão para logs/auditoria.
 
 ### 6.8 Catálogo e mensagens de carta
 

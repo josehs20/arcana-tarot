@@ -134,6 +134,25 @@
 - **Decisão**: o preço público é calculado no servidor por `rate_credits_per_minute × credit_unit_price_cents`, sem coluna de preço por atendente. `attendant_profiles.availability` guarda apenas `offline`/`online`; `busy` é derivado de consulta ativa e nunca editável. As consultas do diretório selecionam apenas colunas aprovadas (nome, bio, foto, especialidades, disponibilidade), sem carregar e-mail, comissão ou dados financeiros.
 - **Consequências**: sem configurações válidas, a UI mostra "Valor sob consulta"; o Prompt 08 reutiliza `availability` para o toggle do atendente; mudanças futuras na regra global de preço não exigem alterar o diretório.
 
+### D-019 — Candidaturas: transições auditadas, duplicidade e ativação manual
+
+- **Status**: Aceita (Prompt 07)
+- **Contexto**: o formulário público precisa impedir spam/duplicidade e o admin precisa revisar candidaturas sem transformar aprovação em acesso.
+- **Decisão**:
+  - Estados `pending`, `under_review`, `approved`, `rejected`. Qualquer admin ativo pode assumir uma candidatura `pending` (`under_review`) e aprovar/rejeitar a partir de `pending` ou `under_review`. A transição é feita com bloqueio de linha em transação e grava `reviewed_by`, `status_changed_at`, `review_started_at` (início da análise) e `reviewed_at` (decisão).
+  - Cada transição gera um `audit_logs` com `action`, `actor_id` e `metadata` contendo apenas `from`/`to`; o conteúdo da candidatura e as notas internas não são copiados para a auditoria. `review_notes` guarda a nota interna atual.
+  - Duplicidade por e-mail normalizado: candidaturas `pending`/`under_review` bloqueiam novo envio com erro explícito; `approved` também bloqueia; após `rejected`, é permitido reaplicar somente depois de **30 dias** da decisão. O candidato sempre recebe uma mensagem clara, sem expor IDs ou detalhes administrativos.
+  - A aprovação **não** cria usuário, senha ou papel de atendente. Como ainda não há fluxo de convite/ativação, a criação de acesso é uma etapa administrativa manual e segura, documentada nesta decisão.
+  - O telefone é normalizado para DDD + dígitos e o e-mail para minúsculas; a coleta fica limitada aos dados mínimos do formulário (sem CPF, documentos, dados bancários, senhas ou upload).
+- **Consequências**: o histórico de decisões fica auditável sem reter payloads sensíveis; a política de 30 dias precisa ser reavaliada se o volume de reaplicações crescer; a ativação continua manual até existir convite seguro.
+
+### D-020 — Anti-spam do formulário público
+
+- **Status**: Aceita (Prompt 07)
+- **Contexto**: o formulário é público e não há integração de CAPTCHA ou e-mail transacional no MVP.
+- **Decisão**: validação integral no servidor, `throttle:5,10` por IP na rota `POST /trabalhe-conosco`, campo honeypot invisível (`website`) que responde com confirmação neutra sem persistir, e política de duplicidade por e-mail (D-019). Requisições acima do limite recebem a página 429 existente.
+- **Consequências**: nenhuma dependência externa; o rate limit é por IP e o honeypot pode ser contornado por bots sofisticados, então a duplicidade e a revisão humana continuam sendo a barreira final.
+
 ---
 
 ## 2. Dúvidas que precisam de confirmação
@@ -180,3 +199,4 @@
 | 2026-10-20 | Prompt 00 | Criação do documento com decisões D-001–D-016 e dúvidas Q-01–Q-16 |
 | 2026-10-20 | Prompt 05 | D-013 confirmada/implementada; D-017 (design system e componentes Blade) adicionada |
 | 2026-10-20 | Prompt 06 | D-018 (preço público derivado e disponibilidade) adicionada; site público, diretório e placeholders institucionais |
+| 2026-10-20 | Prompt 07 | D-019 (candidaturas, duplicidade e ativação manual) e D-020 (anti-spam) adicionadas; formulário público e painel de revisão |

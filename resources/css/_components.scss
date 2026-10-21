@@ -280,6 +280,64 @@
     color: #f0a5a2;
 }
 
+// Campo honeypot: fora da tela, mas ainda presente no DOM para atrair bots.
+// Não usar `display: none`, pois alguns bots ignoram campos escondidos assim.
+.hp-field {
+    height: 1px;
+    left: -9999px;
+    overflow: hidden;
+    position: absolute;
+    top: auto;
+    width: 1px;
+}
+
+.application-table td {
+    vertical-align: middle;
+}
+
+.application-detail__label {
+    color: var(--arcana-ivory-dim);
+    font-size: .78rem;
+    letter-spacing: .04em;
+    margin-bottom: .15rem;
+    text-transform: uppercase;
+}
+
+.application-detail__value {
+    margin-bottom: 1rem;
+    white-space: pre-line;
+}
+
+.application-timeline {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.application-timeline__item {
+    border-left: 1px solid rgba(201, 168, 76, .3);
+    margin-left: .35rem;
+    padding: 0 0 1rem 1rem;
+    position: relative;
+}
+
+.application-timeline__item::before {
+    background: var(--arcana-gold);
+    border-radius: 50%;
+    content: '';
+    height: .5rem;
+    left: -.3rem;
+    position: absolute;
+    top: .35rem;
+    width: .5rem;
+}
+
+.application-timeline__item:last-child {
+    border-left-color: transparent;
+    padding-bottom: 0;
+}
+
+
 // =====================================================================
 // Accordion (FAQ)
 // =====================================================================

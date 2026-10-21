@@ -57,11 +57,13 @@
                     <h2 class="h6 mb-0">Aprovações</h2>
                 </x-ui.card-header>
                 <x-ui.card-body>
-                    <x-ui.empty-state
-                        icon="◈"
-                        title="Nada pendente"
-                        text="Novos pedidos de atendimento aguardando análise aparecem nesta seção."
-                    />
+                    <p class="stat-card__value mb-1">{{ $pendingApplicationsCount }}</p>
+                    <p class="stat-card__hint">
+                        {{ $pendingApplicationsCount === 1 ? 'candidatura aguardando análise' : 'candidaturas aguardando análise' }}
+                    </p>
+                    <a class="btn btn-ghost btn-sm mt-2" href="{{ route('admin.applications.index') }}">
+                        Ver candidaturas
+                    </a>
                 </x-ui.card-body>
             </x-ui.card>
         </div>

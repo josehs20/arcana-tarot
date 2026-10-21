@@ -183,17 +183,42 @@ polimórficas:
 | Coluna | Tipo | Notas |
 |---|---|---|
 | `id` | bigint PK | |
-| `name` / `email` | string | dados de contato |
-| `phone` | string(30) nullable | |
-| `experience_summary` | text nullable | campo profissional mínimo |
-| `message` | text nullable | motivação |
+| `name` / `email` | string | dados de contato; e-mail normalizado em minúsculas |
+| `phone` | string(30) nullable | form required; armazenado como DDD + número (somente dígitos) |
+| `city` / `state` | string(120) / char(2) nullable | localização opcional; UF em maiúsculas |
+| `experience_summary` | text nullable | experiência com Tarot (obrigatória no formulário) |
+| `message` | text nullable | apresentação/abordagem de atendimento (obrigatória no formulário) |
+| `specialties` | json nullable | até 8 áreas, normalizadas; `null` quando não informadas |
+| `portfolio_url` | string(255) nullable | link http/https opcional |
 | `status` | string(20) | enum `ApplicationStatus`: `pending`, `under_review`, `approved`, `rejected` |
-| `reviewed_by` | FK users nullable | administrador revisor; nullOnDelete |
-| `review_notes` | text nullable | notas internas |
-| `submitted_at` / `reviewed_at` | timestamp nullable | datas de envio/revisão |
-| `timestamps` | | |
+| `reviewed_by` | FK users nullable | administrador que assumiu/decidiu; nullOnDelete |
+| `review_notes` | text nullable | nota interna atual; nunca exposta publicamente |
+| `submitted_at` | timestamp nullable | envio |
+| `consent_at` | timestamp nullable | prova do consentimento para análise |
+| `status_changed_at` | timestamp nullable | última transição de estado |
+| `review_started_at` | timestamp nullable | início da análise (`under_review`) |
+| `reviewed_at` | timestamp nullable | data da decisão final |
+| `timestamps` | | `updated_at` cobre alterações de nota/revisor |
 
-Índices: `status`, `email`. **Aprovação não concede acesso automaticamente.**
+Índices: `(email)`, `(status)`, `(email, status)`, `(status, submitted_at)`.
+**Aprovação não concede acesso automaticamente.**
+
+Política de duplicidade (D-019):
+
+- Enquanto houver candidatura `pending` ou `under_review` com o mesmo e-mail
+  normalizado, uma nova submissão é recusada com mensagem explícita ao
+  candidato.
+- Candidatura `approved` bloqueia novas submissões para o mesmo e-mail; ajustes
+  de acesso são tratados pela equipe.
+- Após `rejected`, é permitida uma nova candidatura somente após **30 dias** da
+  decisão (`reviewed_at`; fallback `updated_at`). O prazo é informado na
+  mensagem de erro.
+- A submissão não cria `users`, papel `attendant`, senha ou credenciais.
+
+Auditoria: cada transição grava `audit_logs.action =
+attendant_application.under_review|approved|rejected`, `actor_id` e
+`metadata` apenas com `from`/`to`. O conteúdo da candidatura e as notas não são
+copiados para a auditoria.
 
 ### 2.11 `commission_ledger_entries` — comissão por consulta (imutável)
 
@@ -245,7 +270,7 @@ polimórficas:
 6. **Comissão sobre o valor cobrado** — `base_amount_cents` é o valor monetário efetivamente cobrado na consulta; o cálculo (Prompt 16) ocorre no servidor e grava `commission_amount_cents` imutável.
 7. **Uma consulta ativa por atendente** — garantia de aplicação (Prompt 10), apoiada pelo índice `(attendant_id, status)`.
 8. **Mensagens tipadas com snapshot** — mensagens `tarot_card` guardam `deck_name`, `card_name` e `image_path` (snapshot) e referenciam `tarot_card_id` de forma opcional (`nullOnDelete`), preservando o histórico mesmo que a carta/baralho seja desativado.
-9. **Candidatura ≠ acesso** — aprovar `attendant_applications` não cria `users` nem papel de atendente; revisão registra `reviewed_by` e `reviewed_at`.
+9. **Candidatura ≠ acesso** — aprovar `attendant_applications` não cria `users` nem papel de atendente; revisão registra `reviewed_by`, `reviewed_at`, `review_started_at` e `status_changed_at`, com histórico em `audit_logs`.
 10. **Imagens fora do banco** — apenas `image_path`/metadata no MySQL; binário em storage privado.
 
 ## 4. Política de exclusão e snapshot de imagem

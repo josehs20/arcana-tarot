@@ -6,11 +6,6 @@ use Illuminate\View\View;
 
 class PageController extends Controller
 {
-    public function workWithUs(): View
-    {
-        return view('public.work-with-us');
-    }
-
     public function terms(): View
     {
         return view('public.legal.terms');

@@ -329,6 +329,23 @@ o texto. As cores vêm de `.status-dot--online/busy/offline` e
   `.invalid-feedback` visível (`d-block`).
 - O label recebe `.required`, que desenha `*` em dourado via CSS.
 
+### 7.6.1 Área de texto — `<x-ui.textarea>`
+
+Mesmo contrato visual e de validação de `<x-ui.field>`, para textos longos.
+
+| Prop | Descrição |
+|---|---|
+| `name` | obrigatório; usado em `name`, `id`, `old()` e mensagens |
+| `label` | rótulo; padrão derivado do `name` |
+| `value` | valor inicial (sobreposto por `old()`) |
+| `rows` | número de linhas; padrão `5` |
+| `required` / `disabled` / `help` | iguais ao campo de input |
+| `ignore-old` | não aplica `old()` ao valor |
+
+```blade
+<x-ui.textarea name="message" label="Mensagem" rows="6" required />
+```
+
 ### 7.7 Estado vazio — `<x-ui.empty-state>`
 
 | Prop | Descrição |
@@ -400,6 +417,8 @@ recebe apenas dados aprovados — nunca e-mail, comissão ou informações finan
 | `.attendant-card*`, `.attendant-avatar*` | cartão e avatar do diretório |
 | `.profile-header`, `.profile-name`, `.profile-bio`, `.profile-price*` | perfil público |
 | `.work-cta*` | chamada "Trabalhe conosco" |
+| `.application-form` | formulário público de candidatura |
+| `.hp-field` | honeypot fora da tela (não usar `display: none`) |
 | `.prose-arcana` | textos institucionais/placeholder |
 | `.footer-arcana` | rodapé público |
 
@@ -424,6 +443,9 @@ Todas as animações são desativadas por `prefers-reduced-motion: reduce`
 | `.sidebar-panel` | sidebar fixa sem offcanvas (reserva) |
 | `.page-header*` | cabeçalho de página |
 | `.stat-card*` | cartões de métrica |
+| `.application-table` | tabela de candidaturas no admin |
+| `.application-detail__label`, `.application-detail__value` | rótulos/valores do detalhe da candidatura |
+| `.application-timeline*` | histórico de revisão |
 | `.auth-shell`, `.auth-card*` | telas de autenticação |
 | `.error-page*` | páginas de erro |
 
@@ -444,6 +466,11 @@ Todas as animações são desativadas por `prefers-reduced-motion: reduce`
 - **Navegação mobile**: o offcanvas tem `aria-label`, botão de fechar rotulado e
   o toggler usa `aria-controls`/`aria-label`.
 - **Alertas**: `role="alert"`; ícones são decorativos (`aria-hidden="true"`).
+- **Confirmação**: ações administrativas irreversíveis usam `form[data-confirm]`
+  e o `confirm()` nativo (sem biblioteca nova); o servidor continua validando a
+  transição, independentemente do JavaScript.
+- **Honeypot**: o campo `website` fica em `.hp-field` (fora da tela) e com
+  `aria-hidden="true"`/`tabindex="-1"`; nunca é anunciado a pessoas.
 - **Movimento**: qualquer animação respeita `prefers-reduced-motion`.
 
 ---

@@ -1,3 +1,7 @@
-<span {{ $attributes->merge(['class' => 'badge badge-' . ($variant ?? 'secondary')])->except(['variant', 'classes']) }}>
+@props([
+    'variant' => 'secondary',
+])
+
+<span {{ $attributes->merge(['class' => 'badge badge-' . $variant])->except(['variant', 'classes']) }}>
     {{ $slot }}
 </span>

@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\Admin\ApplicationReviewController;
+use App\Http\Controllers\AttendantApplicationController;
 use App\Http\Controllers\AttendantDirectoryController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
@@ -17,7 +19,10 @@ Route::get('atendentes/{attendant}', [AttendantDirectoryController::class, 'show
     ->whereNumber('attendant')
     ->name('attendants.show');
 
-Route::get('trabalhe-conosco', [PageController::class, 'workWithUs'])->name('work-with-us.index');
+Route::get('trabalhe-conosco', [AttendantApplicationController::class, 'create'])->name('work-with-us.index');
+Route::post('trabalhe-conosco', [AttendantApplicationController::class, 'store'])
+    ->middleware('throttle:5,10')
+    ->name('work-with-us.store');
 Route::get('termos', [PageController::class, 'terms'])->name('legal.terms');
 Route::get('privacidade', [PageController::class, 'privacy'])->name('legal.privacy');
 Route::get('contato', [PageController::class, 'contact'])->name('contact');
@@ -42,4 +47,23 @@ Route::middleware('auth')->group(function () {
     Route::get('admin', [DashboardController::class, 'admin'])->middleware('role:admin')->name('admin.dashboard');
     Route::get('attendant', [DashboardController::class, 'attendant'])->middleware('role:attendant')->name('attendant.dashboard');
     Route::get('client', [DashboardController::class, 'client'])->middleware('role:client')->name('client.dashboard');
+
+    Route::prefix('admin/candidaturas')
+        ->name('admin.applications.')
+        ->middleware('role:admin')
+        ->group(function () {
+            Route::get('/', [ApplicationReviewController::class, 'index'])->name('index');
+            Route::get('{application}', [ApplicationReviewController::class, 'show'])
+                ->whereNumber('application')
+                ->name('show');
+            Route::patch('{application}/iniciar-analise', [ApplicationReviewController::class, 'start'])
+                ->whereNumber('application')
+                ->name('start');
+            Route::patch('{application}/aprovar', [ApplicationReviewController::class, 'approve'])
+                ->whereNumber('application')
+                ->name('approve');
+            Route::patch('{application}/rejeitar', [ApplicationReviewController::class, 'reject'])
+                ->whereNumber('application')
+                ->name('reject');
+        });
 });

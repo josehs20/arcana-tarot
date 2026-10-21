@@ -273,7 +273,7 @@ class PublicSiteTest extends TestCase
             ->assertSee('R$ 1,99');
     }
 
-    public function test_work_with_us_call_to_action_and_placeholders_render(): void
+    public function test_work_with_us_call_to_action_and_institutional_pages_render(): void
     {
         $this->get(route('home'))
             ->assertOk()
@@ -283,10 +283,10 @@ class PublicSiteTest extends TestCase
 
         $this->get(route('work-with-us.index'))
             ->assertOk()
-            ->assertSee('Página em preparação')
-            ->assertSee('não garante aprovação automática')
+            ->assertSee('Formulário de candidatura')
+            ->assertSee('name="consent"', false)
             ->assertSee('não garante aprovação')
-            ->assertDontSee('<form', false);
+            ->assertDontSee('Página em preparação');
 
         $this->get(route('legal.terms'))
             ->assertOk()
