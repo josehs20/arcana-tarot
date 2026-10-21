@@ -354,3 +354,164 @@
     margin: 0;
     max-width: 46ch;
 }
+
+// =====================================================================
+// Cartão público de atendente
+// =====================================================================
+.attendant-card {
+    background: var(--arcana-surface);
+    border: 1px solid rgba(201, 168, 76, .18);
+    border-radius: $arcana-radius;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.5rem;
+    position: relative;
+    transition: border-color var(--arcana-transition), transform var(--arcana-transition),
+        box-shadow var(--arcana-transition);
+
+    &:hover,
+    &:focus-within {
+        border-color: rgba(201, 168, 76, .45);
+        box-shadow: $arcana-shadow;
+        transform: translateY(-2px);
+    }
+
+    &:focus-within {
+        box-shadow: $arcana-ring-gold, $arcana-shadow;
+    }
+}
+
+.attendant-card__head {
+    align-items: center;
+    display: flex;
+    gap: 1rem;
+}
+
+.attendant-card__name {
+    font-family: $arcana-font-display;
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin: 0 0 .3rem;
+
+    a {
+        color: var(--arcana-ivory);
+        text-decoration: none;
+
+        // Torna o cartão inteiro clicável sem aninhar outros links.
+        &::after {
+            content: '';
+            inset: 0;
+            position: absolute;
+        }
+
+        &:focus-visible {
+            outline: none;
+        }
+    }
+}
+
+.attendant-card__bio {
+    color: var(--arcana-ivory-muted);
+    font-size: .93rem;
+    margin: 0;
+}
+
+.attendant-card__specialties,
+.profile-specialties {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .45rem;
+
+    li {
+        margin: 0;
+    }
+}
+
+.attendant-card__footer {
+    align-items: center;
+    border-top: 1px solid rgba(201, 168, 76, .16);
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    margin-top: auto;
+    padding-top: 1rem;
+}
+
+.attendant-card__price {
+    color: var(--arcana-gold-light);
+    font-weight: 600;
+    white-space: nowrap;
+
+    small {
+        color: var(--arcana-ivory-dim);
+        font-weight: 400;
+    }
+}
+
+.attendant-card__link {
+    color: var(--arcana-ivory-muted);
+    font-size: .875rem;
+    transition: color var(--arcana-transition);
+}
+
+.attendant-card:hover .attendant-card__link,
+.attendant-card:focus-within .attendant-card__link {
+    color: var(--arcana-gold-light);
+}
+
+// Avatar com iniciais (fallback acessível quando não há foto enviada).
+.attendant-avatar,
+.profile-avatar {
+    align-items: center;
+    background: linear-gradient(160deg, rgba(74, 45, 133, .75), rgba(23, 20, 51, .95));
+    border: 1px solid rgba(201, 168, 76, .35);
+    border-radius: 50%;
+    display: flex;
+    flex-shrink: 0;
+    justify-content: center;
+    overflow: hidden;
+
+    img {
+        height: 100%;
+        object-fit: cover;
+        width: 100%;
+    }
+}
+
+.attendant-avatar {
+    height: 4.5rem;
+    width: 4.5rem;
+}
+
+.profile-avatar {
+    height: 7rem;
+    width: 7rem;
+}
+
+.attendant-avatar__initials,
+.profile-avatar__initials {
+    color: var(--arcana-gold-light);
+    font-family: $arcana-font-display;
+    font-weight: 600;
+    letter-spacing: .06em;
+}
+
+.attendant-avatar__initials {
+    font-size: 1.35rem;
+}
+
+.profile-avatar__initials {
+    font-size: 2.2rem;
+}
+
+@media (max-width: 575.98px) {
+    .attendant-card {
+        padding: 1.25rem;
+    }
+
+    .profile-avatar {
+        height: 5.5rem;
+        width: 5.5rem;
+    }
+}

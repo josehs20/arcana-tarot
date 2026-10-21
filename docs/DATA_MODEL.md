@@ -64,12 +64,16 @@ polimórficas:
 | `user_id` | FK users (unique) | 1:1; cascadeOnDelete |
 | `display_name` | string | nome público |
 | `bio` | text nullable | apresentação |
+| `photo_path` | string nullable | foto pública opcional no disco `public` (`storage/app/public`) |
 | `specialties` | json nullable | lista de especialidades |
 | `commission_rate_bps` | unsignedInteger | comissão individual em **basis points** (0–10000) |
 | `is_published` | boolean | status de publicação |
+| `availability` | string(20) | `offline`/`online`; `busy` é derivado de consulta ativa |
 | `timestamps` | | |
 
-> A disponibilidade `online/offline/busy` (derivada de consulta ativa) será adicionada no Prompt 08.
+> `photo_path` e `availability` foram adicionados no Prompt 06 para o site
+> público. O toggle manual online/offline no painel e as transições de estado são
+> implementados no Prompt 08; `busy` nunca é persistido.
 
 ### 2.3 `consultations` — consultas/sessões
 

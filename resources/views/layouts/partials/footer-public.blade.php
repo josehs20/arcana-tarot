@@ -1,45 +1,42 @@
 <footer class="footer-arcana py-5 mt-auto" role="contentinfo">
     <div class="container-wide">
-        <div class="row">
-            <div class="col-lg-4 mb-4 mb-lg-0">
+        <div class="row g-4">
+            <div class="col-lg-5">
                 <h5 class="text-gold mb-3">Arcana Tarot</h5>
-                <p class="text-ivory-muted small">Consultas de tarô online com atendentes especializados. Conecte-se com o místico.</p>
+                <p class="text-ivory-muted small mb-3">
+                    Consultas de tarô online com atendentes especializados. Conecte-se com o místico.
+                </p>
+                <p class="text-ivory-dim small mb-0">
+                    Um ambiente reservado para suas perguntas, com valor e disponibilidade
+                    exibidos antes de qualquer solicitação.
+                </p>
             </div>
 
-            <div class="col-lg-2 col-md-4 mb-4 mb-md-0">
-                <h6 class="text-ivory mb-3">Empresa</h6>
+            <div class="col-6 col-lg-2">
+                <h6 class="text-ivory mb-3">Navegação</h6>
                 <ul class="list-unstyled small">
-                    <li class="mb-2"><a href="#" class="text-ivory-muted">Sobre nós</a></li>
-                    <li class="mb-2"><a href="#" class="text-ivory-muted">Carreiras</a></li>
-                    <li class="mb-2"><a href="#" class="text-ivory-muted">Imprensa</a></li>
+                    <li class="mb-2"><a href="{{ route('home') }}">Início</a></li>
+                    <li class="mb-2"><a href="{{ route('attendants.index') }}">Atendentes</a></li>
+                    <li class="mb-2"><a href="{{ route('home') }}#como-funciona">Como funciona</a></li>
+                    <li class="mb-2"><a href="{{ route('home') }}#faq">Dúvidas frequentes</a></li>
                 </ul>
             </div>
 
-            <div class="col-lg-2 col-md-4 mb-4 mb-md-0">
-                <h6 class="text-ivory mb-3">Suporte</h6>
+            <div class="col-6 col-lg-2">
+                <h6 class="text-ivory mb-3">Institucional</h6>
                 <ul class="list-unstyled small">
-                    <li class="mb-2"><a href="#" class="text-ivory-muted">Central de ajuda</a></li>
-                    <li class="mb-2"><a href="#" class="text-ivory-muted">Contato</a></li>
-                    <li class="mb-2"><a href="#" class="text-ivory-muted">Status do sistema</a></li>
+                    <li class="mb-2"><a href="{{ route('work-with-us.index') }}">Trabalhe conosco</a></li>
+                    <li class="mb-2"><a href="{{ route('contact') }}">Contato</a></li>
                 </ul>
             </div>
 
-            <div class="col-lg-2 col-md-4 mb-4 mb-md-0">
+            <div class="col-12 col-lg-3">
                 <h6 class="text-ivory mb-3">Legal</h6>
                 <ul class="list-unstyled small">
-                    <li class="mb-2"><a href="#" class="text-ivory-muted">Termos de uso</a></li>
-                    <li class="mb-2"><a href="#" class="text-ivory-muted">Política de privacidade</a></li>
-                    <li class="mb-2"><a href="#" class="text-ivory-muted">Cookies</a></li>
+                    <li class="mb-2"><a href="{{ route('legal.terms') }}">Termos de uso</a></li>
+                    <li class="mb-2"><a href="{{ route('legal.privacy') }}">Política de privacidade</a></li>
                 </ul>
-            </div>
-
-            <div class="col-lg-2 col-md-4">
-                <h6 class="text-ivory mb-3">Redes</h6>
-                <ul class="list-unstyled small">
-                    <li class="mb-2"><a href="#" class="text-ivory-muted">Instagram</a></li>
-                    <li class="mb-2"><a href="#" class="text-ivory-muted">Twitter</a></li>
-                    <li class="mb-2"><a href="#" class="text-ivory-muted">LinkedIn</a></li>
-                </ul>
+                <p class="text-ivory-dim small mb-0">Documentos em revisão jurídica.</p>
             </div>
         </div>
 

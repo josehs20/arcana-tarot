@@ -127,6 +127,13 @@
 - **Decisão**: usar tokens Sass + custom properties (`resources/css/`), layouts como componentes Blade anônimos (`x-layouts.public`, `x-layouts.guest`, `x-layouts.panel`, `x-layouts.error`) e componentes reutilizáveis (`x-ui.*`) para botões, cards, alertas, badges/status, campos e estados vazios. Estados de presença sempre exibem texto além da cor e animações respeitam `prefers-reduced-motion`.
 - **Consequências**: telas novas devem reutilizar os componentes e layouts; a paleta e o catálogo ficam em `docs/DESIGN_SYSTEM.md`.
 
+### D-018 — Perfil público: preço derivado do servidor e disponibilidade explícita
+
+- **Status**: Aceita (Prompt 06)
+- **Contexto**: o cartão público exige preço por minuto e status atual, mas o modelo não tinha preço individual nem presença persistida.
+- **Decisão**: o preço público é calculado no servidor por `rate_credits_per_minute × credit_unit_price_cents`, sem coluna de preço por atendente. `attendant_profiles.availability` guarda apenas `offline`/`online`; `busy` é derivado de consulta ativa e nunca editável. As consultas do diretório selecionam apenas colunas aprovadas (nome, bio, foto, especialidades, disponibilidade), sem carregar e-mail, comissão ou dados financeiros.
+- **Consequências**: sem configurações válidas, a UI mostra "Valor sob consulta"; o Prompt 08 reutiliza `availability` para o toggle do atendente; mudanças futuras na regra global de preço não exigem alterar o diretório.
+
 ---
 
 ## 2. Dúvidas que precisam de confirmação
@@ -172,3 +179,4 @@
 |---|---|---|
 | 2026-10-20 | Prompt 00 | Criação do documento com decisões D-001–D-016 e dúvidas Q-01–Q-16 |
 | 2026-10-20 | Prompt 05 | D-013 confirmada/implementada; D-017 (design system e componentes Blade) adicionada |
+| 2026-10-20 | Prompt 06 | D-018 (preço público derivado e disponibilidade) adicionada; site público, diretório e placeholders institucionais |

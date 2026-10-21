@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Enums\AttendantAvailability;
 use App\Enums\UserRole;
 use App\Models\AttendantApplication;
 use App\Models\AttendantProfile;
@@ -33,6 +34,7 @@ class DatabaseSeeder extends Seeder
                 'specialties' => ['Amor', 'Carreira', 'Autoconhecimento'],
                 'commission_rate_bps' => 3000,
                 'is_published' => true,
+                'availability' => AttendantAvailability::Online->value,
             ],
         );
 

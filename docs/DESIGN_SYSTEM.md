@@ -359,6 +359,17 @@ Não é um componente Blade (é marcação + classes), usada nos dashboards:
 </div>
 ```
 
+### 7.9 Card público do atendente — `<x-public.attendant-card>`
+
+```blade
+<x-public.attendant-card :attendant="$attendant" :price="$pricePerMinute" />
+```
+
+Exibe foto opcional (fallback de iniciais), nome profissional, status, bio curta,
+até três especialidades e preço por minuto. O cartão inteiro é clicável por meio
+do `::after` no link do nome; `:focus-within` aplica o anel dourado. O componente
+recebe apenas dados aprovados — nunca e-mail, comissão ou informações financeiras.
+
 ---
 
 ## 8. Utilitários e classes de apoio
@@ -380,10 +391,16 @@ Não é um componente Blade (é marcação + classes), usada nos dashboards:
 |---|---|
 | `.container-wide` | container de até `1320px` |
 | `.arcana-hero`, `.arcana-hero__title`, `.arcana-hero__divider` | hero |
+| `.arcana-hero--compact` | hero reduzido de listagem/perfil |
 | `.arcana-section`, `.arcana-section--alt`, `__title`, `__subtitle` | seções |
 | `.arcana-feature`, `__icon`, `__title`, `__text` | cards de conteúdo |
 | `.arcana-eyebrow`, `.arcana-lead` | rótulos e introdução |
 | `.arcana-stars` | textura de estrelas via `radial-gradient` |
+| `.breadcrumb-arcana` | trilha de navegação pública |
+| `.attendant-card*`, `.attendant-avatar*` | cartão e avatar do diretório |
+| `.profile-header`, `.profile-name`, `.profile-bio`, `.profile-price*` | perfil público |
+| `.work-cta*` | chamada "Trabalhe conosco" |
+| `.prose-arcana` | textos institucionais/placeholder |
 | `.footer-arcana` | rodapé público |
 
 ### Movimento

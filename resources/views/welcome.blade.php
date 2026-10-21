@@ -37,6 +37,11 @@
                             <a class="btn btn-primary btn-lg" href="{{ $panelRoute }}">Ir para o painel</a>
                         @endguest
                     </div>
+
+                    <p class="small text-ivory-dim mt-3 mb-0">
+                        É tarólogo?
+                        <a class="text-gold" href="{{ route('work-with-us.index') }}">Trabalhe conosco <span aria-hidden="true">&rarr;</span></a>
+                    </p>
                 </div>
 
                 <div class="col-lg-5">
@@ -123,28 +128,59 @@
     {{-- Atendentes --}}
     <section class="arcana-section arcana-section--alt" id="atendentes">
         <div class="container-wide">
-            <div class="text-center mb-5">
-                <p class="arcana-eyebrow mb-2">Atendentes</p>
-                <h2 class="arcana-section__title">Especialistas por área</h2>
-                <p class="arcana-section__subtitle mx-auto">
-                    Cada consulta é conduzida por quem se dedica àquele tema há anos.
-                </p>
+            <div class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-5">
+                <div>
+                    <p class="arcana-eyebrow mb-2">Atendentes</p>
+                    <h2 class="arcana-section__title">Quem está online agora</h2>
+                    <p class="arcana-section__subtitle">
+                        Perfis publicados, especialidades e disponibilidade vêm direto do
+                        servidor. Escolha com quem conversar.
+                    </p>
+                </div>
+
+                <a class="btn btn-ghost" href="{{ route('attendants.index') }}">Ver diretório completo</a>
             </div>
 
-            <div class="row g-4">
-                @foreach ([
-                    ['Amor e relacionamentos', 'Leituras de pares, reencontros e caminhos do coração.'],
-                    ['Carreira e dinheiro', 'Propósito profissional, decisões e prosperidade.'],
-                    ['Desenvolvimento pessoal', 'Ciclos, bloqueios internos e novos começos.'],
-                    ['Tarô cigano', 'Leituras amplas para perguntas complexas e temas externos.'],
-                ] as $i => [$titulo, $texto])
-                    <div class="col-sm-6 col-lg-3">
-                        <div class="arcana-feature h-100 arcana-fade-up arcana-fade-up-delay-{{ $i % 4 }}">
-                            <h3 class="arcana-feature__title fs-6">{{ $titulo }}</h3>
-                            <p class="arcana-feature__text">{{ $texto }}</p>
+            @if ($attendants->isEmpty())
+                <x-ui.empty-state
+                    icon="☾"
+                    title="Nenhum atendente online neste momento"
+                    text="Todos os atendentes estão offline agora. Você pode conhecer os perfis publicados e voltar quando alguém estiver disponível."
+                >
+                    <a class="btn btn-ghost mt-2" href="{{ route('attendants.index') }}">Ver todos os atendentes</a>
+                </x-ui.empty-state>
+            @else
+                <div class="row g-4">
+                    @foreach ($attendants as $attendant)
+                        <div class="col-md-6 col-xl-4">
+                            <x-public.attendant-card :attendant="$attendant" :price="$pricePerMinute" />
                         </div>
-                    </div>
-                @endforeach
+                    @endforeach
+                </div>
+            @endif
+        </div>
+    </section>
+
+    {{-- Trabalhe conosco --}}
+    <section class="arcana-section" id="trabalhe-conosco">
+        <div class="container-wide">
+            <div class="work-cta">
+                <div class="work-cta__text">
+                    <p class="arcana-eyebrow mb-2">Para profissionais</p>
+                    <h2 class="arcana-section__title">Seu dom também tem lugar aqui</h2>
+                    <p class="arcana-section__subtitle mb-2">
+                        Se você lê cartas e quer atender em um ambiente reservado, conheça o
+                        processo de candidatura do Arcana Tarot.
+                    </p>
+                    <p class="small text-ivory-dim mb-0">
+                        Enviar uma candidatura não garante aprovação automática; cada perfil
+                        passa por análise.
+                    </p>
+                </div>
+
+                <div class="work-cta__actions">
+                    <a class="btn btn-primary btn-lg" href="{{ route('work-with-us.index') }}">Trabalhe conosco</a>
+                </div>
             </div>
         </div>
     </section>

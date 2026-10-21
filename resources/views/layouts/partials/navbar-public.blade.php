@@ -1,7 +1,7 @@
 <nav class="navbar navbar-arcana navbar-expand-lg" aria-label="Navegação principal">
     <div class="container-wide">
         {{-- Brand --}}
-        <a class="navbar-brand" href="/" aria-label="Arcana Tarot - Início">
+        <a class="navbar-brand" href="{{ route('home') }}" aria-label="Arcana Tarot - Início">
             <svg class="me-2" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
                 <path d="M12 6v6l4 2"/>
@@ -18,16 +18,25 @@
         <div class="collapse navbar-collapse" id="navbarPublic">
             <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                 <li class="nav-item">
-                    <a class="nav-link" href="/">Início</a>
+                    <a class="nav-link {{ request()->routeIs('home') ? 'active' : '' }}"
+                       href="{{ route('home') }}"
+                       @if (request()->routeIs('home')) aria-current="page" @endif>Início</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="#como-funciona">Como funciona</a>
+                    <a class="nav-link {{ request()->routeIs('attendants.*') ? 'active' : '' }}"
+                       href="{{ route('attendants.index') }}"
+                       @if (request()->routeIs('attendants.*')) aria-current="page" @endif>Atendentes</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="#atendentes">Atendentes</a>
+                    <a class="nav-link" href="{{ route('home') }}#como-funciona">Como funciona</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="#faq">Dúvidas</a>
+                    <a class="nav-link" href="{{ route('home') }}#faq">Dúvidas</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {{ request()->routeIs('work-with-us.*') ? 'active' : '' }}"
+                       href="{{ route('work-with-us.index') }}"
+                       @if (request()->routeIs('work-with-us.*')) aria-current="page" @endif>Trabalhe conosco</a>
                 </li>
             </ul>
 
