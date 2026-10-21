@@ -63,6 +63,30 @@ docker compose --profile reverb up -d reverb     # ativado no Prompt 12
 
 > MySQL e Redis não são expostos fora da rede Docker por padrão.
 
+## Criar o primeiro administrador
+
+O cadastro público cria apenas contas de **cliente**. Para criar o primeiro administrador **sem senha fixa no repositório**, use:
+
+```bash
+docker compose exec app php artisan arcana:create-admin
+```
+
+O comando pergunta nome, e-mail e senha (ou gera uma senha aleatória). Também aceita opções:
+
+```bash
+docker compose exec app php artisan arcana:create-admin --name="Admin" --email="admin@arcana.local"
+```
+
+> **Demonstração**: `php artisan db:seed` cria usuários de exemplo com senha `password`, apenas para ambiente local.
+
+## Papéis
+
+- `admin` — gestão administrativa (`/admin`)
+- `attendant` — área do atendente (`/attendant`)
+- `client` — área do cliente (`/client`)
+
+Após o login, o usuário é redirecionado para o painel do seu papel. O acesso é validado no servidor pelo middleware `role`.
+
 ## Executar sem Docker
 
 ```bash

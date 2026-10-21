@@ -7,8 +7,6 @@ x-app: &app
     dockerfile: docker/php/Dockerfile
   image: arcana-tarot/app:local
   working_dir: /var/www/html
-  env_file:
-    - .env
   volumes:
     - .:/var/www/html
   networks:
