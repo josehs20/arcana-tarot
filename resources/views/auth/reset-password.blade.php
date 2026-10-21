@@ -1,33 +1,51 @@
-@extends('layouts.app')
-
-@section('title', 'Redefinir senha')
-
-@section('content')
-    <h1>Redefinir senha</h1>
+<x-layouts.guest title="Redefinir senha | Arcana Tarot">
+    <h1 class="h3 mb-1">Redefinir senha</h1>
+    <p class="auth-card__subtitle mb-4">Escolha uma nova senha para acessar sua conta.</p>
 
     @if ($errors->any())
-        <ul>
-            @foreach ($errors->all() as $error)
-                <li>{{ $error }}</li>
-            @endforeach
-        </ul>
+        <x-ui.alert type="danger" :dismissible="false" class="mb-4">
+            <ul class="mb-0 ps-3">
+                @foreach ($errors->all() as $error)
+                    <li>{{ $error }}</li>
+                @endforeach
+            </ul>
+        </x-ui.alert>
     @endif
 
-    <form method="POST" action="{{ route('password.store') }}">
+    <form method="POST" action="{{ route('password.store') }}" novalidate>
         @csrf
         <input type="hidden" name="token" value="{{ $request->route('token') }}">
-        <div>
-            <label for="email">E-mail</label>
-            <input id="email" type="email" name="email" value="{{ old('email', $request->email) }}" required>
-        </div>
-        <div>
-            <label for="password">Nova senha</label>
-            <input id="password" type="password" name="password" required>
-        </div>
-        <div>
-            <label for="password_confirmation">Confirmar nova senha</label>
-            <input id="password_confirmation" type="password" name="password_confirmation" required>
-        </div>
-        <button type="submit">Redefinir senha</button>
+
+        <x-ui.field
+            name="email"
+            label="E-mail"
+            type="email"
+            autocomplete="email"
+            :value="$request->email"
+            required
+        />
+
+        <x-ui.field
+            name="password"
+            label="Nova senha"
+            type="password"
+            autocomplete="new-password"
+            help="Use ao menos 8 caracteres."
+            required
+        />
+
+        <x-ui.field
+            name="password_confirmation"
+            label="Confirmar nova senha"
+            type="password"
+            autocomplete="new-password"
+            required
+        />
+
+        <x-ui.button type="submit" variant="primary" size="lg" block>Redefinir senha</x-ui.button>
     </form>
-@endsection
+
+    <div class="auth-card__links">
+        <a href="{{ route('login') }}">Voltar para o login</a>
+    </div>
+</x-layouts.guest>

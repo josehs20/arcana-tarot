@@ -1,0 +1,153 @@
+// =====================================================================
+// Arcana Tarot — Overrides das variáveis do Bootstrap 5.3
+// Este arquivo é importado ANTES do bootstrap para que os !default
+// do framework não sobrescrevam os valores do design system.
+// =====================================================================
+
+@use 'tokens' as *;
+
+// ---- Corpo e superfícies --------------------------------------------
+$body-bg: $arcana-night;
+$body-color: $arcana-ivory;
+$body-secondary-color: $arcana-ivory-muted;
+
+$primary:   $arcana-gold;
+$secondary: $arcana-purple-soft;
+$success:   $arcana-success;
+$info:      $arcana-info;
+$warning:   $arcana-warning;
+$danger:    $arcana-danger;
+$light:     $arcana-ivory;
+$dark:      $arcana-night;
+
+$theme-colors: (
+    'primary':   $primary,
+    'secondary': $secondary,
+    'success':   $success,
+    'info':      $info,
+    'warning':   $warning,
+    'danger':    $danger,
+    'light':     $light,
+    'dark':      $dark,
+);
+
+// ---- Tipografia ------------------------------------------------------
+$font-family-sans-serif: $arcana-font-body;
+$font-family-base: $arcana-font-body;
+$headings-font-family: $arcana-font-display;
+$headings-font-weight: 600;
+$headings-color: $arcana-ivory;
+$body-color-secondary: $arcana-ivory-muted;
+$font-size-base: 1rem;
+$line-height-base: 1.6;
+
+// ---- Links -----------------------------------------------------------
+$link-color: $arcana-gold-light;
+$link-hover-color: $arcana-gold;
+$link-decoration: none;
+$link-hover-decoration: underline;
+
+// ---- Botões ----------------------------------------------------------
+$btn-font-weight: 500;
+$btn-border-radius: $arcana-radius-sm;
+$btn-border-radius-lg: $arcana-radius;
+$btn-border-radius-sm: 0.25rem;
+$btn-padding-y: .5rem;
+$btn-padding-x: 1rem;
+$btn-focus-box-shadow: $arcana-ring-gold;
+$btn-disabled-opacity: .5;
+
+// ---- Formulários -----------------------------------------------------
+$input-bg: rgba(10, 9, 24, .55);
+$input-color: $arcana-ivory;
+$input-border-color: rgba(201, 168, 76, .28);
+$input-placeholder-color: $arcana-ivory-dim;
+$input-focus-border-color: $arcana-gold;
+$input-focus-box-shadow: $arcana-ring-gold;
+$input-focus-bg: rgba(10, 9, 24, .8);
+$form-label-color: $arcana-ivory;
+$form-label-font-weight: 500;
+$form-select-indicator-color: $arcana-ivory-muted;
+$form-check-input-bg: rgba(10, 9, 24, .55);
+$form-check-input-border: 1px solid rgba(201, 168, 76, .35);
+$form-check-input-checked-bg-color: $arcana-gold;
+$form-check-input-checked-border-color: $arcana-gold;
+$form-range-thumb-bg: $arcana-gold;
+$input-group-text: $arcana-surface;
+$input-group-text-color: $arcana-ivory-muted;
+$input-group-border-color: rgba(201, 168, 76, .28);
+
+// ---- Cards ------------------------------------------------------------
+$card-bg: $arcana-surface;
+$card-border-color: rgba(201, 168, 76, .18);
+$card-border-radius: $arcana-radius;
+$card-cap-bg: rgba(30, 26, 66, .6);
+$card-color: $arcana-ivory;
+$card-box-shadow: $arcana-shadow-sm;
+
+// ---- Navbar -----------------------------------------------------------
+$navbar-dark-color: $arcana-ivory-muted;
+$navbar-dark-hover-color: $arcana-ivory;
+$navbar-dark-active-color: $arcana-gold-light;
+$navbar-dark-brand-color: $arcana-ivory;
+$navbar-dark-brand-hover-color: $arcana-gold-light;
+
+// ---- Nav / list-group -------------------------------------------------
+$nav-link-color: $arcana-ivory-muted;
+$nav-link-hover-color: $arcana-ivory;
+$nav-link-disabled-color: $arcana-ivory-dim;
+$nav-tabs-link-active-color: $arcana-gold-light;
+$list-group-color: $arcana-ivory;
+$list-group-bg: $arcana-surface;
+$list-group-border-color: rgba(201, 168, 76, .18);
+
+// ---- Alerts -----------------------------------------------------------
+$alert-border-radius: $arcana-radius;
+$alert-border-color: transparent;
+
+// ---- Badges -----------------------------------------------------------
+$badge-font-weight: 500;
+$badge-padding-x: .6em;
+$badge-padding-y: .35em;
+$badge-border-radius: 999px;
+
+// ---- Dropdown / offcanvas / modal ------------------------------------
+$dropdown-bg: $arcana-surface;
+$dropdown-border-color: rgba(201, 168, 76, .22);
+$dropdown-link-color: $arcana-ivory-muted;
+$dropdown-link-hover-color: $arcana-ivory;
+$dropdown-link-hover-bg: rgba(107, 75, 176, .22);
+$dropdown-link-active-color: $arcana-gold-light;
+$dropdown-link-active-bg: rgba(201, 168, 76, .16);
+$dropdown-divider-bg: rgba(201, 168, 76, .18);
+$dropdown-link-padding-y: .5rem;
+
+$offcanvas-bg-color: $arcana-surface;
+$offcanvas-border-color: rgba(201, 168, 76, .18);
+$offcanvas-color: $arcana-ivory;
+
+$modal-content-bg: $arcana-surface;
+$modal-content-border-color: rgba(201, 168, 76, .22);
+$modal-header-border-color: rgba(201, 168, 76, .18);
+$modal-footer-border-color: rgba(201, 168, 76, .18);
+$modal-content-color: $arcana-ivory;
+
+// ---- Tabelas ---------------------------------------------------------
+$table-color: $arcana-ivory;
+$table-bg: transparent;
+$table-border-color: rgba(201, 168, 76, .16);
+$table-striped-color: $arcana-ivory;
+$table-striped-bg: rgba(30, 26, 66, .35);
+$table-hover-bg: rgba(107, 75, 176, .16);
+
+// ---- Misc -------------------------------------------------------------
+$border-color: rgba(201, 168, 76, .18);
+$border-radius: $arcana-radius;
+$border-radius-sm: $arcana-radius-sm;
+$border-radius-lg: $arcana-radius-lg;
+$box-shadow: $arcana-shadow;
+$focus-ring-width: .2rem;
+$focus-ring-color: rgba(201, 168, 76, .35);
+$enable-shadows: false;
+$enable-negative-margins: true;
+$enable-smooth-scroll: true;

@@ -1,38 +1,59 @@
-@extends('layouts.app')
-
-@section('title', 'Criar conta')
-
-@section('content')
-    <h1>Criar conta de cliente</h1>
+<x-layouts.guest title="Criar conta | Arcana Tarot">
+    <h1 class="h3 mb-1">Criar conta</h1>
+    <p class="auth-card__subtitle mb-4">Comece a explorar suas leituras em poucos passos.</p>
 
     @if ($errors->any())
-        <ul>
-            @foreach ($errors->all() as $error)
-                <li>{{ $error }}</li>
-            @endforeach
-        </ul>
+        <x-ui.alert type="danger" :dismissible="false" class="mb-4">
+            <ul class="mb-0 ps-3">
+                @foreach ($errors->all() as $error)
+                    <li>{{ $error }}</li>
+                @endforeach
+            </ul>
+        </x-ui.alert>
     @endif
 
-    <form method="POST" action="{{ route('register') }}">
+    <form method="POST" action="{{ route('register') }}" novalidate>
         @csrf
-        <div>
-            <label for="name">Nome</label>
-            <input id="name" type="text" name="name" value="{{ old('name') }}" required autofocus>
-        </div>
-        <div>
-            <label for="email">E-mail</label>
-            <input id="email" type="email" name="email" value="{{ old('email') }}" required>
-        </div>
-        <div>
-            <label for="password">Senha</label>
-            <input id="password" type="password" name="password" required>
-        </div>
-        <div>
-            <label for="password_confirmation">Confirmar senha</label>
-            <input id="password_confirmation" type="password" name="password_confirmation" required>
-        </div>
-        <button type="submit">Criar conta</button>
+
+        <x-ui.field
+            name="name"
+            label="Nome"
+            type="text"
+            placeholder="Como podemos te chamar?"
+            autocomplete="name"
+            required
+        />
+
+        <x-ui.field
+            name="email"
+            label="E-mail"
+            type="email"
+            placeholder="voce@exemplo.com"
+            autocomplete="email"
+            required
+        />
+
+        <x-ui.field
+            name="password"
+            label="Senha"
+            type="password"
+            autocomplete="new-password"
+            help="Use ao menos 8 caracteres."
+            required
+        />
+
+        <x-ui.field
+            name="password_confirmation"
+            label="Confirmar senha"
+            type="password"
+            autocomplete="new-password"
+            required
+        />
+
+        <x-ui.button type="submit" variant="primary" size="lg" block>Criar conta</x-ui.button>
     </form>
 
-    <p><a href="{{ route('login') }}">Já tenho conta</a></p>
-@endsection
+    <div class="auth-card__links">
+        <a href="{{ route('login') }}">Já tenho conta</a>
+    </div>
+</x-layouts.guest>

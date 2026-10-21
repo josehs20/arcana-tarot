@@ -92,12 +92,12 @@
 - **Decisão**: usar Reverb como servidor WebSocket e Laravel Echo com cliente Pusher no frontend; canais **privados** autorizados em `routes/channels.php`.
 - **Consequências**: requer Redis/processo Reverb no Compose; histórico persistido continua sendo a fonte de verdade.
 
-### D-013 — Bootstrap 5.3 como framework visual; Tailwind legado a remover
+### D-013 — Bootstrap 5.3 como framework visual; Tailwind removido
 
-- **Status**: Proposta (confirmar no Prompt 05)
+- **Status**: Aceita (implementada no Prompt 05)
 - **Contexto**: o esqueleto Laravel 13 traz Tailwind 4; a stack pretendida exige Bootstrap 5.3.
-- **Decisão proposta**: adotar Bootstrap 5.3 via Vite como base visual e **remover** Tailwind do build, evitando dois sistemas de estilos concorrentes. O CSS de identidade (azul-noite, roxo, dourado, marfim) será próprio.
-- **Consequências**: ajuste no `package.json`/`vite.config.js`; revisão do `welcome.blade.php` no Prompt 05.
+- **Decisão**: adotar Bootstrap 5.3 via Vite/Sass como base visual e **remover** Tailwind do build, evitando dois sistemas de estilos concorrentes. O CSS de identidade (azul-noite, roxo, dourado, marfim) é próprio e documentado em `docs/DESIGN_SYSTEM.md`.
+- **Consequências**: `package.json`/`vite.config.js` migrados para Sass; `resources/css/app.css` (Tailwind) substituído por `resources/css/app.scss`; `welcome.blade.php` reescrito com os layouts Blade.
 
 ### D-014 — Ambiente de execução reproduzível via Docker (fonte de verdade)
 
@@ -119,6 +119,13 @@
 - **Contexto**: configuração atual `UTC`/`en`; produto em português.
 - **Decisão proposta**: `APP_LOCALE=pt_BR`, `APP_FALLBACK_LOCALE=en`, `APP_TIMEZONE=America/Sao_Paulo`, mantendo timestamps em UTC no banco quando aplicável.
 - **Consequências**: datas e valores exibidos corretamente; atenção a cálculos de cobrança entre fusos.
+
+### D-017 — Design system próprio sobre Bootstrap + componentes Blade
+
+- **Status**: Aceita (Prompt 05)
+- **Contexto**: as telas de negócio precisam de consistência visual e acessibilidade sem introduzir um framework de componentes JavaScript.
+- **Decisão**: usar tokens Sass + custom properties (`resources/css/`), layouts como componentes Blade anônimos (`x-layouts.public`, `x-layouts.guest`, `x-layouts.panel`, `x-layouts.error`) e componentes reutilizáveis (`x-ui.*`) para botões, cards, alertas, badges/status, campos e estados vazios. Estados de presença sempre exibem texto além da cor e animações respeitam `prefers-reduced-motion`.
+- **Consequências**: telas novas devem reutilizar os componentes e layouts; a paleta e o catálogo ficam em `docs/DESIGN_SYSTEM.md`.
 
 ---
 
@@ -164,3 +171,4 @@
 | Data | Etapa | Alteração |
 |---|---|---|
 | 2026-10-20 | Prompt 00 | Criação do documento com decisões D-001–D-016 e dúvidas Q-01–Q-16 |
+| 2026-10-20 | Prompt 05 | D-013 confirmada/implementada; D-017 (design system e componentes Blade) adicionada |

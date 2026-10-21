@@ -1,0 +1,24 @@
+// =====================================================================
+// Arcana Tarot — Design system
+// Bootstrap 5.3 com paleta mística + componentes próprios.
+// =====================================================================
+
+// 1. Variáveis do design system sobrescrevem os !default do Bootstrap.
+@use 'bootstrap-variables' as *;
+
+// 2. Fontes locais (self-hosted) — dispensam CDN externo.
+//    Importadas via SCSS para garantir que entrem no bundle principal de CSS.
+@import '../../node_modules/@fontsource/inter/400.css';
+@import '../../node_modules/@fontsource/inter/500.css';
+@import '../../node_modules/@fontsource/inter/600.css';
+@import '../../node_modules/@fontsource/cormorant-garamond/600.css';
+@import '../../node_modules/@fontsource/cormorant-garamond/700.css';
+
+// 3. Bootstrap 5.3 completo.
+@import 'bootstrap/scss/bootstrap';
+
+// 4. Camadas de estilo do Arcana.
+@import 'base';
+@import 'components';
+@import 'layouts';
+@import 'utilities';

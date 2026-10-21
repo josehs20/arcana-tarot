@@ -1,0 +1,57 @@
+// =====================================================================
+// Arcana Tarot — Design tokens
+// Paleta mística premium: azul-noite base, roxo profundo de apoio,
+// dourado discreto para destaque e marfim para texto.
+// =====================================================================
+
+// ---- Cores da marca -------------------------------------------------
+$arcana-night:        #0a0918; // azul-noite profundo (fundo do app)
+$arcana-night-soft:   #12102a; // fundo de seções alternadas
+$arcana-surface:      #171433; // cards e superfícies elevadas
+$arcana-surface-2:    #1e1a42; // hover / superfície de destaque
+
+$arcana-purple:       #2f1b57; // roxo profundo (apoio)
+$arcana-purple-light: #4a2d85; // roxo de destaque/hover
+$arcana-purple-soft:  #6b4bb0; // roxo para gradientes e bordas
+
+$arcana-gold:         #c9a84c; // dourado discreto (destaque)
+$arcana-gold-light:   #e2c874; // dourado hover/texto sobre escuro
+$arcana-gold-dark:    #8f7530; // dourado para bordas/contornos
+
+$arcana-ivory:        #f4f1e8; // marfim (texto principal)
+$arcana-ivory-muted:  #b9b3ce; // marfim suave (texto secundário)
+$arcana-ivory-dim:    #8a84a3; // marfim discreto (metadados)
+
+// ---- Cores de estado -------------------------------------------------
+$arcana-success:      #4caf7d;
+$arcana-success-dark: #2f7a55;
+$arcana-warning:      #e0a83c;
+$arcana-warning-dark: #a97a1d;
+$arcana-danger:       #e0645f;
+$arcana-danger-dark:  #a83f3b;
+$arcana-info:         #5b9bd5;
+$arcana-info-dark:    #3d6f9e;
+
+// ---- Tipografia ------------------------------------------------------
+$arcana-font-display: 'Cormorant Garamond', 'Cinzel', 'Times New Roman', serif;
+$arcana-font-body: 'Inter', 'Manrope', -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+// ---- Gradientes ------------------------------------------------------
+$arcana-gradient-gold: linear-gradient(135deg, #e2c874 0%, #c9a84c 55%, #8f7530 100%);
+$arcana-gradient-purple: linear-gradient(135deg, #4a2d85 0%, #2f1b57 100%);
+$arcana-gradient-hero: linear-gradient(160deg, #12102a 0%, #0a0918 60%, #1a0f33 100%);
+
+// ---- Medidas ---------------------------------------------------------
+$arcana-radius-sm: 0.375rem;
+$arcana-radius:    0.625rem;
+$arcana-radius-lg: 1rem;
+$arcana-shadow-sm: 0 1px 2px rgba(0, 0, 0, .35);
+$arcana-shadow:    0 8px 24px rgba(0, 0, 0, .45);
+$arcana-shadow-lg: 0 18px 48px rgba(0, 0, 0, .55);
+$arcana-ring-gold: 0 0 0 3px rgba(201, 168, 76, .35);
+
+// ---- Camadas (z-index) ------------------------------------------------
+$arcana-zindex-base:    1;
+$arcana-zindex-sticky:  1020;
+$arcana-zindex-navbar:  1030;
+$arcana-zindex-offcanvas: 1045;

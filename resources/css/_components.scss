@@ -1,0 +1,356 @@
+// =====================================================================
+// Arcana Tarot — Componentes reutilizáveis
+// =====================================================================
+
+@use 'tokens' as *;
+
+// =====================================================================
+// Botões
+// =====================================================================
+.btn {
+    --bs-btn-focus-box-shadow: #{$arcana-ring-gold};
+    border-radius: $arcana-radius-sm;
+    letter-spacing: .01em;
+    transition: transform var(--arcana-transition), box-shadow var(--arcana-transition),
+        background-color var(--arcana-transition), border-color var(--arcana-transition),
+        color var(--arcana-transition);
+
+    &:active {
+        transform: translateY(1px);
+    }
+}
+
+// Variante principal: dourado com gradiente discreto.
+.btn-primary {
+    --bs-btn-color: #1a1408;
+    --bs-btn-hover-color: #1a1408;
+    --bs-btn-active-color: #1a1408;
+    --bs-btn-disabled-color: #1a1408;
+    --bs-btn-bg: #{$arcana-gold};
+    --bs-btn-border-color: #{$arcana-gold};
+    --bs-btn-hover-bg: #{$arcana-gold-light};
+    --bs-btn-hover-border-color: #{$arcana-gold-light};
+    --bs-btn-active-bg: #{$arcana-gold-dark};
+    --bs-btn-active-border-color: #{$arcana-gold-dark};
+    --bs-btn-disabled-bg: #{$arcana-gold};
+    --bs-btn-disabled-border-color: #{$arcana-gold};
+    background: $arcana-gradient-gold;
+    border: 1px solid transparent;
+    font-weight: 600;
+    box-shadow: 0 2px 10px rgba(201, 168, 76, .18);
+
+    &:hover {
+        box-shadow: 0 6px 20px rgba(201, 168, 76, .28);
+    }
+}
+
+// Variante "ghost": contorno dourado sutil, fundo transparente.
+.btn-ghost {
+    --bs-btn-color: #{$arcana-ivory};
+    --bs-btn-hover-color: #{$arcana-gold-light};
+    --bs-btn-active-color: #{$arcana-gold-light};
+    --bs-btn-border-color: rgba(201, 168, 76, .3);
+    --bs-btn-hover-bg: rgba(201, 168, 76, .1);
+    --bs-btn-hover-border-color: rgba(201, 168, 76, .55);
+    --bs-btn-active-bg: rgba(201, 168, 76, .16);
+    --bs-btn-active-border-color: rgba(201, 168, 76, .55);
+    --bs-btn-disabled-color: #{$arcana-ivory-dim};
+    --bs-btn-disabled-border-color: rgba(201, 168, 76, .15);
+    background: transparent;
+    color: var(--arcana-ivory);
+    border: 1px solid rgba(201, 168, 76, .3);
+
+    &:hover {
+        background: rgba(201, 168, 76, .1);
+        border-color: rgba(201, 168, 76, .55);
+    }
+}
+
+// Variante secundária: roxo profundo.
+.btn-secondary {
+    --bs-btn-color: #{$arcana-ivory};
+    --bs-btn-hover-color: #{$arcana-ivory};
+    --bs-btn-active-color: #{$arcana-ivory};
+    --bs-btn-bg: #{$arcana-purple};
+    --bs-btn-border-color: #{$arcana-purple};
+    --bs-btn-hover-bg: #{$arcana-purple-light};
+    --bs-btn-hover-border-color: #{$arcana-purple-light};
+    --bs-btn-active-bg: #{$arcana-purple-light};
+    --bs-btn-active-border-color: #{$arcana-purple-light};
+}
+
+// Variante de perigo.
+.btn-danger {
+    --bs-btn-color: #{$arcana-ivory};
+    --bs-btn-hover-color: #{$arcana-ivory};
+    --bs-btn-active-color: #{$arcana-ivory};
+    --bs-btn-bg: #{$arcana-danger-dark};
+    --bs-btn-border-color: #{$arcana-danger-dark};
+    --bs-btn-hover-bg: #{$arcana-danger};
+    --bs-btn-hover-border-color: #{$arcana-danger};
+    --bs-btn-active-bg: #{$arcana-danger};
+    --bs-btn-active-border-color: #{$arcana-danger};
+}
+
+// =====================================================================
+// Cards
+// =====================================================================
+.card {
+    background-color: var(--arcana-surface);
+    border: 1px solid rgba(201, 168, 76, .18);
+    border-radius: $arcana-radius;
+    box-shadow: $arcana-shadow-sm;
+    color: var(--arcana-ivory);
+    overflow: hidden;
+}
+
+.card-header {
+    background: rgba(30, 26, 66, .6);
+    border-bottom: 1px solid rgba(201, 168, 76, .18);
+    color: var(--arcana-ivory);
+    font-family: $arcana-font-display;
+    font-size: 1.1rem;
+    font-weight: 600;
+    padding: 1rem 1.25rem;
+}
+
+.card-body {
+    padding: 1.25rem;
+}
+
+.card-footer {
+    background: rgba(10, 9, 24, .35);
+    border-top: 1px solid rgba(201, 168, 76, .15);
+    padding: .875rem 1.25rem;
+}
+
+// Card com brilho dourado no topo (usado em destaques).
+.card-gilded {
+    position: relative;
+
+    &::before {
+        content: '';
+        position: absolute;
+        inset: 0 0 auto 0;
+        height: 2px;
+        background: $arcana-gradient-gold;
+        opacity: .8;
+    }
+}
+
+// =====================================================================
+// Badges
+// =====================================================================
+.badge {
+    background-color: var(--arcana-purple-soft);
+    border: 1px solid transparent;
+    letter-spacing: .02em;
+    vertical-align: middle;
+}
+
+.badge-gold {
+    background-color: rgba(201, 168, 76, .16);
+    border-color: rgba(201, 168, 76, .4);
+    color: var(--arcana-gold-light);
+}
+
+.badge-success {
+    background-color: rgba(76, 175, 125, .18);
+    border-color: rgba(76, 175, 125, .45);
+    color: #7fd6a6;
+}
+
+.badge-warning {
+    background-color: rgba(224, 168, 60, .18);
+    border-color: rgba(224, 168, 60, .45);
+    color: #f0c169;
+}
+
+.badge-danger {
+    background-color: rgba(224, 100, 95, .18);
+    border-color: rgba(224, 100, 95, .45);
+    color: #f08a86;
+}
+
+.badge-info {
+    background-color: rgba(91, 155, 213, .18);
+    border-color: rgba(91, 155, 213, .45);
+    color: #8dbde8;
+}
+
+.badge-secondary {
+    background-color: rgba(138, 132, 163, .18);
+    border-color: rgba(138, 132, 163, .4);
+    color: var(--arcana-ivory-muted);
+}
+
+// =====================================================================
+// Alertas
+// =====================================================================
+.alert {
+    align-items: flex-start;
+    border: 1px solid transparent;
+    border-left-width: 3px;
+    border-radius: $arcana-radius;
+    color: var(--arcana-ivory);
+    display: flex;
+    gap: .65rem;
+}
+
+.alert > svg {
+    margin-top: .15rem;
+}
+
+.alert-success {
+    background-color: rgba(76, 175, 125, .12);
+    border-color: rgba(76, 175, 125, .4);
+}
+
+.alert-warning {
+    background-color: rgba(224, 168, 60, .12);
+    border-color: rgba(224, 168, 60, .4);
+}
+
+.alert-danger {
+    background-color: rgba(224, 100, 95, .12);
+    border-color: rgba(224, 100, 95, .4);
+}
+
+.alert-info {
+    background-color: rgba(91, 155, 213, .12);
+    border-color: rgba(91, 155, 213, .4);
+}
+
+.alert .btn-close {
+    filter: invert(1) grayscale(1) brightness(2);
+}
+
+// =====================================================================
+// Campos de formulário
+// =====================================================================
+.form-label {
+    margin-bottom: .35rem;
+    font-size: .9rem;
+}
+
+.form-label.required::after {
+    content: ' *';
+    color: var(--arcana-gold);
+}
+
+.form-control,
+.form-select {
+    background-color: rgba(10, 9, 24, .55);
+    border: 1px solid rgba(201, 168, 76, .28);
+    color: var(--arcana-ivory);
+    padding: .55rem .8rem;
+
+    &:focus {
+        background-color: rgba(10, 9, 24, .8);
+        border-color: var(--arcana-gold);
+        box-shadow: $arcana-ring-gold;
+        color: var(--arcana-ivory);
+    }
+
+    &:disabled {
+        background-color: rgba(10, 9, 24, .35);
+        color: var(--arcana-ivory-dim);
+    }
+}
+
+.form-control::placeholder {
+    color: var(--arcana-ivory-dim);
+}
+
+.form-text {
+    color: var(--arcana-ivory-dim);
+    font-size: .82rem;
+}
+
+.invalid-feedback {
+    color: #f08a86;
+}
+
+.form-check-input:checked {
+    background-color: var(--arcana-gold);
+    border-color: var(--arcana-gold);
+}
+
+.has-error .form-label {
+    color: #f0a5a2;
+}
+
+// =====================================================================
+// Accordion (FAQ)
+// =====================================================================
+.accordion {
+    --bs-accordion-bg: transparent;
+    --bs-accordion-color: var(--arcana-ivory);
+    --bs-accordion-border-color: rgba(201, 168, 76, .16);
+    --bs-accordion-btn-color: var(--arcana-ivory);
+    --bs-accordion-btn-bg: transparent;
+    --bs-accordion-btn-focus-box-shadow: #{$arcana-ring-gold};
+    --bs-accordion-active-color: var(--arcana-gold-light);
+    --bs-accordion-active-bg: rgba(201, 168, 76, .06);
+    --bs-accordion-body-color: var(--arcana-ivory-muted);
+}
+
+.accordion-button {
+    font-family: $arcana-font-display;
+    font-size: 1.05rem;
+    font-weight: 600;
+
+    &:not(.collapsed) {
+        box-shadow: inset 0 -1px 0 rgba(201, 168, 76, .16);
+    }
+
+    // Seta padrão é escura; invertemos para ficar legível no fundo noturno.
+    &::after {
+        filter: invert(1) sepia(1) saturate(2) hue-rotate(5deg);
+    }
+}
+
+.accordion-body {
+    color: var(--arcana-ivory-muted);
+}
+
+// =====================================================================
+// Estado vazio
+// =====================================================================
+.empty-state {
+    align-items: center;
+    background: rgba(23, 20, 51, .5);
+    border: 1px dashed rgba(201, 168, 76, .28);
+    border-radius: $arcana-radius-lg;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    padding: 3rem 1.5rem;
+    text-align: center;
+}
+
+.empty-state-icon {
+    align-items: center;
+    background: rgba(201, 168, 76, .12);
+    border-radius: 999px;
+    color: var(--arcana-gold);
+    display: inline-flex;
+    height: 3.5rem;
+    justify-content: center;
+    margin-bottom: .5rem;
+    width: 3.5rem;
+}
+
+.empty-state-title {
+    color: var(--arcana-ivory);
+    font-family: $arcana-font-display;
+    font-size: 1.35rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.empty-state-text {
+    color: var(--arcana-ivory-muted);
+    margin: 0;
+    max-width: 46ch;
+}

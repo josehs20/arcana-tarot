@@ -1,0 +1,96 @@
+// =====================================================================
+// Arcana Tarot — Utilitários e animações
+// =====================================================================
+
+@use 'tokens' as *;
+
+// =====================================================================
+// Indicador de status (online / offline / ocupado)
+// Sempre acompanhado de TEXTO visível — a cor é apenas reforço.
+// =====================================================================
+.status-indicator {
+    align-items: center;
+    display: inline-flex;
+    gap: .45rem;
+    font-size: .85rem;
+    font-weight: 500;
+}
+
+.status-dot {
+    background-color: var(--arcana-ivory-dim);
+    border-radius: 999px;
+    display: inline-block;
+    flex-shrink: 0;
+    height: .55rem;
+    width: .55rem;
+}
+
+.status-dot--online {
+    background-color: var(--arcana-success);
+    box-shadow: 0 0 0 3px rgba(76, 175, 125, .18);
+}
+
+.status-dot--busy {
+    background-color: var(--arcana-warning);
+    box-shadow: 0 0 0 3px rgba(224, 168, 60, .18);
+}
+
+.status-dot--offline {
+    background-color: var(--arcana-ivory-dim);
+}
+
+.status-text--online { color: #7fd6a6; }
+.status-text--busy { color: #f0c169; }
+.status-text--offline { color: var(--arcana-ivory-muted); }
+
+// =====================================================================
+// Animações discretas
+// =====================================================================
+@keyframes arcana-fade-up {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes arcana-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .55; }
+}
+
+@keyframes arcana-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(201, 168, 76, .4); }
+    50% { box-shadow: 0 0 0 6px rgba(201, 168, 76, 0); }
+}
+
+.arcana-fade-up {
+    animation: arcana-fade-up .5s ease both;
+}
+
+.arcana-fade-up-delay-1 { animation-delay: .08s; }
+.arcana-fade-up-delay-2 { animation-delay: .16s; }
+.arcana-fade-up-delay-3 { animation-delay: .24s; }
+
+.arcana-pulse {
+    animation: arcana-pulse 2.4s ease-in-out infinite;
+}
+
+.arcana-glow {
+    animation: arcana-glow 2.4s ease-in-out infinite;
+}
+
+// =====================================================================
+// Respeito a prefers-reduced-motion
+// =====================================================================
+@media (prefers-reduced-motion: reduce) {
+    html {
+        scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+        scroll-behavior: auto !important;
+    }
+}

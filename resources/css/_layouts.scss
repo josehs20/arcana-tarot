@@ -1,0 +1,461 @@
+// =====================================================================
+// Arcana Tarot — Camada de layouts
+// =====================================================================
+
+@use 'tokens' as *;
+
+// =====================================================================
+// Navbar
+// =====================================================================
+.navbar-arcana {
+    background: rgba(10, 9, 24, .85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(201, 168, 76, .16);
+    padding: .85rem 0;
+    position: sticky;
+    top: 0;
+    z-index: $arcana-zindex-navbar;
+}
+
+.navbar-arcana .navbar-brand {
+    align-items: center;
+    color: var(--arcana-ivory);
+    display: inline-flex;
+    font-family: $arcana-font-display;
+    font-size: 1.35rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+
+    svg {
+        color: var(--arcana-gold);
+    }
+
+    &:hover,
+    &:focus-visible {
+        color: var(--arcana-gold-light);
+    }
+}
+
+.navbar-arcana .nav-link {
+    border-radius: $arcana-radius-sm;
+    color: var(--arcana-ivory-muted);
+    font-weight: 500;
+    margin-inline: .15rem;
+    padding: .45rem .8rem;
+    transition: color var(--arcana-transition), background-color var(--arcana-transition);
+
+    &:hover,
+    &:focus-visible,
+    &.active {
+        background: rgba(201, 168, 76, .1);
+        color: var(--arcana-gold-light);
+    }
+}
+
+.navbar-arcana .navbar-toggler {
+    border-color: rgba(201, 168, 76, .35);
+    padding: .35rem .5rem;
+
+    .navbar-toggler-icon {
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba(244,241,232,0.85)' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+    }
+}
+
+// =====================================================================
+// Container de largura ampla (páginas públicas)
+// =====================================================================
+.container-wide {
+    margin-inline: auto;
+    max-width: 1320px;
+    padding-inline: 1.25rem;
+    width: 100%;
+}
+
+// =====================================================================
+// Sidebar do painel
+// =====================================================================
+.sidebar-panel {
+    background-color: var(--arcana-surface);
+    border-right: 1px solid rgba(201, 168, 76, .16);
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+}
+
+.sidebar-panel .nav-link {
+    align-items: center;
+    border-radius: $arcana-radius-sm;
+    color: var(--arcana-ivory-muted);
+    display: flex;
+    font-weight: 500;
+    gap: .75rem;
+    padding: .6rem .8rem;
+    transition: color var(--arcana-transition), background-color var(--arcana-transition);
+
+    svg {
+        flex-shrink: 0;
+    }
+
+    &:hover,
+    &:focus-visible {
+        background: rgba(201, 168, 76, .1);
+        color: var(--arcana-ivory);
+    }
+
+    &.active {
+        background: var(--arcana-purple);
+        color: var(--arcana-gold-light);
+    }
+}
+
+.sidebar-panel hr {
+    border-color: rgba(201, 168, 76, .15);
+    margin: 1rem 0;
+    opacity: 1;
+}
+
+// O offcanvas do Bootstrap esconde a sidebar no desktop.
+// A partir de `lg` ele vira uma coluna fixa, preservando a navegação por teclado.
+@media (min-width: 992px) {
+    .offcanvas-sidebar {
+        background-color: var(--arcana-surface);
+        border-right: 1px solid rgba(201, 168, 76, .16);
+        flex: 0 0 260px;
+        // Mantém a sidebar abaixo da navbar fixa.
+        height: calc(100vh - var(--arcana-navbar-height));
+        max-width: 260px;
+        overflow-y: auto;
+        position: sticky;
+        top: var(--arcana-navbar-height);
+        // Anula o deslocamento horizontal aplicado pelo offcanvas do Bootstrap.
+        transform: none;
+        visibility: visible !important;
+        width: 260px;
+        z-index: $arcana-zindex-base;
+    }
+
+    .offcanvas-sidebar .offcanvas-header {
+        display: flex;
+    }
+
+    .offcanvas-sidebar .offcanvas-body {
+        display: flex;
+        flex-direction: column;
+        overflow: visible;
+        padding: 0;
+        width: 100%;
+    }
+
+    // O botão de fechar do offcanvas é desnecessário no desktop.
+    .offcanvas-sidebar [data-bs-dismiss='offcanvas'] {
+        display: none;
+    }
+}
+
+// =====================================================================
+// Cabeçalho de página do painel
+// =====================================================================
+.page-header {
+    align-items: flex-end;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    justify-content: space-between;
+}
+
+.page-header__title {
+    font-size: clamp(1.6rem, 3vw, 2.1rem);
+    margin: 0;
+}
+
+.page-header__subtitle {
+    color: var(--arcana-ivory-muted);
+    margin: .25rem 0 0;
+}
+
+.page-header__actions {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+}
+
+// =====================================================================
+// Cartão de métrica (stat card)
+// =====================================================================
+.stat-card {
+    background: var(--arcana-surface);
+    border: 1px solid rgba(201, 168, 76, .18);
+    border-radius: $arcana-radius;
+    height: 100%;
+    padding: 1.25rem 1.4rem;
+}
+
+.stat-card__label {
+    color: var(--arcana-ivory-muted);
+    font-size: .8rem;
+    font-weight: 500;
+    letter-spacing: .04em;
+    margin: 0 0 .35rem;
+    text-transform: uppercase;
+}
+
+.stat-card__value {
+    color: var(--arcana-ivory);
+    font-family: $arcana-font-display;
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1.1;
+    margin: 0;
+}
+
+.stat-card__hint {
+    color: var(--arcana-ivory-dim);
+    font-size: .8rem;
+    margin: .35rem 0 0;
+}
+
+// =====================================================================
+// Rodapé público
+// =====================================================================
+.footer-arcana {
+    background: var(--arcana-bg-soft);
+    border-top: 1px solid rgba(201, 168, 76, .16);
+    color: var(--arcana-ivory-muted);
+    margin-top: auto;
+    padding: 3.5rem 0 2rem;
+}
+
+.footer-arcana h6 {
+    color: var(--arcana-ivory);
+    font-family: $arcana-font-display;
+    font-size: 1rem;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+
+.footer-arcana a {
+    color: var(--arcana-ivory-muted);
+
+    &:hover {
+        color: var(--arcana-gold-light);
+    }
+}
+
+// =====================================================================
+// Layout de autenticação (cartão centralizado)
+// =====================================================================
+.auth-shell {
+    align-items: center;
+    display: flex;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 2rem 1rem;
+}
+
+.auth-card {
+    background: var(--arcana-surface);
+    border: 1px solid rgba(201, 168, 76, .2);
+    border-radius: $arcana-radius-lg;
+    box-shadow: $arcana-shadow-lg;
+    max-width: 460px;
+    padding: 2.25rem;
+    width: 100%;
+}
+
+.auth-card__brand {
+    align-items: center;
+    color: var(--arcana-ivory);
+    display: inline-flex;
+    font-family: $arcana-font-display;
+    font-size: 1.5rem;
+    font-weight: 700;
+    gap: .5rem;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+
+    svg {
+        color: var(--arcana-gold);
+    }
+}
+
+.auth-card__links {
+    align-items: center;
+    color: var(--arcana-ivory-dim);
+    display: flex;
+    flex-wrap: wrap;
+    font-size: .9rem;
+    gap: .5rem;
+    justify-content: center;
+    margin-top: 1.5rem;
+
+    a {
+        color: var(--arcana-gold-light);
+    }
+}
+
+.auth-card__subtitle {
+    color: var(--arcana-ivory-muted);
+    margin-bottom: 0;
+}
+
+.auth-card__divider {
+    align-items: center;
+    color: var(--arcana-ivory-dim);
+    display: flex;
+    font-size: .8rem;
+    gap: .75rem;
+    margin: 1.5rem 0;
+    text-transform: uppercase;
+
+    &::before,
+    &::after {
+        background: rgba(201, 168, 76, .18);
+        content: '';
+        flex: 1;
+        height: 1px;
+    }
+}
+
+// =====================================================================
+// Hero da landing page
+// =====================================================================
+.arcana-hero {
+    background: $arcana-gradient-hero;
+    border-bottom: 1px solid rgba(201, 168, 76, .18);
+    padding: 6rem 0 5rem;
+    position: relative;
+}
+
+.arcana-hero__title {
+    color: var(--arcana-ivory);
+    font-family: $arcana-font-display;
+    font-size: clamp(2.4rem, 6vw, 4rem);
+    font-weight: 700;
+    letter-spacing: .01em;
+    line-height: 1.1;
+}
+
+.arcana-hero__divider {
+    background: linear-gradient(90deg, transparent, var(--arcana-gold), transparent);
+    height: 1px;
+    margin: 1.5rem 0;
+    width: 120px;
+}
+
+// =====================================================================
+// Seções de conteúdo
+// =====================================================================
+.arcana-section {
+    padding: 4.5rem 0;
+}
+
+.arcana-section--alt {
+    background: var(--arcana-bg-soft);
+    border-block: 1px solid rgba(201, 168, 76, .12);
+}
+
+.arcana-section__title {
+    color: var(--arcana-ivory);
+    font-family: $arcana-font-display;
+    font-size: clamp(1.75rem, 3.4vw, 2.5rem);
+    font-weight: 700;
+    margin-bottom: .5rem;
+}
+
+.arcana-section__subtitle {
+    color: var(--arcana-ivory-muted);
+    margin-bottom: 0;
+    max-width: 62ch;
+}
+
+// Card de destaque (usado nas grades de conteúdo).
+.arcana-feature {
+    background: var(--arcana-surface);
+    border: 1px solid rgba(201, 168, 76, .18);
+    border-radius: $arcana-radius;
+    height: 100%;
+    padding: 1.75rem;
+    transition: border-color var(--arcana-transition), transform var(--arcana-transition),
+        box-shadow var(--arcana-transition);
+
+    &:hover {
+        border-color: rgba(201, 168, 76, .4);
+        box-shadow: $arcana-shadow;
+        transform: translateY(-2px);
+    }
+}
+
+.arcana-feature__icon {
+    align-items: center;
+    background: rgba(201, 168, 76, .12);
+    border-radius: $arcana-radius-sm;
+    color: var(--arcana-gold);
+    display: inline-flex;
+    height: 2.75rem;
+    justify-content: center;
+    margin-bottom: 1rem;
+    width: 2.75rem;
+}
+
+.arcana-feature__title {
+    color: var(--arcana-ivory);
+    font-family: $arcana-font-display;
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: .35rem;
+}
+
+.arcana-feature__text {
+    color: var(--arcana-ivory-muted);
+    margin: 0;
+}
+
+// =====================================================================
+// Página de erro
+// =====================================================================
+.error-page {
+    align-items: center;
+    display: flex;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 3rem 1rem;
+    text-align: center;
+}
+
+.error-page__code {
+    color: var(--arcana-gold);
+    font-family: $arcana-font-display;
+    font-size: clamp(4rem, 14vw, 8rem);
+    font-weight: 700;
+    letter-spacing: .04em;
+    line-height: 1;
+    margin: 0;
+    text-shadow: 0 0 40px rgba(201, 168, 76, .25);
+}
+
+.error-page__title {
+    color: var(--arcana-ivory);
+    font-family: $arcana-font-display;
+    font-size: clamp(1.5rem, 3.5vw, 2rem);
+    font-weight: 600;
+    margin: .5rem 0 1rem;
+}
+
+.error-page__text {
+    color: var(--arcana-ivory-muted);
+    margin: 0 auto 2rem;
+    max-width: 52ch;
+}
+
+.error-page__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .75rem;
+    justify-content: center;
+}
+
