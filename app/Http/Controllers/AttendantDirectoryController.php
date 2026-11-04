@@ -3,13 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\AttendantProfile;
-use App\Support\ConsultationPricing;
+use App\Support\ConsultationModalityCatalog;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\View\View;
 
 class AttendantDirectoryController extends Controller
 {
-    public function index(ConsultationPricing $pricing): View
+    public function index(ConsultationModalityCatalog $catalog): View
     {
         $attendants = $this->directoryQuery()
             ->published()
@@ -18,11 +18,15 @@ class AttendantDirectoryController extends Controller
 
         return view('public.attendants.index', [
             'attendants' => $attendants,
-            'pricePerMinute' => $pricing->pricePerMinuteLabel(),
+            'modalityOptions' => $attendants->mapWithKeys(
+                fn (AttendantProfile $profile): array => [
+                    $profile->getKey() => $catalog->publicOptionsFor($profile),
+                ],
+            ),
         ]);
     }
 
-    public function show(int $attendant, ConsultationPricing $pricing): View
+    public function show(int $attendant, ConsultationModalityCatalog $catalog): View
     {
         $profile = $this->directoryQuery()
             ->published()
@@ -30,7 +34,7 @@ class AttendantDirectoryController extends Controller
 
         return view('public.attendants.show', [
             'attendant' => $profile,
-            'pricePerMinute' => $pricing->pricePerMinuteLabel(),
+            'options' => $catalog->options($profile),
         ]);
     }
 
@@ -42,7 +46,8 @@ class AttendantDirectoryController extends Controller
     private function directoryQuery(): Builder
     {
         return AttendantProfile::query()
-            ->select(['id', 'display_name', 'bio', 'specialties', 'photo_path', 'availability'])
+            ->select(['id', 'user_id', 'display_name', 'bio', 'specialties', 'offered_modalities', 'photo_path', 'availability'])
+            ->with('modalityPrices')
             ->withExists('activeConsultation');
     }
 }

@@ -1,0 +1,514 @@
+// =====================================================================
+// Arcana Tarot — Temas claro e escuro
+//
+// O tema ativo é definido em `<html data-theme="light|dark">`, renderizado
+// pelo servidor a partir de `users.theme_preference`. Visitantes partem do
+// tema claro e o script inline dos layouts aplica o valor salvo no navegador.
+//
+// Aqui ficam:
+//   1. os tokens de cada tema;
+//   2. o reapontamento das variáveis CSS do Bootstrap 5.3 (compiladas com a
+//      paleta escura) para os tokens do tema ativo;
+//   3. o botão de alternância e os ajustes de contraste do tema claro.
+// =====================================================================
+
+@use 'tokens' as *;
+
+// ---------------------------------------------------------------------
+// 1. Tokens — tema claro (padrão)
+// ---------------------------------------------------------------------
+:root,
+[data-theme='light'] {
+    color-scheme: light;
+
+    // Superfícies
+    --arcana-bg: #f7f3e8;
+    --arcana-bg-soft: #efe7d6;
+    --arcana-surface: #fffdf8;
+    --arcana-surface-2: #f4ecdd;
+
+    // Marca (dourado rebaixado para manter contraste sobre marfim)
+    --arcana-purple: #4a2d85;
+    --arcana-purple-light: #5a3d99;
+    --arcana-purple-soft: #6b4bb0;
+    --arcana-gold: #8a6a1c;
+    --arcana-gold-light: #6b5113;
+    --arcana-gold-dark: #55400d;
+
+    // Canais RGB para uso em `rgba(...)` com transparência
+    --arcana-gold-rgb: 138, 106, 28;
+    --arcana-purple-rgb: 90, 61, 153;
+    --arcana-night-rgb: 36, 29, 51;
+    --arcana-surface-2-rgb: 244, 236, 221;
+    --arcana-success-rgb: 47, 122, 85;
+    --arcana-warning-rgb: 138, 100, 20;
+    --arcana-danger-rgb: 168, 63, 59;
+    --arcana-info-rgb: 55, 106, 153;
+
+    // Seta do `<select>` (o Bootstrap embute a imagem no componente)
+    --arcana-select-arrow: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23554e68' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+
+    // Texto
+    --arcana-ivory: #241d33;
+    --arcana-ivory-rgb: 36, 29, 51;
+    --arcana-ivory-muted: #554e68;
+    --arcana-ivory-muted-rgb: 85, 78, 104;
+    --arcana-ivory-dim: #6b657f;
+    --arcana-ivory-dim-rgb: 107, 101, 127;
+
+    // Estados
+    --arcana-success: #2f7a55;
+    --arcana-warning: #8a6414;
+    --arcana-danger: #a83f3b;
+    --arcana-info: #376a99;
+
+    // Texto sobre superfícies de destaque (roxo/dourado)
+    --arcana-on-accent: #f8f5ec;
+    --arcana-on-gold: #1a1408;
+
+    // Bordas e superfícies de apoio
+    --arcana-border: rgba(107, 81, 19, .2);
+    --arcana-border-strong: rgba(107, 81, 19, .38);
+    --arcana-navbar-bg: rgba(250, 246, 236, .92);
+    --arcana-panel-bg:
+        radial-gradient(1200px 600px at 15% -10%, rgba(90, 61, 153, .1), transparent 60%),
+        var(--arcana-bg);
+    --arcana-sidebar-bg:
+        linear-gradient(180deg, rgba(90, 61, 153, .07) 0%, transparent 38%),
+        var(--arcana-surface);
+    --arcana-hero-bg: linear-gradient(160deg, #fbf7ec 0%, #f4eddc 58%, #ece2f6 100%);
+    --arcana-card-face-bg: linear-gradient(160deg, #4a2d85 0%, #1b1030 100%);
+    --arcana-cta-bg: linear-gradient(135deg, #efe6fb 0%, #f8f2e6 100%);
+    --arcana-card-head-bg: #f8f1e3;
+    --arcana-card-foot-bg: #f6f0e2;
+    --arcana-field-bg: #fffefb;
+    --arcana-field-bg-focus: #ffffff;
+    --arcana-field-bg-disabled: #f2ece0;
+    --arcana-surface-muted: rgba(90, 61, 153, .05);
+    --arcana-option-checked-bg: linear-gradient(140deg, #f0e7fc, #fffdf8);
+    --arcana-chat-bubble-bg: #f6f0e4;
+    --arcana-chat-bubble-mine-bg: #ede3fa;
+    --arcana-avatar-bg: linear-gradient(160deg, #e6dbf7, #fbf7ef);
+    --arcana-nav-active-bg: #f0e8fb;
+    --arcana-navbar-control-bg: #fffdf8;
+    --arcana-stage-bg: radial-gradient(circle at 50% 20%, #3a2266, #14102a);
+    --arcana-stage-overlay: rgba(20, 16, 42, .7);
+
+    // Sombras
+    --arcana-shadow-sm: 0 1px 2px rgba(52, 38, 12, .07);
+    --arcana-shadow: 0 10px 26px rgba(52, 38, 12, .1);
+    --arcana-shadow-lg: 0 20px 44px rgba(52, 38, 12, .14);
+    --arcana-ring-gold: 0 0 0 3px rgba(138, 106, 28, .25);
+
+    // Filtros e ornamentos
+    --arcana-chevron-filter: none;
+    --arcana-close-filter: none;
+    --arcana-stars-opacity: .5;
+    --arcana-stars-image:
+        radial-gradient(1px 1px at 12% 18%, rgba(122, 95, 34, .28) 50%, transparent 50%),
+        radial-gradient(1px 1px at 68% 8%, rgba(74, 45, 133, .2) 50%, transparent 50%),
+        radial-gradient(1.5px 1.5px at 84% 62%, rgba(154, 122, 40, .3) 50%, transparent 50%),
+        radial-gradient(1px 1px at 32% 74%, rgba(74, 45, 133, .16) 50%, transparent 50%),
+        radial-gradient(1px 1px at 52% 42%, rgba(122, 95, 34, .14) 50%, transparent 50%);
+    --arcana-navbar-toggler-icon: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba(36,29,51,0.8)' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+}
+
+// ---------------------------------------------------------------------
+// 2. Tokens — tema escuro (paleta original do design system)
+// ---------------------------------------------------------------------
+[data-theme='dark'] {
+    color-scheme: dark;
+
+    --arcana-bg: #0a0918;
+    --arcana-bg-soft: #12102a;
+    --arcana-surface: #171433;
+    --arcana-surface-2: #1e1a42;
+
+    --arcana-purple: #2f1b57;
+    --arcana-purple-light: #4a2d85;
+    --arcana-purple-soft: #6b4bb0;
+    --arcana-gold: #c9a84c;
+    --arcana-gold-light: #e2c874;
+    --arcana-gold-dark: #8f7530;
+
+    --arcana-gold-rgb: 201, 168, 76;
+    --arcana-purple-rgb: 74, 45, 133;
+    --arcana-night-rgb: 10, 9, 24;
+    --arcana-surface-2-rgb: 30, 26, 66;
+    --arcana-success-rgb: 76, 175, 125;
+    --arcana-warning-rgb: 224, 168, 60;
+    --arcana-danger-rgb: 224, 100, 95;
+    --arcana-info-rgb: 91, 155, 213;
+
+    --arcana-select-arrow: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23b9b3ce' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+
+    --arcana-ivory: #f4f1e8;
+    --arcana-ivory-rgb: 244, 241, 232;
+    --arcana-ivory-muted: #b9b3ce;
+    --arcana-ivory-muted-rgb: 185, 179, 206;
+    --arcana-ivory-dim: #8a84a3;
+    --arcana-ivory-dim-rgb: 138, 132, 163;
+
+    --arcana-success: #4caf7d;
+    --arcana-warning: #e0a83c;
+    --arcana-danger: #e0645f;
+    --arcana-info: #5b9bd5;
+
+    --arcana-on-accent: #f4f1e8;
+    --arcana-on-gold: #1a1408;
+
+    --arcana-border: rgba(201, 168, 76, .18);
+    --arcana-border-strong: rgba(201, 168, 76, .28);
+    --arcana-navbar-bg: rgba(10, 9, 24, .85);
+    --arcana-panel-bg:
+        radial-gradient(1200px 600px at 15% -10%, rgba(74, 45, 133, .28), transparent 60%),
+        var(--arcana-bg);
+    --arcana-sidebar-bg:
+        linear-gradient(180deg, rgba(74, 45, 133, .22) 0%, transparent 38%),
+        var(--arcana-surface);
+    --arcana-hero-bg: linear-gradient(160deg, #12102a 0%, #0a0918 60%, #1a0f33 100%);
+    --arcana-card-face-bg: linear-gradient(160deg, rgba(74, 45, 133, .55), rgba(10, 9, 24, .95));
+    --arcana-cta-bg: linear-gradient(135deg, rgba(74, 45, 133, .38), rgba(23, 20, 51, .92));
+    --arcana-card-head-bg: rgba(30, 26, 66, .6);
+    --arcana-card-foot-bg: rgba(10, 9, 24, .35);
+    --arcana-field-bg: rgba(10, 9, 24, .55);
+    --arcana-field-bg-focus: rgba(10, 9, 24, .8);
+    --arcana-field-bg-disabled: rgba(10, 9, 24, .35);
+    --arcana-surface-muted: rgba(23, 20, 51, .5);
+    --arcana-option-checked-bg: linear-gradient(140deg, rgba(74, 45, 133, .45), rgba(23, 20, 51, .85));
+    --arcana-chat-bubble-bg: rgba(255, 255, 255, .035);
+    --arcana-chat-bubble-mine-bg: rgba(74, 45, 133, .28);
+    --arcana-avatar-bg: linear-gradient(160deg, rgba(74, 45, 133, .75), rgba(23, 20, 51, .95));
+    --arcana-nav-active-bg: #2f1b57;
+    --arcana-navbar-control-bg: rgba(23, 20, 51, .9);
+    --arcana-stage-bg: radial-gradient(circle at 50% 20%, rgba(74, 45, 133, .55), rgba(10, 9, 24, .95));
+    --arcana-stage-overlay: rgba(10, 9, 24, .7);
+
+    --arcana-shadow-sm: 0 1px 2px rgba(0, 0, 0, .35);
+    --arcana-shadow: 0 8px 24px rgba(0, 0, 0, .45);
+    --arcana-shadow-lg: 0 18px 48px rgba(0, 0, 0, .55);
+    --arcana-ring-gold: 0 0 0 3px rgba(201, 168, 76, .35);
+
+    --arcana-chevron-filter: invert(1) sepia(1) saturate(2) hue-rotate(5deg);
+    --arcana-close-filter: invert(1) grayscale(1) brightness(2);
+    --arcana-stars-opacity: .5;
+    --arcana-stars-image:
+        radial-gradient(1px 1px at 12% 18%, rgba(244, 241, 232, .55) 50%, transparent 50%),
+        radial-gradient(1px 1px at 68% 8%, rgba(244, 241, 232, .35) 50%, transparent 50%),
+        radial-gradient(1.5px 1.5px at 84% 62%, rgba(226, 200, 116, .4) 50%, transparent 50%),
+        radial-gradient(1px 1px at 32% 74%, rgba(244, 241, 232, .3) 50%, transparent 50%),
+        radial-gradient(1px 1px at 52% 42%, rgba(244, 241, 232, .22) 50%, transparent 50%);
+    --arcana-navbar-toggler-icon: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba(244,241,232,0.85)' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+}
+
+// ---------------------------------------------------------------------
+// 3. Bootstrap 5.3 — variáveis globais apontando para o tema ativo
+// ---------------------------------------------------------------------
+html[data-theme] {
+    --bs-body-bg: var(--arcana-bg);
+    --bs-body-color: var(--arcana-ivory);
+    --bs-body-color-rgb: var(--arcana-ivory-rgb);
+    --bs-emphasis-color: var(--arcana-ivory);
+    --bs-emphasis-color-rgb: var(--arcana-ivory-rgb);
+    --bs-secondary-color: var(--arcana-ivory-muted);
+    --bs-secondary-color-rgb: var(--arcana-ivory-muted-rgb);
+    --bs-secondary-bg: var(--arcana-surface-2);
+    --bs-secondary-bg-rgb: var(--arcana-surface-2-rgb);
+    --bs-tertiary-color: var(--arcana-ivory-dim);
+    --bs-tertiary-color-rgb: var(--arcana-ivory-dim-rgb);
+    --bs-tertiary-bg: var(--arcana-bg-soft);
+    --bs-heading-color: var(--arcana-ivory);
+    --bs-link-color: var(--arcana-gold-light);
+    --bs-link-hover-color: var(--arcana-gold);
+    --bs-border-color: var(--arcana-border);
+    --bs-border-color-translucent: var(--arcana-border);
+
+    // Cores de estado e validação também são compiladas com a paleta escura;
+    // os utilitários (`text-danger`, `bg-success`, ...) leem estes canais rgb.
+    // `warning` fica de fora: ele é usado como fundo de selo com texto escuro,
+    // então mantém o âmbar original nos dois temas (ver `.text-warning`).
+    --bs-primary-rgb: var(--arcana-gold-rgb);
+    --bs-success-rgb: var(--arcana-success-rgb);
+    --bs-danger-rgb: var(--arcana-danger-rgb);
+    --bs-info-rgb: var(--arcana-info-rgb);
+    --bs-form-valid-color: var(--arcana-success);
+    --bs-form-invalid-color: var(--arcana-danger);
+}
+
+// Bootstrap compila as variáveis de componente com os valores do tema escuro.
+// Reapontamos cada uma para os tokens do tema ativo.
+.card {
+    --bs-card-bg: var(--arcana-surface);
+    --bs-card-color: var(--arcana-ivory);
+    --bs-card-border-color: var(--arcana-border);
+    --bs-card-cap-bg: var(--arcana-card-head-bg);
+    --bs-card-cap-color: var(--arcana-ivory);
+}
+
+.card-header,
+.card-footer {
+    color: var(--arcana-ivory);
+}
+
+.dropdown-menu {
+    --bs-dropdown-bg: var(--arcana-surface);
+    --bs-dropdown-color: var(--arcana-ivory-muted);
+    --bs-dropdown-border-color: var(--arcana-border);
+    --bs-dropdown-link-color: var(--arcana-ivory-muted);
+    --bs-dropdown-link-hover-color: var(--arcana-ivory);
+    --bs-dropdown-link-hover-bg: var(--arcana-surface-2);
+    --bs-dropdown-link-active-color: var(--arcana-gold-light);
+    --bs-dropdown-link-active-bg: var(--arcana-surface-2);
+    --bs-dropdown-divider-bg: var(--arcana-border);
+    --bs-dropdown-header-color: var(--arcana-ivory-dim);
+}
+
+.modal {
+    --bs-modal-bg: var(--arcana-surface);
+    --bs-modal-color: var(--arcana-ivory);
+    --bs-modal-border-color: var(--arcana-border);
+    --bs-modal-header-border-color: var(--arcana-border);
+    --bs-modal-footer-border-color: var(--arcana-border);
+}
+
+.offcanvas {
+    --bs-offcanvas-bg: var(--arcana-surface);
+    --bs-offcanvas-color: var(--arcana-ivory);
+    --bs-offcanvas-border-color: var(--arcana-border);
+}
+
+.list-group {
+    --bs-list-group-bg: var(--arcana-surface);
+    --bs-list-group-color: var(--arcana-ivory);
+    --bs-list-group-border-color: var(--arcana-border);
+    --bs-list-group-action-color: var(--arcana-ivory-muted);
+    --bs-list-group-action-hover-bg: var(--arcana-surface-2);
+    --bs-list-group-action-hover-color: var(--arcana-ivory);
+    --bs-list-group-action-active-bg: var(--arcana-surface-2);
+    --bs-list-group-action-active-color: var(--arcana-gold-light);
+}
+
+.table {
+    --bs-table-bg: transparent;
+    --bs-table-color: var(--arcana-ivory);
+    --bs-table-border-color: var(--arcana-border);
+    --bs-table-striped-color: var(--arcana-ivory);
+    --bs-table-striped-bg: rgba(var(--arcana-ivory-rgb), .035);
+    --bs-table-hover-color: var(--arcana-ivory);
+    --bs-table-hover-bg: rgba(var(--arcana-gold-rgb), .07);
+}
+
+.nav {
+    --bs-nav-link-color: var(--arcana-ivory-muted);
+    --bs-nav-link-hover-color: var(--arcana-ivory);
+    --bs-nav-link-disabled-color: var(--arcana-ivory-dim);
+}
+
+.pagination {
+    --bs-pagination-bg: transparent;
+    --bs-pagination-color: var(--arcana-gold-light);
+    --bs-pagination-border-color: var(--arcana-border);
+    --bs-pagination-hover-bg: var(--arcana-surface-2);
+    --bs-pagination-hover-color: var(--arcana-ivory);
+    --bs-pagination-hover-border-color: var(--arcana-border-strong);
+    --bs-pagination-focus-bg: var(--arcana-surface-2);
+    --bs-pagination-focus-color: var(--arcana-ivory);
+    --bs-pagination-active-bg: var(--arcana-gold);
+    --bs-pagination-active-border-color: var(--arcana-gold);
+    --bs-pagination-active-color: var(--arcana-on-gold);
+    --bs-pagination-disabled-bg: transparent;
+    --bs-pagination-disabled-color: var(--arcana-ivory-dim);
+    --bs-pagination-disabled-border-color: var(--arcana-border);
+}
+
+.form-check-input {
+    background-color: var(--arcana-field-bg);
+    border-color: var(--arcana-border-strong);
+}
+
+.form-select {
+    // O Bootstrap embute a seta como SVG com a cor compilada; trocamos o token.
+    --bs-form-select-bg-img: var(--arcana-select-arrow);
+}
+
+// Rótulos, anexos de input e botão de upload são compilados com a cor do texto
+// escuro fixa; sem este reaponte ficam invisíveis no tema claro.
+.form-label,
+.col-form-label {
+    color: var(--arcana-ivory);
+}
+
+.input-group-text {
+    background-color: var(--arcana-surface-2);
+    border-color: rgba(var(--arcana-gold-rgb), .28);
+    color: var(--arcana-ivory-muted);
+}
+
+.form-control::file-selector-button {
+    color: var(--arcana-ivory);
+}
+
+// Firefox espelha a cor do texto do `<select>` num text-shadow compilado.
+.form-select:-moz-focusring {
+    text-shadow: 0 0 var(--arcana-ivory);
+}
+
+// `text-warning` é compilado com o âmbar fixo (que segue usado como fundo de
+// selo). Como texto sobre superfícies claras ele precisa do token do tema.
+.text-warning {
+    color: var(--arcana-warning) !important;
+}
+
+.progress {
+    --bs-progress-bg: var(--arcana-surface-2);
+    --bs-progress-bar-bg: var(--arcana-gold);
+}
+
+.btn-close {
+    filter: var(--arcana-close-filter);
+}
+
+// Utilitários `bg-*` não definem cor de texto; garantimos contraste nos selos.
+.badge.bg-secondary,
+.badge.bg-primary,
+.badge.bg-dark,
+.badge.bg-info {
+    color: var(--arcana-on-accent);
+}
+
+// ---------------------------------------------------------------------
+// 4. Botão de alternância de tema
+// ---------------------------------------------------------------------
+.theme-toggle {
+    align-items: center;
+    background: rgba(var(--arcana-gold-rgb), .08);
+    border: 1px solid var(--arcana-border-strong);
+    border-radius: 50%;
+    color: var(--arcana-gold);
+    display: inline-flex;
+    flex-shrink: 0;
+    height: 2.35rem;
+    justify-content: center;
+    padding: 0;
+    transition:
+        background-color var(--arcana-transition),
+        border-color var(--arcana-transition),
+        color var(--arcana-transition),
+        transform var(--arcana-transition);
+    width: 2.35rem;
+
+    &:hover,
+    &:focus-visible {
+        background: rgba(var(--arcana-gold-rgb), .16);
+        border-color: var(--arcana-gold);
+        color: var(--arcana-gold-light);
+        transform: translateY(-1px);
+    }
+
+    &:focus-visible {
+        box-shadow: var(--arcana-ring-gold);
+        outline: 0;
+    }
+
+    &[aria-busy='true'] {
+        cursor: progress;
+        opacity: .7;
+    }
+}
+
+.theme-toggle__icon {
+    align-items: center;
+    display: inline-flex;
+    justify-content: center;
+    line-height: 0;
+}
+
+// O ícone exibido representa o tema que o clique ativa.
+.theme-toggle__icon--sun {
+    display: none;
+}
+
+[data-theme='dark'] {
+    .theme-toggle__icon--sun {
+        display: inline-flex;
+    }
+
+    .theme-toggle__icon--moon {
+        display: none;
+    }
+}
+
+// Atalho flutuante usado nas telas sem navbar (login, cadastro, erros).
+.theme-toggle-dock {
+    display: flex;
+    gap: .5rem;
+    position: fixed;
+    right: 1.25rem;
+    top: 1.25rem;
+    z-index: $arcana-zindex-navbar;
+}
+
+// Na navbar pública o botão fica alinhado ao início quando o menu colapsa.
+.navbar-arcana__theme {
+    align-self: flex-start;
+}
+
+@media (min-width: 992px) {
+    .navbar-arcana__theme {
+        align-self: center;
+    }
+}
+
+.panel-navbar__theme {
+    align-items: center;
+    display: flex;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .theme-toggle {
+        transition: none;
+
+        &:hover,
+        &:focus-visible {
+            transform: none;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------
+// 5. Ajustes do tema claro em componentes que nasceram escuros
+// ---------------------------------------------------------------------
+[data-theme='light'] {
+    // Itens ativos da navegação lateral: lavanda claro no lugar do roxo cheio.
+    .sidebar-panel .nav-link.active,
+    .panel-nav__link.is-active {
+        background: var(--arcana-nav-active-bg);
+        box-shadow: inset 2px 0 0 var(--arcana-gold);
+        color: var(--arcana-gold-light);
+    }
+
+    // O palco de chamada exibe vídeo e permanece escuro; restaura os tokens
+    // escuros para textos e ícones dentro dele.
+    .call-stage {
+        --arcana-ivory: #f4f1e8;
+        --arcana-ivory-muted: #b9b3ce;
+        --arcana-ivory-dim: #8a84a3;
+        --arcana-gold: #c9a84c;
+        --arcana-gold-light: #e2c874;
+        --arcana-surface: #171433;
+        --arcana-border: rgba(201, 168, 76, .25);
+    }
+
+    // O dorso das cartas é sempre escuro; o texto mantém o dourado claro.
+    .deck-card__face {
+        --arcana-ivory: #f4f1e8;
+        --arcana-ivory-muted: #b9b3ce;
+        --arcana-gold: #c9a84c;
+        --arcana-gold-light: #e2c874;
+    }
+
+    // Mensagens de validação mantêm contraste AA sobre superfícies claras.
+    .alert .btn-close {
+        filter: none;
+    }
+}

@@ -2,25 +2,12 @@
     title="Trabalhe conosco — Arcana Tarot"
     description="Candidate-se para atender como tarólogo no Arcana Tarot. Conte sua experiência e sua abordagem de atendimento."
 >
-    <section class="arcana-hero arcana-hero--compact arcana-stars">
-        <div class="container-wide">
-            <nav aria-label="Trilha de navegação">
-                <ol class="breadcrumb-arcana">
-                    <li><a href="{{ route('home') }}">Início</a></li>
-                    <li aria-hidden="true">/</li>
-                    <li aria-current="page">Trabalhe conosco</li>
-                </ol>
-            </nav>
-
-            <p class="arcana-eyebrow mb-2">Para profissionais</p>
-            <h1 class="arcana-hero__title">Seu dom também tem lugar aqui</h1>
-            <div class="arcana-hero__divider" aria-hidden="true"></div>
-            <p class="arcana-lead mb-0">
-                Quer atender no Arcana Tarot? Conte sua experiência com Tarot e como você
-                conduz seus atendimentos. Nossa equipe analisa cada candidatura com atenção.
-            </p>
-        </div>
-    </section>
+    <x-public.page-hero
+        eyebrow="Para profissionais"
+        title="Seu dom também tem lugar aqui"
+        description="Quer atender no Arcana Tarot? Conte sua experiência com Tarot e como você conduz seus atendimentos. Nossa equipe analisa cada candidatura com atenção."
+        current="Trabalhe conosco"
+    />
 
     <section class="arcana-section">
         <div class="container-wide">

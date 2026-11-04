@@ -175,8 +175,9 @@ Props: `title`.
 
 ### 6.3 Painel — `<x-layouts.panel>`
 
-Navbar + sidebar (offcanvas no mobile, coluna fixa a partir de `lg`) + flash
-messages + conteúdo.
+Casca compartilhada pelos três painéis: navbar + sidebar (offcanvas no mobile,
+coluna fixa a partir de `lg`) + flash messages + conteúdo. Navbar e sidebar são
+componentes próprios, com a mesma estrutura para admin, atendente e cliente.
 
 ```blade
 <x-layouts.panel variant="panel" title="Painel do Cliente | Arcana Tarot">
@@ -192,6 +193,27 @@ messages + conteúdo.
 - `variant="panel"` — clientes e atendentes (`navbar-auth` + `sidebar-client`);
   o destino do link “Painel” é resolvido pelo papel do usuário.
 - `variant="admin"` — administração (`navbar-admin` + `sidebar-admin`).
+
+Estrutura renderizada:
+
+```html
+<body class="panel-body">
+  <nav class="navbar navbar-arcana panel-navbar">...</nav>
+  <div class="panel-shell">
+    <aside class="offcanvas offcanvas-start offcanvas-sidebar panel-sidebar">...</aside>
+    <main id="conteudo-principal" class="panel-content" tabindex="-1">
+      <div class="panel-content__inner">...</div>
+    </main>
+  </div>
+</body>
+```
+
+A sidebar recebe `groups` (array de `label` + `links`) em
+`resources/views/layouts/partials/sidebar-admin.blade.php` e
+`sidebar-client.blade.php`; cada link declara `route`, `pattern` (para
+`routeIs`), `label`, `icon` e, opcionalmente, `badge`/`badge_label`. A navbar
+resolve a área pelo papel do usuário (`<x-layouts.panel-navbar>`), com dropdown
+da conta, link para o site público e logout.
 
 No mobile, os botões `data-bs-toggle="offcanvas"` abrem a navegação lateral.
 A sidebar fica abaixo da navbar fixa (`top: var(--arcana-navbar-height)`).
@@ -364,17 +386,21 @@ Mesmo contrato visual e de validação de `<x-ui.field>`, para textos longos.
 Classe base `.empty-state` (flex em coluna, borda tracejada dourada). O slot é
 usado para ações.
 
-### 7.8 Stat card — classe `.stat-card`
+### 7.8 Stat card — `<x-ui.stat-card>`
 
-Não é um componente Blade (é marcação + classes), usada nos dashboards:
+Cartão de indicador usado no topo dos dashboards. Props: `label` (obrigatória),
+`value`, `hint`, `href`, `icon` (nome do `<x-ui.icon>`) e `tone`
+(`default`, `gold`, `success`, `warning`, `danger`, `info`).
 
 ```blade
-<div class="stat-card">
-    <p class="stat-card__label">Consultas</p>
-    <p class="stat-card__value">0</p>
-    <p class="stat-card__hint">Nenhuma consulta ainda</p>
-</div>
+<x-ui.stat-card label="Saldo disponível" :value="$balance" hint="Carteira ativa" icon="wallet" tone="gold" />
+
+<x-ui.stat-card label="Consultas" :value="$metrics->pendingApplications" href="{{ route('admin.applications.index') }}" />
 ```
+
+Com `href`, o cartão vira um `<a>` e ganha `.stat-card__cta` (“Ver detalhes”),
+permanecendo navegável por teclado. O slot permite conteúdo extra (badges,
+descrições).
 
 ### 7.9 Card público do atendente — `<x-public.attendant-card>`
 
@@ -386,6 +412,29 @@ Exibe foto opcional (fallback de iniciais), nome profissional, status, bio curta
 até três especialidades e preço por minuto. O cartão inteiro é clicável por meio
 do `::after` no link do nome; `:focus-within` aplica o anel dourado. O componente
 recebe apenas dados aprovados — nunca e-mail, comissão ou informações financeiras.
+
+### 7.10 Gráfico — `<x-ui.chart>`
+
+Gráfico SVG acessível, sem JavaScript nem dependências externas, usado nos três
+dashboards. Props: `labels`, `values`, `seriesLabel`, `unit` (`count` ou
+`currency`), `type` (`line` ou `bar`) e `period` (rótulo exibido no estado
+vazio).
+
+```blade
+<x-ui.chart :labels="$trend['labels']" :values="$trend['values']"
+    series-label="Consultas por dia" unit="count" type="line" period="Últimos 14 dias" />
+
+<x-ui.chart :labels="$revenue['labels']" :values="$revenue['values']"
+    series-label="Receita confirmada" unit="currency" type="bar" />
+```
+
+- Série sem valores positivos exibe `.chart-empty` com “Sem dados no período”.
+- A área (`line`) ou as barras (`bar`) usam as classes `.chart__area`,
+  `.chart__line`, `.chart__point` e `.chart__bar`; eixos e grade usam
+  `.chart__grid`, `.chart__axis-label`, `.chart__x-label` e `.chart__baseline`.
+- Cada ponto/barra tem `<title>`, e uma tabela `.visually-hidden` repete os
+  dados para leitores de tela.
+- Valores monetários são formatados com `App\Support\Money::format`.
 
 ---
 
@@ -438,11 +487,21 @@ Todas as animações são desativadas por `prefers-reduced-motion: reduce`
 
 | Classe | Uso |
 |---|---|
+| `.panel-body` | escopo do painel (navbar fixa + fundo) |
+| `.panel-shell`, `.panel-content`, `.panel-content__inner` | grade da casca (sidebar + conteúdo) |
+| `.panel-navbar`, `.panel-navbar__*` | navbar do painel (marca, ações, conta) |
+| `.panel-sidebar`, `.panel-nav*` | sidebar e seus grupos/links/badges |
 | `.navbar-arcana` | navbar fixa com blur |
 | `.offcanvas-sidebar` | sidebar offcanvas (coluna fixa ≥ `lg`) |
 | `.sidebar-panel` | sidebar fixa sem offcanvas (reserva) |
 | `.page-header*` | cabeçalho de página |
-| `.stat-card*` | cartões de métrica |
+| `.dashboard-section`, `.dashboard-section__header` | seção dos dashboards |
+| `.dashboard-shortcut*` | atalhos rápidos por papel |
+| `.stat-card*` | cartões de métrica (`<x-ui.stat-card>`) |
+| `.chart*`, `.chart-empty*` | gráficos SVG (`<x-ui.chart>`) |
+| `.panel-list`, `.panel-list__item` | listas compactas do painel |
+| `.panel-details*` | pares rótulo/valor do painel |
+| `.dashboard-table` | tabelas de resumo dos dashboards |
 | `.application-table` | tabela de candidaturas no admin |
 | `.application-detail__label`, `.application-detail__value` | rótulos/valores do detalhe da candidatura |
 | `.application-timeline*` | histórico de revisão |

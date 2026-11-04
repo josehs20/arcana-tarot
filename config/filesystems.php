@@ -38,6 +38,15 @@ return [
             'report' => false,
         ],
 
+        // Catálogo de Tarot: imagens privadas, servidas somente por rota autorizada.
+        'tarot_private' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private/tarot'),
+            'serve' => false,
+            'throw' => true,
+            'report' => false,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),

@@ -2,16 +2,20 @@
     Cartão público do atendente.
 
     Exibe apenas dados aprovados para divulgação: foto opcional, nome
-    profissional, apresentação curta, especialidades, preço por minuto
-    (calculado no servidor) e status atual. Nunca recebe e-mail, comissão
-    ou qualquer dado financeiro.
+    profissional, apresentação curta, especialidades, modalidades com preço
+    por minuto (calculado no servidor) e status atual. Nunca recebe e-mail,
+    comissão ou qualquer dado financeiro.
 
     Uso:
-        <x-public.attendant-card :attendant="$attendant" :price="$pricePerMinute" />
+        <x-public.attendant-card
+            :attendant="$attendant"
+            :modalities="$options"
+        />
 --}}
 @props([
     'attendant',
-    'price' => null,
+    'requestable' => false,
+    'modalities' => [],
 ])
 
 @php
@@ -52,14 +56,37 @@
         </ul>
     @endif
 
+    @if ($modalities !== [])
+        <ul class="attendant-card__modalities list-unstyled mb-0" aria-label="Modalidades e preços">
+            @foreach ($modalities as $modality)
+                <li>
+                    <x-ui.icon :name="$modality['icon']" width="14" height="14" />
+                    <span>{{ $modality['label'] }}</span>
+                    <strong>{{ $modality['price_label'] ?? 'Sob consulta' }}<small>/min</small></strong>
+                </li>
+            @endforeach
+        </ul>
+    @endif
+
     <div class="attendant-card__footer">
         <p class="attendant-card__price mb-0">
-            @if ($price)
-                {{ $price }} <small>/ minuto</small>
+            @if ($modalities !== [])
+                Preço confirmado pelo servidor
             @else
-                Valor sob consulta
+                Preço não configurado
             @endif
         </p>
-        <span class="attendant-card__link" aria-hidden="true">Ver perfil <span aria-hidden="true">&rarr;</span></span>
+        @if ($requestable)
+            <div class="d-flex align-items-center gap-2">
+                <a class="attendant-card__link" href="{{ route('attendants.show', $attendant) }}">Ver perfil</a>
+                <form method="POST" action="{{ route('client.consultations.store') }}">
+                    @csrf
+                    <input type="hidden" name="attendant_id" value="{{ $attendant->user_id }}">
+                    <x-ui.button type="submit" variant="primary" size="sm">Solicitar</x-ui.button>
+                </form>
+            </div>
+        @else
+            <span class="attendant-card__link" aria-hidden="true">Ver perfil <span aria-hidden="true">&rarr;</span></span>
+        @endif
     </div>
 </article>

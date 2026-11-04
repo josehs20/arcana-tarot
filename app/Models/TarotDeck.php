@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Database\Factories\TarotDeckFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -24,5 +25,10 @@ class TarotDeck extends Model
     public function cards(): HasMany
     {
         return $this->hasMany(TarotCard::class, 'deck_id');
+    }
+
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where('is_active', true);
     }
 }

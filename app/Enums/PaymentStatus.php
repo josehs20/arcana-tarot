@@ -9,4 +9,15 @@ enum PaymentStatus: string
     case Expired = 'expired';
     case Failed = 'failed';
     case Refunded = 'refunded';
+
+    public function label(): string
+    {
+        return match ($this) {
+            self::Pending => 'Aguardando pagamento',
+            self::Confirmed => 'Confirmado',
+            self::Expired => 'Expirado',
+            self::Failed => 'Recusado',
+            self::Refunded => 'Estornado',
+        };
+    }
 }

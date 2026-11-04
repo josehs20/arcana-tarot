@@ -1,0 +1,544 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Enums\ConsultationEndReason;
+use App\Enums\ConsultationStatus;
+use App\Enums\MessageType;
+use App\Models\Consultation;
+use App\Models\ConsultationMessage;
+use App\Models\TarotCard;
+use App\Models\TarotDeck;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Tests\TestCase;
+
+class ConsultationChatTest extends TestCase
+{
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Storage::fake('tarot_private');
+    }
+
+    /**
+     * @return array{0: User, 1: User, 2: Consultation}
+     */
+    private function conversation(): array
+    {
+        $client = User::factory()->create();
+        $attendant = User::factory()->attendant()->create();
+
+        $consultation = Consultation::factory()->active()->create([
+            'client_id' => $client->id,
+            'attendant_id' => $attendant->id,
+        ]);
+
+        return [$client, $attendant, $consultation];
+    }
+
+    /**
+     * @return array{0: TarotCard, 1: TarotDeck}
+     */
+    private function card(bool $cardActive = true, bool $deckActive = true): array
+    {
+        $deck = TarotDeck::factory()->create([
+            'name' => 'Baralho Solar',
+            'is_active' => $deckActive,
+        ]);
+
+        $image = $this->imageBytes();
+        $path = 'cards/'.Str::random(32).'.png';
+        Storage::disk('tarot_private')->put($path, $image);
+
+        $card = TarotCard::factory()->create([
+            'deck_id' => $deck->id,
+            'name' => 'A Estrela',
+            'image_path' => $path,
+            'image_mime' => 'image/png',
+            'image_size' => strlen($image),
+            'is_active' => $cardActive,
+        ]);
+
+        return [$card, $deck];
+    }
+
+    private function imageBytes(): string
+    {
+        return (string) base64_decode(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+            true,
+        );
+    }
+
+    public function test_participants_can_send_and_read_text_messages(): void
+    {
+        [$client, $attendant, $consultation] = $this->conversation();
+
+        $this->actingAs($client)
+            ->post(route('consultations.messages.store', $consultation), [
+                'body' => '  Olá, atendente!  ',
+                'sender_id' => $attendant->id,
+                'type' => MessageType::TarotCard->value,
+                'created_at' => now()->subDay()->toDateTimeString(),
+            ])
+            ->assertRedirect(route('consultations.show', $consultation).'#chat')
+            ->assertSessionHas('success');
+
+        $message = ConsultationMessage::query()->sole();
+
+        $this->assertSame($consultation->id, $message->consultation_id);
+        $this->assertSame($client->id, $message->sender_id);
+        $this->assertSame(MessageType::Text, $message->type);
+        $this->assertSame('Olá, atendente!', $message->body);
+        $this->assertNotNull($message->created_at);
+
+        $this->actingAs($attendant)
+            ->get(route('consultations.show', $consultation))
+            ->assertOk()
+            ->assertSee('Olá, atendente!')
+            ->assertSee($client->name)
+            ->assertSee('Cliente');
+    }
+
+    public function test_non_participants_and_administrators_cannot_read_or_send_messages(): void
+    {
+        [$client, , $consultation] = $this->conversation();
+        $message = ConsultationMessage::factory()->create([
+            'consultation_id' => $consultation->id,
+            'sender_id' => $client->id,
+            'body' => 'Conteúdo privado da consulta',
+        ]);
+
+        $outsider = User::factory()->create();
+
+        $this->actingAs($outsider)
+            ->get(route('consultations.show', $consultation))
+            ->assertForbidden();
+
+        $this->actingAs($outsider)
+            ->post(route('consultations.messages.store', $consultation), ['body' => 'Invasão'])
+            ->assertForbidden();
+
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)
+            ->get(route('consultations.show', $consultation))
+            ->assertOk()
+            ->assertDontSee($message->body)
+            ->assertSee('conversa entre cliente e atendente é privada');
+
+        $this->actingAs($admin)
+            ->post(route('consultations.messages.store', $consultation), ['body' => 'Invasão'])
+            ->assertForbidden();
+    }
+
+    public function test_ended_consultations_keep_history_but_reject_new_messages_and_cards(): void
+    {
+        [$client, $attendant, $consultation] = $this->conversation();
+        [$card] = $this->card();
+
+        $this->actingAs($client)
+            ->post(route('consultations.messages.store', $consultation), ['body' => 'Mensagem anterior'])
+            ->assertRedirect();
+
+        $consultation->update([
+            'status' => ConsultationStatus::Ended->value,
+            'ended_at' => now(),
+            'ended_reason' => ConsultationEndReason::ClientEnded->value,
+        ]);
+
+        $this->actingAs($client)
+            ->post(route('consultations.messages.store', $consultation), ['body' => 'Depois do fim'])
+            ->assertForbidden();
+
+        $this->actingAs($attendant)
+            ->post(route('consultations.cards.store', $consultation), ['tarot_card_id' => $card->id])
+            ->assertForbidden();
+
+        $this->actingAs($client)
+            ->get(route('consultations.show', $consultation))
+            ->assertOk()
+            ->assertSee('Mensagem anterior')
+            ->assertSee('Somente leitura');
+
+        $this->assertSame(1, ConsultationMessage::query()->count());
+    }
+
+    public function test_text_validation_enforces_required_content_and_maximum_length(): void
+    {
+        [$client, , $consultation] = $this->conversation();
+
+        $this->actingAs($client)
+            ->from(route('consultations.show', $consultation))
+            ->post(route('consultations.messages.store', $consultation), ['body' => '   '])
+            ->assertSessionHasErrors('body');
+
+        $this->actingAs($client)
+            ->from(route('consultations.show', $consultation))
+            ->post(route('consultations.messages.store', $consultation), [
+                'body' => str_repeat('a', (int) config('consultation.message_max_length') + 1),
+            ])
+            ->assertSessionHasErrors('body');
+
+        $this->assertDatabaseCount('consultation_messages', 0);
+    }
+
+    public function test_history_is_paginated_and_presented_in_chronological_order(): void
+    {
+        config(['consultation.message_page_size' => 10]);
+
+        [$client, , $consultation] = $this->conversation();
+
+        foreach (range(1, 12) as $number) {
+            ConsultationMessage::factory()->create([
+                'consultation_id' => $consultation->id,
+                'sender_id' => $client->id,
+                'body' => sprintf('Mensagem %02d', $number),
+            ]);
+        }
+
+        $firstPage = $this->actingAs($client)
+            ->get(route('consultations.show', $consultation))
+            ->assertOk()
+            ->assertSee('Mensagem 12')
+            ->assertDontSee('Mensagem 01');
+
+        $messages = $firstPage->viewData('messages');
+
+        $this->assertSame(12, $messages->total());
+        $this->assertCount(10, $messages->items());
+        $this->assertSame('Mensagem 03', $messages->first()->body);
+        $this->assertSame('Mensagem 12', $messages->last()->body);
+
+        $this->actingAs($client)
+            ->get(route('consultations.show', ['consultation' => $consultation, 'page' => 2]))
+            ->assertOk()
+            ->assertSee('Mensagem 01')
+            ->assertSee('Mensagem 02')
+            ->assertDontSee('Mensagem 12');
+    }
+
+    public function test_attendant_can_send_a_card_with_a_private_historical_snapshot(): void
+    {
+        [$client, $attendant, $consultation] = $this->conversation();
+        [$card, $deck] = $this->card();
+
+        $this->actingAs($attendant)
+            ->post(route('consultations.cards.store', $consultation), [
+                'tarot_card_id' => $card->id,
+                'sender_id' => $client->id,
+                'deck_name' => 'Baralho falso',
+                'card_name' => 'Carta falsa',
+                'image_path' => '../../etc/passwd',
+                'created_at' => now()->subDay()->toDateTimeString(),
+            ])
+            ->assertRedirect(route('consultations.show', $consultation).'#chat')
+            ->assertSessionHas('success');
+
+        $message = ConsultationMessage::query()->sole();
+
+        $this->assertSame(MessageType::TarotCard, $message->type);
+        $this->assertNull($message->body);
+        $this->assertSame($attendant->id, $message->sender_id);
+        $this->assertSame($card->id, $message->tarot_card_id);
+        $this->assertSame($deck->name, $message->deck_name);
+        $this->assertSame($card->name, $message->card_name);
+        $this->assertStringStartsWith("consultation-cards/{$consultation->id}/", $message->image_path);
+        $this->assertNotSame($card->image_path, $message->image_path);
+        Storage::disk('tarot_private')->assertExists($message->image_path);
+        $this->assertSame(
+            Storage::disk('tarot_private')->get($card->image_path),
+            Storage::disk('tarot_private')->get($message->image_path),
+        );
+
+        $this->actingAs($attendant)
+            ->get(route('consultations.show', $consultation))
+            ->assertOk()
+            ->assertSee('Enviar uma carta')
+            ->assertSee('A Estrela')
+            ->assertSee($deck->name);
+
+        $this->actingAs($client)
+            ->get(route('consultations.show', $consultation))
+            ->assertOk()
+            ->assertSee('A Estrela')
+            ->assertSee($deck->name);
+
+        $image = $this->actingAs($client)
+            ->get(route('consultations.messages.image', [$consultation, $message]))
+            ->assertOk()
+            ->assertHeader('Content-Type', 'image/png')
+            ->assertHeader('X-Content-Type-Options', 'nosniff');
+
+        $this->assertStringContainsString('private', (string) $image->headers->get('Cache-Control'));
+    }
+
+    public function test_card_snapshot_survives_catalog_changes_and_ended_consultation(): void
+    {
+        [$client, $attendant, $consultation] = $this->conversation();
+        [$card, $deck] = $this->card();
+
+        $this->actingAs($attendant)
+            ->post(route('consultations.cards.store', $consultation), ['tarot_card_id' => $card->id])
+            ->assertRedirect();
+
+        $message = ConsultationMessage::query()->sole();
+        $snapshotPath = $message->image_path;
+        $snapshotContents = Storage::disk('tarot_private')->get($snapshotPath);
+
+        $replacement = 'cards/'.Str::random(32).'.png';
+        Storage::disk('tarot_private')->put($replacement, $this->imageBytes());
+
+        $card->update([
+            'name' => 'A Lua',
+            'image_path' => $replacement,
+            'is_active' => false,
+        ]);
+        $deck->update(['is_active' => false]);
+
+        $consultation->update([
+            'status' => ConsultationStatus::Ended->value,
+            'ended_at' => now(),
+            'ended_reason' => ConsultationEndReason::ClientEnded->value,
+        ]);
+
+        $message->refresh();
+
+        $this->assertSame($snapshotPath, $message->image_path);
+        $this->assertSame('A Estrela', $message->card_name);
+        $this->assertSame($deck->name, $message->deck_name);
+        $this->assertSame($snapshotContents, Storage::disk('tarot_private')->get($snapshotPath));
+
+        $this->actingAs($client)
+            ->get(route('consultations.show', $consultation))
+            ->assertOk()
+            ->assertSee('A Estrela')
+            ->assertDontSee('A Lua');
+
+        $this->actingAs($client)
+            ->get(route('consultations.messages.image', [$consultation, $message]))
+            ->assertOk()
+            ->assertHeader('Content-Type', 'image/png');
+    }
+
+    public function test_only_the_assigned_attendant_can_send_cards(): void
+    {
+        [$client, , $consultation] = $this->conversation();
+        [$card] = $this->card();
+
+        $this->actingAs($client)
+            ->post(route('consultations.cards.store', $consultation), ['tarot_card_id' => $card->id])
+            ->assertForbidden();
+
+        $otherAttendant = User::factory()->attendant()->create();
+
+        $this->actingAs($otherAttendant)
+            ->post(route('consultations.cards.store', $consultation), ['tarot_card_id' => $card->id])
+            ->assertForbidden();
+
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)
+            ->post(route('consultations.cards.store', $consultation), ['tarot_card_id' => $card->id])
+            ->assertForbidden();
+
+        $this->assertDatabaseCount('consultation_messages', 0);
+    }
+
+    public function test_card_send_rejects_inactive_deck_inactive_card_and_missing_image(): void
+    {
+        [$client, $attendant, $consultation] = $this->conversation();
+        [$card, $deck] = $this->card();
+
+        $card->update(['is_active' => false]);
+
+        $this->actingAs($attendant)
+            ->from(route('consultations.show', $consultation))
+            ->post(route('consultations.cards.store', $consultation), ['tarot_card_id' => $card->id])
+            ->assertSessionHasErrors('tarot_card_id');
+
+        $card->update(['is_active' => true]);
+        $deck->update(['is_active' => false]);
+
+        $this->actingAs($attendant)
+            ->from(route('consultations.show', $consultation))
+            ->post(route('consultations.cards.store', $consultation), ['tarot_card_id' => $card->id])
+            ->assertSessionHasErrors('tarot_card_id');
+
+        $deck->update(['is_active' => true]);
+        Storage::disk('tarot_private')->delete($card->image_path);
+
+        $this->actingAs($attendant)
+            ->from(route('consultations.show', $consultation))
+            ->post(route('consultations.cards.store', $consultation), ['tarot_card_id' => $card->id])
+            ->assertSessionHasErrors('tarot_card_id');
+
+        $this->assertDatabaseCount('consultation_messages', 0);
+    }
+
+    public function test_card_snapshot_image_access_is_limited_to_consultation_participants(): void
+    {
+        [$client, $attendant, $consultation] = $this->conversation();
+        [$card] = $this->card();
+
+        $this->actingAs($attendant)
+            ->post(route('consultations.cards.store', $consultation), ['tarot_card_id' => $card->id])
+            ->assertRedirect();
+
+        $cardMessage = ConsultationMessage::query()->sole();
+        $textMessage = ConsultationMessage::factory()->create([
+            'consultation_id' => $consultation->id,
+            'sender_id' => $client->id,
+            'type' => MessageType::Text->value,
+        ]);
+
+        $this->actingAs($client)
+            ->get(route('consultations.messages.image', [$consultation, $cardMessage]))
+            ->assertOk();
+
+        $this->actingAs(User::factory()->create())
+            ->get(route('consultations.messages.image', [$consultation, $cardMessage]))
+            ->assertForbidden();
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->get(route('consultations.messages.image', [$consultation, $cardMessage]))
+            ->assertForbidden();
+
+        $this->actingAs($attendant)
+            ->get(route('consultations.messages.image', [$consultation, $textMessage]))
+            ->assertNotFound();
+
+        [, $otherAttendant, $otherConsultation] = $this->conversation();
+        $foreignMessage = ConsultationMessage::factory()->create([
+            'consultation_id' => $otherConsultation->id,
+            'sender_id' => $otherAttendant->id,
+            'type' => MessageType::TarotCard->value,
+            'body' => null,
+            'deck_name' => 'Outro baralho',
+            'card_name' => 'Outra carta',
+            'image_path' => 'consultation-cards/foreign.png',
+        ]);
+
+        $this->actingAs($client)
+            ->get(route('consultations.messages.image', [$consultation, $foreignMessage]))
+            ->assertNotFound();
+
+        $consultation->update([
+            'status' => ConsultationStatus::Ended->value,
+            'ended_at' => now(),
+            'ended_reason' => ConsultationEndReason::ClientEnded->value,
+        ]);
+
+        $this->actingAs($client)
+            ->get(route('consultations.messages.image', [$consultation, $cardMessage]))
+            ->assertOk();
+    }
+
+    public function test_message_text_is_escaped_when_rendered(): void
+    {
+        [$client, $attendant, $consultation] = $this->conversation();
+
+        ConsultationMessage::factory()->create([
+            'consultation_id' => $consultation->id,
+            'sender_id' => $attendant->id,
+            'body' => '<b>negrito</b>',
+        ]);
+
+        $this->actingAs($client)
+            ->get(route('consultations.show', $consultation))
+            ->assertOk()
+            ->assertDontSee('<b>negrito</b>', false)
+            ->assertSee('&lt;b&gt;negrito&lt;/b&gt;', false);
+    }
+
+    public function test_unread_indicator_is_cleared_after_opening_the_chat(): void
+    {
+        [$client, $attendant, $consultation] = $this->conversation();
+
+        ConsultationMessage::factory()->create([
+            'consultation_id' => $consultation->id,
+            'sender_id' => $attendant->id,
+            'body' => 'Nova orientação para você',
+        ]);
+
+        $this->assertSame(1, $consultation->unreadMessageCountFor($client));
+
+        $this->actingAs($client)
+            ->get(route('client.dashboard'))
+            ->assertOk()
+            ->assertSee('1 nova(s)');
+
+        $this->actingAs($client)
+            ->get(route('consultations.show', $consultation))
+            ->assertOk()
+            ->assertSee('1 mensagem nova foi recebida');
+
+        $this->assertNotNull($consultation->fresh()->client_last_read_at);
+        $this->assertSame(0, $consultation->fresh()->unreadMessageCountFor($client));
+
+        $this->actingAs($client)
+            ->get(route('client.dashboard'))
+            ->assertOk()
+            ->assertDontSee('1 nova(s)');
+    }
+
+    public function test_text_message_frequency_is_limited_per_participant_and_consultation(): void
+    {
+        config(['consultation.message_rate_per_minute' => 2]);
+
+        [$client, , $consultation] = $this->conversation();
+
+        $this->actingAs($client);
+
+        $this->post(route('consultations.messages.store', $consultation), ['body' => 'Primeira'])
+            ->assertRedirect();
+
+        $this->post(route('consultations.messages.store', $consultation), ['body' => 'Segunda'])
+            ->assertRedirect();
+
+        $this->post(route('consultations.messages.store', $consultation), ['body' => 'Terceira'])
+            ->assertStatus(429);
+
+        $this->assertSame(2, ConsultationMessage::query()->count());
+    }
+
+    public function test_attendant_sees_the_card_picker_with_card_images(): void
+    {
+        [, $attendant, $consultation] = $this->conversation();
+        [$card] = $this->card();
+
+        $this->actingAs($attendant)
+            ->get(route('consultations.show', $consultation))
+            ->assertOk()
+            ->assertSee('chat-card-picker', false)
+            ->assertSee('name="tarot_card_id"', false)
+            ->assertSee('type="radio"', false)
+            ->assertSee('Baralho Solar')
+            ->assertSee('A Estrela')
+            ->assertSee('src="'.route('tarot.cards.image', $card).'"', false)
+            // O seletor antigo (lista simples) não existe mais.
+            ->assertDontSee('<select name="tarot_card_id"', false);
+    }
+
+    public function test_card_picker_is_not_rendered_for_the_client(): void
+    {
+        [$client, , $consultation] = $this->conversation();
+        $this->card();
+
+        $this->actingAs($client)
+            ->get(route('consultations.show', $consultation))
+            ->assertOk()
+            ->assertDontSee('chat-card-picker', false)
+            ->assertDontSee('name="tarot_card_id"', false)
+            // Visão do cliente: sem o cartão de participantes e com o nome do
+            // atendente já no subtítulo da página.
+            ->assertDontSee('Participantes')
+            ->assertSee('Conversa com '.$consultation->attendant->name);
+    }
+}

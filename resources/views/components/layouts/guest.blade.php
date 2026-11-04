@@ -11,18 +11,25 @@
 ])
 
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-theme="{{ \App\Support\Theme::current()->value }}" data-theme-user="{{ \App\Support\Theme::isPersisted() ? '1' : '0' }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta name="theme-endpoint" content="{{ route('preferences.theme.update') }}">
     <title>{{ $title }}</title>
+
+    @include('layouts.partials.theme-bootstrap')
 
     @vite(['resources/css/app.scss', 'resources/js/app.js'])
 
     <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
 </head>
 <body class="bg-body auth-shell arcana-stars">
+    <div class="theme-toggle-dock">
+        <x-ui.theme-toggle />
+    </div>
+
     <div class="auth-card arcana-fade-up">
         <a class="auth-card__brand" href="{{ route('home') }}" aria-label="Arcana Tarot — Início">
             <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">

@@ -4,6 +4,11 @@
     Uso:
         <x-ui.alert type="success">Salvo com sucesso.</x-ui.alert>
         <x-ui.alert type="danger" :dismissible="false">...</x-ui.alert>
+
+    Observação: não usamos as classes `fade show` do Bootstrap. Com elas o alerta
+    só aparece depois que a transição de opacidade roda, então uma CSS/JS ausente
+    ou com atraso deixava a mensagem invisível. Sem `fade` o alerta é renderizado
+    visível de imediato e continua dispensável pelo botão de fechar.
 --}}
 @props([
     'type' => 'info',
@@ -22,7 +27,7 @@
     $iconPath = $icons[$type] ?? $icons['info'];
 @endphp
 
-<div role="alert" {{ $attributes->merge(['class' => 'alert alert-' . $type . ($dismissible ? ' alert-dismissible fade show' : '')]) }}>
+<div role="alert" {{ $attributes->merge(['class' => 'alert alert-' . $type . ($dismissible ? ' alert-dismissible' : '')]) }}>
     @if ($icon)
         <svg class="flex-shrink-0" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             {!! $iconPath !!}

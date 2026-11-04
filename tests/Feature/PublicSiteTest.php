@@ -5,7 +5,8 @@ namespace Tests\Feature;
 use App\Enums\AttendantAvailability;
 use App\Models\AttendantProfile;
 use App\Models\Consultation;
-use App\Models\Setting;
+use App\Models\TarotCard;
+use App\Models\TarotDeck;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
@@ -14,23 +15,6 @@ use Tests\TestCase;
 class PublicSiteTest extends TestCase
 {
     use RefreshDatabase;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        Setting::query()->create([
-            'key' => 'rate_credits_per_minute',
-            'value' => '2',
-            'type' => 'integer',
-        ]);
-
-        Setting::query()->create([
-            'key' => 'credit_unit_price_cents',
-            'value' => '150',
-            'type' => 'integer',
-        ]);
-    }
 
     /**
      * @param  array<string, mixed>  $profile
@@ -72,7 +56,7 @@ class PublicSiteTest extends TestCase
         $this->get(route('home'))
             ->assertOk()
             ->assertSee('Ana Online')
-            ->assertSee('R$ 3,00')
+            ->assertSee('R$ 2,00')
             ->assertDontSee('Beto Offline')
             ->assertDontSee('Carla Oculta')
             ->assertDontSee('Davi Inativo');
@@ -110,8 +94,8 @@ class PublicSiteTest extends TestCase
             ->assertSee('Beto Offline')
             ->assertSee('Online')
             ->assertSee('Offline')
-            ->assertSee('R$ 3,00')
-            ->assertSee('/ minuto');
+            ->assertSee('R$ 2,00')
+            ->assertSee('/min');
     }
 
     public function test_directory_and_profile_do_not_expose_private_data(): void
@@ -155,13 +139,13 @@ class PublicSiteTest extends TestCase
             ->assertSee('Amor')
             ->assertSee('Carreira')
             ->assertSee('Online')
-            ->assertSee('R$ 3,00')
+            ->assertSee('R$ 2,00')
             ->assertSee('Entrar para solicitar')
             ->assertSee(route('login'), false)
             ->assertSee('Você precisa estar autenticado para solicitar uma consulta.');
     }
 
-    public function test_authenticated_client_is_sent_to_the_panel_instead_of_login(): void
+    public function test_authenticated_client_receives_the_request_form_instead_of_login(): void
     {
         $attendant = $this->attendant([
             'availability' => AttendantAvailability::Online->value,
@@ -172,8 +156,9 @@ class PublicSiteTest extends TestCase
         $this->actingAs($client)
             ->get(route('attendants.show', $attendant))
             ->assertOk()
-            ->assertSee('Ir para o meu painel')
-            ->assertSee(route('client.dashboard'), false)
+            ->assertSee('Confirmar e solicitar')
+            ->assertSee(route('client.consultations.store'), false)
+            ->assertDontSee('Ir para o meu painel')
             ->assertDontSee('Entrar para solicitar');
     }
 
@@ -213,22 +198,24 @@ class PublicSiteTest extends TestCase
             ->assertDontSee('Entrar para solicitar');
     }
 
-    public function test_price_falls_back_to_consult_when_settings_are_missing(): void
+    public function test_price_is_unknown_when_attendant_has_no_modality_price(): void
     {
-        Setting::query()->delete();
+        $user = User::factory()->attendant()->create();
 
-        $attendant = $this->attendant([
-            'availability' => AttendantAvailability::Online->value,
-        ]);
+        $attendant = AttendantProfile::factory()
+            ->online()
+            ->for($user)
+            ->withoutModalityPrices()
+            ->create();
 
         $this->get(route('attendants.index'))
             ->assertOk()
-            ->assertSee('Valor sob consulta')
+            ->assertSee('Preço não configurado')
             ->assertDontSee('R$');
 
         $this->get(route('attendants.show', $attendant))
             ->assertOk()
-            ->assertSee('Valor sob consulta');
+            ->assertSee('Não configurado');
     }
 
     public function test_optional_photo_is_used_when_available_and_falls_back_to_initials(): void
@@ -261,16 +248,89 @@ class PublicSiteTest extends TestCase
 
     public function test_price_is_formatted_from_integer_cents(): void
     {
-        Setting::query()->where('key', 'rate_credits_per_minute')->update(['value' => '1']);
-        Setting::query()->where('key', 'credit_unit_price_cents')->update(['value' => '199']);
+        $user = User::factory()->attendant()->create();
 
-        $this->attendant([
-            'availability' => AttendantAvailability::Online->value,
-        ]);
+        AttendantProfile::factory()
+            ->online()
+            ->for($user)
+            ->withModalityPrices(['text' => 199])
+            ->create();
 
         $this->get(route('attendants.index'))
             ->assertOk()
             ->assertSee('R$ 1,99');
+    }
+
+    public function test_home_lists_active_tarot_decks_with_their_card_counts(): void
+    {
+        $deck = TarotDeck::factory()->create([
+            'name' => 'Tarô de Marselha',
+            'description' => 'Baralho tradicional usado nas leituras de caminho.',
+            'is_active' => true,
+        ]);
+
+        TarotCard::factory()->count(3)->create(['deck_id' => $deck->id]);
+
+        TarotDeck::factory()->create([
+            'name' => 'Baralho Oculto',
+            'is_active' => false,
+        ]);
+
+        $this->get(route('home'))
+            ->assertOk()
+            ->assertSee('Tradições que abrem caminhos diferentes')
+            ->assertSee('Tarô de Marselha')
+            ->assertSee('3 cartas')
+            ->assertDontSee('Baralho Oculto');
+    }
+
+    public function test_home_shows_an_empty_state_when_no_deck_is_active(): void
+    {
+        TarotDeck::factory()->create([
+            'name' => 'Baralho Oculto',
+            'is_active' => false,
+        ]);
+
+        $this->get(route('home'))
+            ->assertOk()
+            ->assertSee('Baralhos em preparação')
+            ->assertDontSee('Baralho Oculto');
+    }
+
+    public function test_navigation_links_point_to_the_dedicated_pages(): void
+    {
+        $this->get(route('home'))
+            ->assertOk()
+            ->assertSee('href="'.route('pages.how-it-works').'"', false)
+            ->assertSee('href="'.route('pages.faq').'"', false)
+            ->assertDontSee('href="'.route('home').'#como-funciona"', false)
+            ->assertDontSee('href="'.route('home').'#faq"', false);
+    }
+
+    public function test_how_it_works_page_renders_the_steps_and_the_first_faqs(): void
+    {
+        $this->get(route('pages.how-it-works'))
+            ->assertOk()
+            ->assertSee('breadcrumb-arcana', false)
+            ->assertSee('Três passos, uma leitura')
+            ->assertSee('Passo 01')
+            ->assertSee('Escolha o atendente')
+            ->assertSee('Preciso saber de tarô?')
+            ->assertDontSee('Minhas mensagens ficam privadas?')
+            ->assertSee('aria-current="page"', false);
+    }
+
+    public function test_faq_page_lists_every_published_question(): void
+    {
+        $this->get(route('pages.faq'))
+            ->assertOk()
+            ->assertSee('breadcrumb-arcana', false)
+            ->assertSee('Antes de perguntar')
+            ->assertSee('Preciso saber de tarô?')
+            ->assertSee('Como funciona a cobrança?')
+            ->assertSee('Posso cancelar a consulta?')
+            ->assertSee('Minhas mensagens ficam privadas?')
+            ->assertSee('Falar com a equipe');
     }
 
     public function test_work_with_us_call_to_action_and_institutional_pages_render(): void

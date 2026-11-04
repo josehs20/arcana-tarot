@@ -1,7 +1,18 @@
 # syntax=docker/dockerfile:1
 
 # PHP 8.4 FPM (Alpine) — versão documentada na stack do projeto (README/DECISIONS).
+#
+# O *patch* fica solto de propósito: dentro da série 8.4 cada `docker compose
+# build` puxa o patch de segurança mais recente publicado. Medido em
+# 04/11/2026: o build trouxe **8.4.27** (21/10/2026), enquanto o container que
+# estava em uso rodava 8.4.26 — é exatamente esse delta que o `FROM` flutuante
+# entrega. Não fixe o patch aqui: a série só recebe correção enquanto estiver
+# dentro da janela de suporte do php.net. A checagem abaixo falha o build se a
+# imagem-base sair da série exigida pelo `composer.json` (`^8.4`).
 FROM php:8.4-fpm-alpine
+
+RUN php -r 'if (PHP_VERSION_ID < 80400) { fwrite(STDERR, "PHP >= 8.4 obrigatorio\n"); exit(1); }' \
+    && php -v | head -1
 
 # ---------------------------------------------------------------------------
 # Extensões PHP e justificativas:
@@ -56,6 +67,9 @@ RUN addgroup -g 1000 appuser \
 
 # Pool do PHP-FPM escutando na porta 9000 para o Nginx.
 COPY docker/php/www.conf /usr/local/etc/php-fpm.d/www.conf
+
+# Limites de upload compatíveis com o catálogo de cartas (5 MB na aplicação).
+COPY docker/php/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
 
 WORKDIR /var/www/html
 

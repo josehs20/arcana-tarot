@@ -22,7 +22,7 @@ class CommissionLedgerEntryFactory extends Factory
             'consultation_id' => Consultation::factory(),
             'commission_rate_bps' => 3000,
             'base_amount_cents' => $base,
-            'commission_amount_cents' => (int) round($base * 3000 / 10000),
+            'commission_amount_cents' => intdiv(($base * 3000) + 5000, 10000),
             'type' => CommissionEntryType::Accrual->value,
             'idempotency_key' => fake()->uuid(),
         ];

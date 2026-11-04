@@ -5,51 +5,63 @@ namespace App\Support;
 use App\Models\Setting;
 
 /**
- * Preço público da consulta por minuto.
+ * Parâmetros globais do crédito.
  *
- * O valor é sempre calculado no servidor a partir das configurações
- * (`rate_credits_per_minute` × `credit_unit_price_cents`). Não existe
- * preço individual por atendente nesta etapa.
+ * O preço por minuto não é mais definido pela plataforma: cada atendente tem o
+ * seu próprio preço por modalidade em `attendant_modality_prices`
+ * (`AttendantProfile::priceForModality()`). Este serviço cuida apenas do que
+ * continua global — o valor do crédito e o saldo mínimo exigido no aceite — e
+ * converte o preço do atendente no saldo necessário para iniciar a consulta.
+ *
+ * Nenhum preço vem do navegador: o servidor resolve o valor no perfil do
+ * atendente e congela o snapshot no aceite.
  */
 final class ConsultationPricing
 {
     /** @var array<string, string|null>|null */
     private ?array $settings = null;
 
-    public function pricePerMinuteCents(): ?int
+    public function creditUnitPriceCents(): ?int
     {
-        $rate = $this->integer('rate_credits_per_minute');
         $unit = $this->integer('credit_unit_price_cents');
 
-        if ($rate === null || $unit === null || $rate <= 0 || $unit <= 0) {
-            return null;
-        }
-
-        return $rate * $unit;
+        return $unit !== null && $unit > 0 ? $unit : null;
     }
 
     /**
-     * Ex.: "R$ 1,00". Retorna null quando as configurações não estão definidas.
+     * Minutos minimos exigidos no aceite. Preferencia para o setting
+     * administrativo e fallback para config/consultation.php.
      */
-    public function pricePerMinuteLabel(): ?string
+    public function minimumBalanceMinutes(): int
     {
-        $cents = $this->pricePerMinuteCents();
+        $minutes = $this->integer('minimum_balance_minutes')
+            ?? (int) config('consultation.minimum_balance_minutes', 1);
 
-        if ($cents === null) {
-            return null;
-        }
+        return max(1, $minutes);
+    }
 
-        $reais = intdiv($cents, 100);
-        $centavos = str_pad((string) ($cents % 100), 2, '0', STR_PAD_LEFT);
+    /**
+     * Saldo mínimo em centavos para iniciar uma consulta com este preço por
+     * minuto (`preço do atendente × minutos mínimos`).
+     */
+    public function minimumBalanceCentsFor(int $pricePerMinuteCents): int
+    {
+        return max(0, $pricePerMinuteCents) * $this->minimumBalanceMinutes();
+    }
 
-        return 'R$ '.number_format($reais, 0, ',', '.').','.$centavos;
+    /**
+     * Ex.: "R$ 2,00".
+     */
+    public function minimumBalanceLabelFor(int $pricePerMinuteCents): string
+    {
+        return Money::format($this->minimumBalanceCentsFor($pricePerMinuteCents));
     }
 
     private function integer(string $key): ?int
     {
         if ($this->settings === null) {
             $this->settings = Setting::query()
-                ->whereIn('key', ['rate_credits_per_minute', 'credit_unit_price_cents'])
+                ->whereIn('key', ['credit_unit_price_cents', 'minimum_balance_minutes'])
                 ->pluck('value', 'key')
                 ->all();
         }
