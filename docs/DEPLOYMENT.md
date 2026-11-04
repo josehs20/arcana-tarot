@@ -7,7 +7,7 @@
 
 | Componente | Versão usada no projeto |
 |---|---|
-| PHP | 8.4 no container (`php:8.4-fpm-alpine`) |
+| PHP | **8.4 obrigatório** (mínimo 8.4.1) — container `php:8.4-fpm-alpine`; no Hostoo, escolhido no painel |
 | Laravel | 13.x |
 | MySQL | 8.4 |
 | Redis | 7 Alpine |
@@ -17,6 +17,38 @@
 | Docker / Compose | Docker 29+, Compose v2+ |
 | PHPUnit | 12.x |
 | Navegador | Versão atual com WebSocket e JavaScript habilitados |
+
+### 1.1 PHP 8.4 é requisito, não preferência
+
+O `composer.json` declara `"php": "^8.4"` e os componentes do Symfony usados
+pelo Laravel 13 exigem `>= 8.4.1`. Com isso o `vendor/composer/platform_check.php`
+— gerado pelo Composer e carregado no *bootstrap* de toda requisição — aborta com
+`Composer detected issues in your platform: ... require a PHP version ">= 8.4.1"`
+em qualquer PHP anterior. O modo de falha é fechado: erro 500 imediato, nunca um
+ambiente meio funcional.
+
+| Série | Suporte (php.net, consultado em 04/11/2026) |
+|---|---|
+| 8.5 | correções de bugs e segurança até 31/12/2027; segurança até 31/12/2029 |
+| **8.4 (alvo do projeto)** | correções de bugs e segurança até 31/12/2026; segurança até 31/12/2028 |
+| 8.3 | apenas segurança, até 31/12/2027 |
+| 8.2 | apenas segurança, até 31/12/2026 |
+| 8.1 e anteriores | **fim de vida** — sem correções de segurança |
+
+Séries em fim de vida (`5.6`, `7.x`, `8.0`, `8.1`) ainda aparecem como padrão em
+painéis de hospedagem compartilhada e **não recebem patch de segurança**. Fixar
+8.4 é o que mantém o servidor dentro da janela de suporte.
+
+Dependências entram na mesma conta: os advisories do Symfony publicados em
+28/10 e 04/11/2026 só foram zerados depois de subir `symfony/*` para
+`8.1.10`/`8.1.11` (`composer audit` → `No security vulnerability advisories found`).
+
+Verificação:
+
+```bash
+docker compose exec app php -v                      # PHP 8.4.x
+docker compose exec app composer check-platform-reqs
+```
 
 O host de desenvolvimento pode não ter `pdo_sqlite`, `pdo_mysql` ou `redis`.
 Nesse caso, execute testes, migrations e comandos dentro do container.
@@ -159,12 +191,15 @@ docker compose exec app php artisan arcana:create-attendant \
   --email="atendente@example.com" \
   --display-name="Nome público" \
   --commission-rate="25" \
+  --price-text="100" \
   --publish
 ```
 
-Sem `--publish`, o perfil fica não publicado e offline. O comando registra
-auditoria e não altera a candidatura. Detalhes em
-`docs/ATTENDANT_ONBOARDING.md`.
+Sem `--publish`, o perfil fica não publicado e offline. Sem `--price-text`
+(e demais `--price-audio`/`--price-video`, em centavos por minuto), o atendente
+não recebe solicitações até que a administração defina os preços em
+**Admin → Modalidades**. O comando registra auditoria e não altera a
+candidatura. Detalhes em `docs/ATTENDANT_ONBOARDING.md`.
 
 ## 7. Worker, Reverb, scheduler e assets
 
@@ -286,9 +321,11 @@ PAYMENT_SANDBOX_ENABLED=false
   subdomínios.
 - CSP estrita deve ser testada em homologação antes de ser habilitada.
 - Em hospedagem compartilhada (Hostoo), troque `SESSION_DRIVER`, `CACHE_STORE` e
-  `QUEUE_CONNECTION` para `database`, use `BROADCAST_CONNECTION=log` com
-  `CONSULTATION_WEBSOCKET_ENABLED=false` e defina `TRUSTED_PROXIES=*`. Checklist
-  completo em [ARQUITETURA_PRODUCAO_HOSTOO.md](ARQUITETURA_PRODUCAO_HOSTOO.md).
+  `QUEUE_CONNECTION` para `database` e use `BROADCAST_CONNECTION=log` com
+  `CONSULTATION_WEBSOCKET_ENABLED=false`. O `TRUSTED_PROXIES` **não** vale no
+  `.env`: injete com `SetEnv TRUSTED_PROXIES "*"` no servidor. Checklist completo
+  em [ARQUITETURA_PRODUCAO_HOSTOO.md](ARQUITETURA_PRODUCAO_HOSTOO.md) e teste
+  local em [TESTE_LOCAL_MODO_HOSTOO.md](TESTE_LOCAL_MODO_HOSTOO.md).
 
 ## 9. Migrations com backup e rollback
 
@@ -448,9 +485,9 @@ deve reiniciá-lo. `reverb:restart` faz o mesmo para o servidor WebSocket.
 - O host de desenvolvimento pode não ter drivers PHP; use Docker.
 - O domínio, marca, textos legais e valores comerciais ainda precisam de decisão
   do responsável.
-- `credit_unit_price_cents`, `rate_credits_per_minute` e taxas de comissão são
-  configurações administrativas; os valores comerciais não são fixados no
-  código.
+- `credit_unit_price_cents`, `attendant_modality_prices.price_per_minute_cents`
+  e taxas de comissão são configurações administrativas; os valores comerciais
+  não são fixados no código.
 
 ## 14. Avaliação objetiva de prontidão
 

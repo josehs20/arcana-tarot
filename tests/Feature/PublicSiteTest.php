@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Enums\AttendantAvailability;
 use App\Models\AttendantProfile;
 use App\Models\Consultation;
-use App\Models\Setting;
 use App\Models\TarotCard;
 use App\Models\TarotDeck;
 use App\Models\User;
@@ -16,23 +15,6 @@ use Tests\TestCase;
 class PublicSiteTest extends TestCase
 {
     use RefreshDatabase;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        Setting::query()->create([
-            'key' => 'rate_credits_per_minute',
-            'value' => '2',
-            'type' => 'integer',
-        ]);
-
-        Setting::query()->create([
-            'key' => 'credit_unit_price_cents',
-            'value' => '150',
-            'type' => 'integer',
-        ]);
-    }
 
     /**
      * @param  array<string, mixed>  $profile
@@ -74,7 +56,7 @@ class PublicSiteTest extends TestCase
         $this->get(route('home'))
             ->assertOk()
             ->assertSee('Ana Online')
-            ->assertSee('R$ 3,00')
+            ->assertSee('R$ 2,00')
             ->assertDontSee('Beto Offline')
             ->assertDontSee('Carla Oculta')
             ->assertDontSee('Davi Inativo');
@@ -112,7 +94,7 @@ class PublicSiteTest extends TestCase
             ->assertSee('Beto Offline')
             ->assertSee('Online')
             ->assertSee('Offline')
-            ->assertSee('R$ 3,00')
+            ->assertSee('R$ 2,00')
             ->assertSee('/min');
     }
 
@@ -157,7 +139,7 @@ class PublicSiteTest extends TestCase
             ->assertSee('Amor')
             ->assertSee('Carreira')
             ->assertSee('Online')
-            ->assertSee('R$ 3,00')
+            ->assertSee('R$ 2,00')
             ->assertSee('Entrar para solicitar')
             ->assertSee(route('login'), false)
             ->assertSee('Você precisa estar autenticado para solicitar uma consulta.');
@@ -216,17 +198,19 @@ class PublicSiteTest extends TestCase
             ->assertDontSee('Entrar para solicitar');
     }
 
-    public function test_price_falls_back_to_consult_when_settings_are_missing(): void
+    public function test_price_is_unknown_when_attendant_has_no_modality_price(): void
     {
-        Setting::query()->delete();
+        $user = User::factory()->attendant()->create();
 
-        $attendant = $this->attendant([
-            'availability' => AttendantAvailability::Online->value,
-        ]);
+        $attendant = AttendantProfile::factory()
+            ->online()
+            ->for($user)
+            ->withoutModalityPrices()
+            ->create();
 
         $this->get(route('attendants.index'))
             ->assertOk()
-            ->assertSee('Valor sob consulta')
+            ->assertSee('Preço não configurado')
             ->assertDontSee('R$');
 
         $this->get(route('attendants.show', $attendant))
@@ -264,12 +248,13 @@ class PublicSiteTest extends TestCase
 
     public function test_price_is_formatted_from_integer_cents(): void
     {
-        Setting::query()->where('key', 'rate_credits_per_minute')->update(['value' => '1']);
-        Setting::query()->where('key', 'credit_unit_price_cents')->update(['value' => '199']);
+        $user = User::factory()->attendant()->create();
 
-        $this->attendant([
-            'availability' => AttendantAvailability::Online->value,
-        ]);
+        AttendantProfile::factory()
+            ->online()
+            ->for($user)
+            ->withModalityPrices(['text' => 199])
+            ->create();
 
         $this->get(route('attendants.index'))
             ->assertOk()

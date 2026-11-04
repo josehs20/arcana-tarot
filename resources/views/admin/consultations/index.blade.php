@@ -101,7 +101,7 @@
                                 </td>
                                 <td class="text-nowrap">
                                     {{ $consultation->pricePerMinuteLabel() ?? '—' }}
-                                    <div class="form-text">{{ $consultation->rate_credits_per_minute }} créditos/min</div>
+                                    <div class="form-text">{{ $consultation->modalityLabel() }}</div>
                                 </td>
                                 <td class="text-nowrap">{{ $consultation->durationLabel() ?? '—' }}</td>
                                 <td class="text-nowrap">{{ $consultation->totalChargedLabel() }}</td>

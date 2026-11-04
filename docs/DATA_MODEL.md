@@ -91,6 +91,23 @@ polimórficas:
 > personalizado faltar, o painel volta a tocar a sirene. O som só altera o aviso
 > de nova solicitação, nunca o aceite ou a cobrança.
 
+### 2.2.1 `attendant_modality_prices` — preço por atendente e modalidade
+
+| Coluna | Tipo | Notas |
+|---|---|---|
+| `id` | bigint PK | |
+| `attendant_profile_id` | FK attendant_profiles | cascadeOnDelete |
+| `modality` | string(20) | enum `ConsultationModality` (`text`, `audio`, `video`) |
+| `price_per_minute_cents` | unsignedInteger | valor cobrado por minuto iniciado |
+| `timestamps` | | |
+
+Índice único `(attendant_profile_id, modality)`. É a **única** fonte do preço de
+novas consultas: o aceite copia o valor para
+`consultations.price_per_minute_cents`. Modalidade sem linha (ou com valor
+zero) significa “preço não configurado” e bloqueia o pedido/aceite — não existe
+tarifa global de fallback. A edição acontece em **Admin → Modalidades** e é
+auditada como `attendant.modalities_updated`.
+
 ### 2.3 `consultations` — consultas/sessões
 
 | Coluna | Tipo | Notas |
@@ -102,8 +119,9 @@ polimórficas:
 | `open_client_id` | unsignedBigInteger nullable | trava única: preenchido em `requested`/`active`, `NULL` em estados finais |
 | `active_attendant_id` | unsignedBigInteger nullable | trava única: preenchido apenas em `active` |
 | `commission_rate_bps` | unsignedInteger nullable | **snapshot** da comissão no início oficial |
-| `rate_credits_per_minute` | unsignedInteger nullable | **snapshot** da tarifa no aceite (Prompt 10) |
-| `credit_unit_price_cents` | unsignedBigInteger nullable | **snapshot** do preço do crédito no aceite (Prompt 10) |
+| `price_per_minute_cents` | unsignedInteger nullable | **snapshot** do preço do atendente para a modalidade no aceite |
+| `rate_credits_per_minute` | unsignedInteger nullable | coluna **legada** (espelho em créditos do preço congelado; nula em consultas novas quando o crédito não divide o preço) |
+| `credit_unit_price_cents` | unsignedBigInteger nullable | **snapshot** do preço do crédito no aceite (legado, mantido para auditoria) |
 | `started_at` / `ended_at` | timestamp nullable | controlados pelo servidor (aceite/encerramento) |
 | `last_activity_at` | timestamp nullable | relógio agregado de interação; base da interrupção por inatividade |
 | `client_last_activity_at` / `attendant_last_activity_at` | timestamp nullable | última interação por papel; diagnóstico, não decide a interrupção |
@@ -390,7 +408,7 @@ copiados para a auditoria.
 |---|---|
 | Papéis | `users.role` string + enum PHP (`UserRole`), sem pacote de permissões |
 | Comissão | `commission_rate_bps` em basis points inteiros (0–10000) |
-| Parâmetros configuráveis | tabela `settings` (preço do crédito, tarifa por minuto etc.) |
+| Parâmetros configuráveis | tabela `settings` (valor do crédito, saldo mínimo etc.); preços por minuto ficam em `attendant_modality_prices` |
 | Estados | enums string-backed (`app/Enums`) |
 | Ciclo da consulta | transições somente via `ConsultationLifecycleManager`, estados finais terminais e travas únicas `open_client_id`/`active_attendant_id` |
 | Monetário | inteiros de centavos; formatação apenas na apresentação |

@@ -1,6 +1,5 @@
 @php
     $attendants = $attendants ?? collect();
-    $pricePerMinute = $pricePerMinute ?? null;
 @endphp
 
 <section class="arcana-section arcana-section--alt" id="atendentes">
@@ -49,7 +48,6 @@
                     <div class="col-md-6 col-xl-4">
                         <x-public.attendant-card
                             :attendant="$attendant"
-                            :price="$pricePerMinute"
                             :modalities="$modalityOptions[$attendant->getKey()] ?? []"
                         />
                     </div>

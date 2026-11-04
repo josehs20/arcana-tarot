@@ -14,6 +14,7 @@ use App\Models\Setting;
 use App\Models\User;
 use App\Models\Wallet;
 use Carbon\Carbon;
+use Database\Factories\AttendantProfileFactory;
 use DomainException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -25,12 +26,6 @@ class ConsultationLifecycleTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-
-        Setting::query()->create([
-            'key' => 'rate_credits_per_minute',
-            'value' => '2',
-            'type' => 'integer',
-        ]);
 
         Setting::query()->create([
             'key' => 'credit_unit_price_cents',
@@ -193,7 +188,8 @@ class ConsultationLifecycleTest extends TestCase
         $this->assertSame(ConsultationStatus::Active, $consultation->status);
         $this->assertNotNull($consultation->started_at);
         $this->assertSame(2500, $consultation->commission_rate_bps);
-        $this->assertSame(2, $consultation->rate_credits_per_minute);
+        $this->assertSame(AttendantProfileFactory::DEFAULT_PRICE_PER_MINUTE_CENTS, $consultation->price_per_minute_cents);
+        $this->assertNull($consultation->rate_credits_per_minute);
         $this->assertSame(150, $consultation->credit_unit_price_cents);
         $this->assertNotNull($profile->fresh()->last_seen_at);
 
@@ -228,7 +224,7 @@ class ConsultationLifecycleTest extends TestCase
 
         $this->assertSame(ConsultationStatus::Requested, $consultation->status);
         $this->assertNull($consultation->started_at);
-        $this->assertNull($consultation->rate_credits_per_minute);
+        $this->assertNull($consultation->price_per_minute_cents);
     }
 
     public function test_attendant_must_be_online_to_accept(): void

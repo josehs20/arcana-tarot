@@ -4,12 +4,12 @@ namespace App\Http\Controllers\Admin;
 
 use App\Enums\ConsultationModality;
 use App\Http\Controllers\Controller;
+use App\Models\AttendantModalityPrice;
 use App\Models\AttendantProfile;
 use App\Models\AuditLog;
 use App\Models\Consultation;
 use App\Models\User;
 use App\Support\ConsultationModalityCatalog;
-use App\Support\ConsultationPricing;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -19,18 +19,21 @@ use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 /**
- * Modalidades realmente oferecidas por cada atendente.
+ * Modalidades e precos realmente oferecidos por cada atendente.
  *
  * Texto e a modalidade base e permanece sempre habilitada. Audio e video
  * dependem tambem da infraestrutura global, portanto nao podem ser atribuidos
  * quando o recurso esta desligado no servidor.
+ *
+ * O preco por minuto de cada modalidade e definido aqui, por atendente
+ * (`attendant_modality_prices`). Nao existe mais tarifa global: a consulta so
+ * pode ser solicitada e aceita quando o profissional tem preco configurado.
  */
 class ModalityController extends Controller
 {
     public function index(
         Request $request,
         ConsultationModalityCatalog $catalog,
-        ConsultationPricing $pricing,
     ): View {
         Gate::authorize('viewAny', Consultation::class);
 
@@ -42,7 +45,7 @@ class ModalityController extends Controller
 
         $attendants = User::query()
             ->where('role', 'attendant')
-            ->with('attendantProfile')
+            ->with('attendantProfile.modalityPrices')
             ->whereHas('attendantProfile')
             ->when($search !== '', function ($query) use ($search): void {
                 $term = '%'.$search.'%';
@@ -63,7 +66,6 @@ class ModalityController extends Controller
             'search' => $search,
             'modalities' => ConsultationModality::cases(),
             'catalog' => $catalog,
-            'labelsByModality' => $pricing->labelsByModality(),
         ]);
     }
 
@@ -82,6 +84,8 @@ class ModalityController extends Controller
         $validated = $request->validate([
             'offered_modalities' => ['nullable', 'array'],
             'offered_modalities.*' => [Rule::enum(ConsultationModality::class)],
+            'prices' => ['nullable', 'array'],
+            'prices.*' => ['nullable', 'integer', 'min:1', 'max:1000000'],
         ]);
 
         $requested = collect($validated['offered_modalities'] ?? [])
@@ -90,12 +94,24 @@ class ModalityController extends Controller
             ->unique()
             ->values();
 
+        $prices = [];
+
         foreach ($requested as $modality) {
             if (! $catalog->isEnabled($modality)) {
                 throw ValidationException::withMessages([
                     'offered_modalities' => 'A modalidade '.$modality->label().' está desativada na infraestrutura.',
                 ]);
             }
+
+            $price = $validated['prices'][$modality->value] ?? null;
+
+            if ($price === null) {
+                throw ValidationException::withMessages([
+                    'prices' => 'Informe o preço por minuto de '.$modality->label().' para este atendente.',
+                ]);
+            }
+
+            $prices[$modality->value] = (int) $price;
         }
 
         $order = array_flip(ConsultationModality::values());
@@ -106,12 +122,23 @@ class ModalityController extends Controller
             ->values()
             ->all();
 
-        DB::transaction(function () use ($profile, $values, $request): void {
+        DB::transaction(function () use ($profile, $values, $prices, $request): void {
             $locked = AttendantProfile::query()->lockForUpdate()->findOrFail($profile->getKey());
             $before = $locked->offeredModalityValues();
+            $beforePrices = $locked->pricesByModality();
 
             $locked->offered_modalities = $values;
             $locked->save();
+
+            foreach ($prices as $modality => $cents) {
+                AttendantModalityPrice::query()->updateOrCreate(
+                    [
+                        'attendant_profile_id' => $locked->getKey(),
+                        'modality' => $modality,
+                    ],
+                    ['price_per_minute_cents' => $cents],
+                );
+            }
 
             AuditLog::query()->create([
                 'actor_id' => $request->user()->getKey(),
@@ -121,10 +148,12 @@ class ModalityController extends Controller
                 'metadata' => [
                     'before' => $before,
                     'after' => $values,
+                    'prices_before' => $beforePrices,
+                    'prices_after' => $prices,
                 ],
             ]);
         });
 
-        return back()->with('success', 'Modalidades do atendente atualizadas.');
+        return back()->with('success', 'Modalidades e preços por minuto do atendente atualizados. Consultas já iniciadas mantêm o preço congelado.');
     }
 }

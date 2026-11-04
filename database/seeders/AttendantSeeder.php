@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Enums\AttendantAvailability;
 use App\Enums\UserRole;
+use App\Models\AttendantModalityPrice;
 use App\Models\AttendantProfile;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
@@ -53,6 +54,29 @@ class AttendantSeeder extends DemoSeeder
                 'request_sound' => $profile->request_sound?->value ?? $attendant['request_sound'],
                 'last_seen_at' => $availability === AttendantAvailability::Online ? now() : $profile->last_seen_at,
             ])->saveQuietly();
+
+            $this->seedModalityPrices($profile);
+        }
+    }
+
+    /**
+     * Cada atendente recebe um preço por minuto para cada modalidade que
+     * oferece. O preço é obrigatório para novas consultas, então o cenário de
+     * demonstração nunca fica sem tarifa. Preços já ajustados manualmente são
+     * preservados.
+     */
+    private function seedModalityPrices(AttendantProfile $profile): void
+    {
+        foreach ($profile->offeredModalities() as $modality) {
+            AttendantModalityPrice::query()->firstOrCreate(
+                [
+                    'attendant_profile_id' => $profile->getKey(),
+                    'modality' => $modality->value,
+                ],
+                [
+                    'price_per_minute_cents' => DemoData::modalityPricePerMinuteCents($modality->value),
+                ],
+            );
         }
     }
 }

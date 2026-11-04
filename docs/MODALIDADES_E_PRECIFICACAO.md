@@ -23,10 +23,11 @@ por áudio/vídeo usam a interface de chamada e não aceitam mensagens.
 
 ## 2. Regra de cobrança
 
-A regra financeira existente foi preservada:
+O preço do minuto é **por atendente e por modalidade**:
 
 ```
-preço por minuto = créditos por minuto × valor do crédito
+preço por minuto = attendant_modality_prices.price_per_minute_cents
+                   (atendente + modalidade escolhida)
 ```
 
 - A cobrança é **por minuto iniciado** (`ConsultationBillingManager`).
@@ -38,44 +39,49 @@ preço por minuto = créditos por minuto × valor do crédito
   encerrada com motivo `out_of_credits` pelo comando `consultations:charge-minutes`.
 - O saldo nunca fica negativo: o débito usa `UPDATE` condicional
   (`balance_cents >= amount`) além do lock pessimista da carteira.
-- Consultas já aceitas guardam snapshots imutáveis de:
-  `rate_credits_per_minute`, `credit_unit_price_cents`,
-  `price_per_minute_cents` e `commission_rate_bps`. Mudanças futuras de preço
-  não alteram consultas anteriores.
+- `credit_unit_price_cents` continua global e serve para converter recargas em
+  créditos; não define mais o preço do minuto.
+- Consultas já aceitas guardam snapshots imutáveis de
+  `price_per_minute_cents`, `credit_unit_price_cents` (legado),
+  `rate_credits_per_minute` (espelho legado) e `commission_rate_bps`. Mudanças
+  futuras de preço não alteram consultas anteriores.
 
 ### Onde o preço é configurado
 
-Painel administrativo → **Financeiro** → cartão **Tarifas por modalidade**
-(`PATCH /admin/financeiro/tarifa`). A administração define:
+Painel administrativo → **Modalidades** (`/admin/modalidades`) → cartão
+**Preço por atendente**. Para cada atendente publicado e cada modalidade
+oferecida a administração informa o valor em centavos por minuto; o botão
+**Salvar modalidades e preços** grava em `attendant_modality_prices` e audita
+`attendant.modalities_updated`.
 
-- créditos por minuto de **texto** (`rate_credits_per_minute_text`);
-- créditos por minuto de **áudio** (`rate_credits_per_minute_audio`);
-- créditos por minuto de **vídeo** (`rate_credits_per_minute_video`);
+Em **Financeiro** (`/admin/financeiro`) ficam apenas os parâmetros globais:
+
 - valor do crédito em centavos (`credit_unit_price_cents`);
 - saldo mínimo em minutos (`minimum_balance_minutes`).
 
-A chave histórica `rate_credits_per_minute` continua existindo como espelho da
-tarifa de texto e como fallback quando uma tarifa específica ainda não foi
-definida. Em produção, **não há valores fictícios**: se o preço de uma
-modalidade não estiver configurado, o servidor recusa a solicitação com uma
-mensagem de tarifa não configurada.
+Não existe tarifa global nem fallback de modalidade: se o atendente não tiver
+preço para a modalidade escolhida, o servidor recusa a solicitação e o aceite
+com a mensagem **“Preço não configurado”**. O perfil público e o diretório
+mostram o menor preço disponível do atendente como “a partir de”, sem nunca
+inventar valor.
 
 ### Valores de demonstração (somente ambiente demo)
 
-O `SettingsSeeder` (que exige ambiente de demonstração) usa:
+O `AttendantSeeder`/`SettingsSeeder` (que exigem ambiente de demonstração)
+usam `credit_unit_price_cents = 100` e derivam o preço por modalidade:
 
-| Modalidade | Créditos/min | Crédito | Preço/min |
-| --- | --- | --- | --- |
-| Texto | 1 | R$ 1,00 | R$ 1,00 |
-| Áudio | 2 | R$ 1,00 | R$ 2,00 |
-| Vídeo | 3 | R$ 1,00 | R$ 3,00 |
+| Modalidade | Créditos/min (demo) | Preço/min |
+| --- | --- | --- |
+| Texto | 1 | R$ 1,00 |
+| Áudio | 2 | R$ 2,00 |
+| Vídeo | 3 | R$ 3,00 |
 
 ## 3. Modalidades por atendente
 
 Cada perfil possui `attendant_profiles.offered_modalities` (JSON). Perfis sem
 configuração oferecem apenas **texto** — áudio e vídeo nunca são presumidos.
 
-A administração ajusta as modalidades em **Admin → Modalidades**
+A administração ajusta as modalidades e os preços em **Admin → Modalidades**
 (`/admin/modalidades`), com auditoria `attendant.modalities_updated`. O texto é
 sempre oferecido; áudio/vídeo só podem ser atribuídos quando habilitados na
 infraestrutura. O servidor revalida no pedido e no aceite:
@@ -83,8 +89,8 @@ infraestrutura. O servidor revalida no pedido e no aceite:
 1. o atendente está online e publicado;
 2. o atendente oferece a modalidade escolhida;
 3. a modalidade está habilitada em `config/consultation.php`;
-4. existe preço configurado;
-5. o cliente possui o saldo mínimo da modalidade (no aceite).
+4. existe preço configurado para o par atendente/modalidade;
+5. o cliente possui o saldo mínimo do preço do atendente (no aceite).
 
 ## 4. Chamadas de áudio e vídeo (WebRTC)
 
@@ -197,7 +203,9 @@ docker compose exec app php artisan test --compact
 
 ### Teste manual por modalidade
 
-1. Entre como administrador e defina as tarifas em **Financeiro**.
+1. Entre como administrador e defina os preços por atendente em
+   **Modalidades**; confira o valor do crédito e o saldo mínimo em
+   **Financeiro**.
 2. Em **Modalidades**, habilite texto/áudio/vídeo para um atendente e deixe-o
    online no painel dele.
 3. Como cliente, abra o perfil do atendente, escolha a modalidade e confirme o

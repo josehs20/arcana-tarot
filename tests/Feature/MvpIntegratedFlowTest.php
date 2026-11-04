@@ -36,7 +36,6 @@ class MvpIntegratedFlowTest extends TestCase
 
         Storage::fake('tarot_private');
 
-        Setting::query()->create(['key' => 'rate_credits_per_minute', 'value' => '1', 'type' => 'integer']);
         Setting::query()->create(['key' => 'credit_unit_price_cents', 'value' => '100', 'type' => 'integer']);
         Setting::query()->create(['key' => 'minimum_balance_minutes', 'value' => '1', 'type' => 'integer']);
     }
@@ -101,10 +100,14 @@ class MvpIntegratedFlowTest extends TestCase
 
         $admin = User::factory()->admin()->create();
         $attendant = User::factory()->attendant()->create(['name' => 'Atendente Integrado']);
-        $profile = AttendantProfile::factory()->offline()->for($attendant)->create([
-            'display_name' => 'Atendente Integrado',
-            'commission_rate_bps' => 2500,
-        ]);
+        $profile = AttendantProfile::factory()
+            ->offline()
+            ->for($attendant)
+            ->withModalityPrices(['text' => 100])
+            ->create([
+                'display_name' => 'Atendente Integrado',
+                'commission_rate_bps' => 2500,
+            ]);
 
         $client = User::factory()->create(['name' => 'Cliente Integrado']);
         $wallet = Wallet::factory()->create([

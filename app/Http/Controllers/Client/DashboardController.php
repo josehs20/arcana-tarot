@@ -7,7 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AttendantProfile;
 use App\Models\Consultation;
 use App\Models\Payment;
-use App\Support\ConsultationPricing;
+use App\Support\ConsultationModalityCatalog;
 use App\Support\DashboardTrend;
 use App\Support\ModalityUsageReport;
 use Illuminate\Http\Request;
@@ -16,7 +16,7 @@ use Illuminate\View\View;
 
 class DashboardController extends Controller
 {
-    public function __invoke(Request $request, ConsultationPricing $pricing): View
+    public function __invoke(Request $request, ConsultationModalityCatalog $catalog): View
     {
         Gate::authorize('access-client-panel');
         Gate::authorize('viewClientPanel', Consultation::class);
@@ -59,6 +59,7 @@ class DashboardController extends Controller
             ->whereDoesntHave('activeConsultation');
 
         $availableAttendants = (clone $availableAttendantsQuery)
+            ->with('modalityPrices')
             ->orderForDirectory()
             ->limit(6)
             ->get();
@@ -75,7 +76,7 @@ class DashboardController extends Controller
             'availableAttendants' => $availableAttendants,
             'availableAttendantsCount' => (clone $availableAttendantsQuery)->count(),
             'consultationsCount' => (clone $consultations)->count(),
-            'pricePerMinuteLabel' => $pricing->pricePerMinuteLabel(),
+            'startingPriceLabel' => $catalog->startingPriceLabel(),
             'modalityUsage' => ModalityUsageReport::summary(client: $user),
             'unreadMessagesCount' => $currentConsultation?->unreadMessageCountFor($user) ?? 0,
         ]);

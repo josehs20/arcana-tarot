@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Enums\ConsultationModality;
+use App\Models\AttendantModalityPrice;
 use App\Models\AttendantProfile;
 
 /**
@@ -10,11 +11,13 @@ use App\Models\AttendantProfile;
  *
  * Uma modalidade so pode ser contratada quando:
  * - a infraestrutura correspondente esta habilitada (config);
- * - existe preco configurado pela administracao;
- * - o atendente escolhido a oferece explicitamente.
+ * - o atendente escolhido a oferece explicitamente;
+ * - o atendente possui preco por minuto configurado para a modalidade
+ *   (`attendant_modality_prices`).
  *
- * A interface usa exatamente a mesma resolucao; o servidor revalida no
- * momento da solicitacao e do aceite.
+ * Não existe mais preço global: o valor exibido e cobrado vem sempre do
+ * profissional escolhido. A interface usa exatamente a mesma resolucao; o
+ * servidor revalida no momento da solicitacao e do aceite.
  */
 final class ConsultationModalityCatalog
 {
@@ -29,13 +32,50 @@ final class ConsultationModalityCatalog
         return (bool) config('consultation.modalities.'.$modality->value.'.enabled', false);
     }
 
+    /**
+     * Preço por minuto em centavos definido pelo atendente para a modalidade.
+     */
+    public function priceCentsFor(?AttendantProfile $profile, ConsultationModality $modality): ?int
+    {
+        return $profile?->priceForModality($modality);
+    }
+
+    /**
+     * Ex.: "R$ 1,50". Retorna null quando o atendente não configurou o preço.
+     */
+    public function priceLabelFor(?AttendantProfile $profile, ConsultationModality $modality): ?string
+    {
+        $cents = $this->priceCentsFor($profile, $modality);
+
+        return $cents === null ? null : Money::format($cents);
+    }
+
     public function isAvailableFor(?AttendantProfile $profile, ConsultationModality $modality): bool
     {
-        if (! $this->isEnabled($modality) || ! $this->pricing->isPriced($modality)) {
-            return false;
-        }
+        return $this->unavailableReason($profile, $modality) === null;
+    }
 
-        return $profile === null || $profile->offersModality($modality);
+    /**
+     * Menor preco por minuto entre os atendentes disponiveis.
+     *
+     * Serve apenas como referencia ("a partir de") quando ainda nao existe um
+     * atendente escolhido. Cada consulta usa sempre o preco do proprio
+     * profissional, congelado no aceite.
+     */
+    public function startingPriceCents(): ?int
+    {
+        $cents = AttendantModalityPrice::query()
+            ->whereHas('attendantProfile', static fn ($query) => $query->available())
+            ->min('price_per_minute_cents');
+
+        return $cents === null ? null : (int) $cents;
+    }
+
+    public function startingPriceLabel(): ?string
+    {
+        $cents = $this->startingPriceCents();
+
+        return $cents === null ? null : Money::format($cents);
     }
 
     public function unavailableReason(?AttendantProfile $profile, ConsultationModality $modality): ?string
@@ -46,12 +86,16 @@ final class ConsultationModalityCatalog
                 : 'Atendimento por audio indisponivel no momento.';
         }
 
-        if (! $this->pricing->isPriced($modality)) {
-            return 'O preco desta modalidade ainda nao foi configurado.';
+        if ($profile === null) {
+            return 'Escolha um atendente para consultar o preço desta modalidade.';
         }
 
-        if ($profile !== null && ! $profile->offersModality($modality)) {
+        if (! $profile->offersModality($modality)) {
             return 'Este atendente nao oferece atendimento por '.$modality->label().'.';
+        }
+
+        if ($this->priceCentsFor($profile, $modality) === null) {
+            return 'O preco desta modalidade ainda nao foi configurado para este atendente.';
         }
 
         return null;
@@ -71,8 +115,8 @@ final class ConsultationModalityCatalog
                 'label' => $modality->label(),
                 'description' => $modality->description(),
                 'icon' => $modality->icon(),
-                'price_cents' => $this->pricing->pricePerMinuteCents($modality),
-                'price_label' => $this->pricing->pricePerMinuteLabel($modality),
+                'price_cents' => $this->priceCentsFor($profile, $modality),
+                'price_label' => $this->priceLabelFor($profile, $modality),
                 'available' => $this->isAvailableFor($profile, $modality),
                 'reason' => $this->unavailableReason($profile, $modality),
                 'requires_video' => $modality->requiresVideo(),
@@ -83,8 +127,8 @@ final class ConsultationModalityCatalog
     }
 
     /**
-     * Opcoes publicas do diretorio: apenas modalidades oferecidas e
-     * disponiveis, usadas para exibir precos antes da consulta.
+     * Opcoes publicas do diretorio: apenas modalidades oferecidas, precificadas
+     * e disponiveis, usadas para exibir precos antes da consulta.
      *
      * @return array<int, array{label: string, value: string, price_label: string|null, price_cents: int|null, icon: string}>
      */

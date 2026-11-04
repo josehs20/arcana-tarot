@@ -4,7 +4,9 @@
 > Redis, sem Reverb e sem worker permanente — mantendo Docker/Reverb intacto para
 > o desenvolvimento local.
 > Complementa [REALTIME.md](REALTIME.md) (WebSocket com Reverb) e
-> [DEPLOYMENT.md](DEPLOYMENT.md) (runbook Docker).
+> [DEPLOYMENT.md](DEPLOYMENT.md) (runbook Docker). Para exercitar este mesmo
+> perfil na máquina de desenvolvimento, antes do deploy, use
+> [TESTE_LOCAL_MODO_HOSTOO.md](TESTE_LOCAL_MODO_HOSTOO.md).
 
 ---
 
@@ -21,11 +23,50 @@ compartilhada, quatro deles não têm equivalente:
 | Scheduler | cron na máquina de operação | existe, via painel | precisa de duas entradas de cron |
 | Nginx/PHP-FPM próprios | serviços `nginx` + `app` | gerenciados pelo provedor | document root aponta para `public/` |
 | TLS | proxy do desenvolvedor | termina no proxy do provedor | `X-Forwarded-*` e cookies `secure` |
+| Versão do PHP | fixada pela imagem `php:8.4-fpm-alpine` | **escolhida no painel** (MultiPHP) | precisa ser **8.4** — mínimo 8.4.1 (§1.1) |
 
 Sem WebSocket e sem worker, o caminho "evento → fila → Reverb → navegador" não
 fecha. Foi exatamente essa a mudança de arquitetura: **o navegador passa a ler o
 estado por HTTP em intervalos curtos**, e as rotinas financeiras são acionadas
 pelo cron.
+
+### 1.1 PHP 8.4 é obrigatório no site **e** no cron
+
+O `composer.json` exige `"php": "^8.4"` e os componentes do Symfony usados pelo
+Laravel 13 exigem `>= 8.4.1`. O `vendor/composer/platform_check.php`, carregado no
+*bootstrap* de toda requisição e de todo comando, aborta com
+
+```
+Composer detected issues in your platform: Your Composer dependencies require a
+PHP version ">= 8.4.1". You are running 7.4.33.
+```
+
+em qualquer PHP anterior. A falha é **fechada** (500 imediato), nunca um ambiente
+meio funcional — e é justamente ela que aparece no navegador quando o painel está
+entregando uma versão antiga.
+
+| Série | Suporte oficial (php.net, 04/11/2026) |
+|---|---|
+| 8.5 | bugs + segurança até 31/12/2027; segurança até 31/12/2029 |
+| **8.4 — alvo do projeto** | bugs + segurança até 31/12/2026; segurança até 31/12/2028 |
+| 8.3 | apenas segurança, até 31/12/2027 |
+| 8.2 | apenas segurança, até 31/12/2026 |
+| 8.1 e anteriores | **fim de vida** — nenhuma correção de segurança |
+
+Painéis compartilhados costumam deixar `5.6`, `7.x` ou `8.1` como padrão, sem
+patch de segurança há anos, e o valor pode ser diferente para o site e para o
+cron. Como conferir sem SSH, usando o próprio cron do painel:
+
+```
+# comando do cron (uma execução só, depois remover):
+php -r 'file_put_contents(__DIR__."/php-version.txt", PHP_VERSION." | ".PHP_SAPI.PHP_EOL);'
+# e, para provar que o artisan sobe com essa versão:
+php artisan about --only=environment >> php-version.txt
+```
+
+Leia o `php-version.txt` pelo gerenciador de arquivos; o esperado é `8.4.x` e um
+bloco `Environment` sem `Composer detected issues`. No site, o teste equivalente é
+abrir `/up` (deve responder 200) e, depois, o próprio bootstrap da aplicação.
 
 ---
 
@@ -104,7 +145,7 @@ aditivas e desligadas por configuração.
 | `routes/web.php` | rota `panel.events` (autenticada, `throttle:panel-events`) e `throttle:consultation-feed` na leitura de mensagens |
 | `app/Providers/AppServiceProvider.php` | limitadores `consultation-feed` e `panel-events` |
 | `config/consultation.php` | bloco `realtime` (`websocket_enabled`, `poll.*`, limites por minuto) |
-| `bootstrap/app.php` | `trustProxies(at: env('TRUSTED_PROXIES'))` |
+| `bootstrap/app.php` | `trustProxies(at: env('TRUSTED_PROXIES'))` — resolvido **antes** do Dotenv: o valor vem do servidor, não do `.env` (nota na seção 5) |
 | `resources/js/polling.js` | **novo** — `createPoller` e `readMilliseconds` |
 | `resources/js/chat.js` | usa o agendador; `syncMessages` devolve `ok`/`skipped`/`error`; para ao encerrar |
 | `resources/js/user-channel.js` | usa o agendador; reconcilia fila e estado; abre modal e sirene |
@@ -216,11 +257,29 @@ Use [`.env.hostoo.example`](../.env.hostoo.example) como base. As variáveis que
 | `QUEUE_CONNECTION` | `redis` | `database` | tabela `jobs` já existe |
 | `BROADCAST_CONNECTION` | `reverb` | `log` | nenhum serviço WebSocket disponível |
 | `CONSULTATION_WEBSOCKET_ENABLED` | `true` | `false` | publica `data-realtime-mode="poll"` |
-| `TRUSTED_PROXIES` | *(vazio)* | `*` | TLS termina no proxy do provedor |
+| `TRUSTED_PROXIES` | *(vazio)* | injetado pelo servidor (`SetEnv`) | TLS termina no proxy do provedor; **não** funciona no `.env` |
 | `REVERB_*` / `VITE_REVERB_*` | preenchidos | **removidos** | sem servidor Reverb |
 
 Permanecem inalteradas: `APP_KEY`, `APP_URL`, limites de consulta, pagamentos,
 `CONSULTATION_ICE_SERVERS` e `VITE_APP_NAME`.
+
+> **`TRUSTED_PROXIES` não funciona no `.env`.** O `bootstrap/app.php` resolve esse
+> valor com `env()` quando o kernel HTTP é construído — antes do bootstrap do
+> Dotenv — e, com `config:cache`, o `.env` nem chega a ser carregado. O valor
+> precisa ser injetado pelo servidor: `SetEnv TRUSTED_PROXIES "*"` no `.htaccess`
+> (ou variável de ambiente do PHP no painel). Medição, consequências e as três
+> correções possíveis na seção 9 de
+> [TESTE_LOCAL_MODO_HOSTOO.md](TESTE_LOCAL_MODO_HOSTOO.md).
+>
+> **`"*"` é o mínimo para funcionar, não o ideal.** Com `TRUSTED_PROXIES="*"` o
+> Laravel aceita `X-Forwarded-For`, `X-Forwarded-Host` e `X-Forwarded-Proto` de
+> qualquer origem: um cliente consegue forjar o próprio IP (rate limit e
+> auditoria) e o host usado na geração de URLs. Prefira a faixa do proxy do
+> provedor — `SetEnv TRUSTED_PROXIES "200.1.2.3,10.0.0.0/8"` —, que o Hostoo
+> informa no painel/suporte. E **não** use o atalho `private_ranges`: era
+> justamente o que o advisory PKSA-nxjs-s6hn-vb6m explorava (endereços
+> IPv4-mapped, 6to4, Teredo e NAT64 aceitos como proxy), corrigido em
+> `symfony/http-foundation` 8.1.11 — versão já aplicada no `composer.lock`.
 
 Ajuste fino dos intervalos (todos opcionais, os padrões já servem):
 
@@ -332,9 +391,16 @@ continuam existindo.
 
 ## 9. Passo a passo do deploy
 
-1. **Preparar o plano**: PHP 8.4 (ou o disponível ≥ 8.4 no painel), MySQL 8,
+1. **Preparar o plano**: PHP **8.4** selecionado no painel — vale para o site e
+   para cada entrada de cron; mínimo 8.4.1, pois abaixo disso o
+   `platform_check` do Composer derruba a requisição (seção 1.1). MySQL 8,
    acesso SSH e Composer. Sem SSH, use o instalador do provedor e envie o
    `vendor/` do build local.
+
+   ```bash
+   php -v        # PHP 8.4.x
+   php -r 'echo PHP_VERSION_ID >= 80401 ? "ok\n" : "ABORTAR\n";'
+   ```
 2. **Enviar o código** para `/home/USUARIO/arcana` (fora de `public_html`) e
    apontar o domínio para `public/`.
 3. **Criar o `.env`** a partir de `.env.hostoo.example` e gerar a chave:
@@ -399,12 +465,13 @@ continuam existindo.
 
     ```bash
     php artisan arcana:create-admin
-    php artisan arcana:create-attendant --publish --commission-rate=30
+    php artisan arcana:create-attendant --publish --commission-rate=30 --price-text=100
     ```
 
-    As tarifas de `admin/financeiro` precisam existir antes do primeiro aceite;
-    sem elas o aceite falha com "A tarifa desta modalidade ainda não está
-    configurada". A ordem completa de bootstrap está em
+    Antes do primeiro aceite, cadastre os preços por minuto do atendente em
+    **Admin → Modalidades** (`attendant_modality_prices`); sem eles o pedido e o
+    aceite falham com "O preço desta modalidade ainda não foi configurado para
+    este atendente". A ordem completa de bootstrap está em
     [DEPLOYMENT.md](DEPLOYMENT.md) seções 5 e 6.
 12. **Validar** com a seção 10.
 
@@ -459,9 +526,10 @@ de configuração está velho: rode `php artisan config:cache` novamente.
 | Sintoma | Causa provável | Ação |
 |---|---|---|
 | Nada chega nas telas | `data-realtime-mode="socket"` + sem Reverb | `php artisan config:cache` |
+| 500 com `Composer detected issues in your platform` | painel entregando PHP < 8.4.1 (site ou cron) | trocar a versão do PHP no painel e conferir com `php -v` (§1.1) |
 | Erros 429 no console | intervalo abaixo do limite por minuto | subir `CONSULTATION_*_POLL_MS` ou o limite |
 | 403 em `/painel/eventos` | usuário `admin` (sem bloco de avisos) | esperado; use conta de atendente/cliente |
-| Login não persiste | `TRUSTED_PROXIES` vazio ou cookie `secure` em HTTP | `TRUSTED_PROXIES=*` e HTTPS no proxy |
+| Login não persiste | cookie `secure` em HTTP ou proxy não reconhecido | HTTPS no proxy; `TRUSTED_PROXIES` via `SetEnv` no servidor (não no `.env`) |
 | Jobs não rodam | cron de `queue:work` ausente | cadastrar a segunda linha da seção 6 |
 | `withoutOverlapping` travado | execução anterior morreu no meio | `php artisan cache:clear` |
 
@@ -511,7 +579,10 @@ docker compose exec -T app php artisan test --compact \
 - [ ] `BROADCAST_CONNECTION=log` e `CONSULTATION_WEBSOCKET_ENABLED=false`
 - [ ] `SESSION_DRIVER`/`CACHE_STORE`/`QUEUE_CONNECTION` = `database`
 - [ ] nenhuma variável `REVERB_*`/`VITE_REVERB_*` no `.env`
-- [ ] `TRUSTED_PROXIES=*` e HTTPS forçado no proxy
+- [ ] `SetEnv TRUSTED_PROXIES "*"` no servidor (o `.env` não é lido nesse ponto) e HTTPS no proxy
+- [ ] PHP **8.4.x** (≥ 8.4.1) selecionado no painel para o site **e** para os crons
+- [ ] `composer install --no-dev` concluído sem `Composer detected issues in your platform`
+- [ ] `composer audit --no-dev` sem advisories em aberto
 - [ ] `composer install --no-dev` + `npm run build` aplicados
 - [ ] `migrate --force` executado e `storage:link` criado
 - [ ] `config:cache`, `route:cache`, `view:cache` após o `.env` final

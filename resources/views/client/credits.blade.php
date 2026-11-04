@@ -22,10 +22,10 @@
                     <p class="display-5 mb-3">{{ \App\Support\Money::format($wallet->balance_cents) }}</p>
 
                     <dl class="row small mb-0">
-                        <!-- <dt class="col-sm-5 text-ivory-muted fw-normal">Valor por minuto</dt> -->
-                        <!-- <dd class="col-sm-7">
-                            {{ $pricePerMinuteLabel ?? 'A definir pela administração' }}
-                        </dd> -->
+                        <dt class="col-sm-5 text-ivory-muted fw-normal">Valor por minuto</dt>
+                        <dd class="col-sm-7">
+                            {{ $startingPriceLabel ? 'A partir de '.$startingPriceLabel : 'Definido pelo atendente escolhido' }}
+                        </dd>
 
                         <dt class="col-sm-5 text-ivory-muted fw-normal">Forma de cobrança</dt>
                         <dd class="col-sm-7">Descontada do saldo apenas durante a consulta</dd>

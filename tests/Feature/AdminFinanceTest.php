@@ -167,7 +167,7 @@ class AdminFinanceTest extends TestCase
             ->assertSee('R$ 15,00');
     }
 
-    public function test_admin_can_update_consultation_pricing_with_audit(): void
+    public function test_admin_can_update_credit_unit_price_and_minimum_balance_with_audit(): void
     {
         $admin = User::factory()->admin()->create();
 
@@ -177,38 +177,33 @@ class AdminFinanceTest extends TestCase
 
         $this->actingAs($admin)
             ->patch(route('admin.finance.pricing.update'), [
-                'rate_credits_per_minute_text' => 2,
-                'rate_credits_per_minute_audio' => 3,
-                'rate_credits_per_minute_video' => 5,
                 'credit_unit_price_cents' => 150,
                 'minimum_balance_minutes' => 3,
             ])
             ->assertRedirect(route('admin.finance.index'))
             ->assertSessionHas('success');
 
-        $this->assertSame('2', Setting::query()->where('key', 'rate_credits_per_minute')->value('value'));
-        $this->assertSame('2', Setting::query()->where('key', 'rate_credits_per_minute_text')->value('value'));
-        $this->assertSame('3', Setting::query()->where('key', 'rate_credits_per_minute_audio')->value('value'));
-        $this->assertSame('5', Setting::query()->where('key', 'rate_credits_per_minute_video')->value('value'));
         $this->assertSame('150', Setting::query()->where('key', 'credit_unit_price_cents')->value('value'));
         $this->assertSame('3', Setting::query()->where('key', 'minimum_balance_minutes')->value('value'));
+
+        // O preço por minuto é por atendente: a chave global legada não é mais gravada.
+        $this->assertSame('1', Setting::query()->where('key', 'rate_credits_per_minute')->value('value'));
 
         $audit = AuditLog::query()->where('action', 'consultation_pricing.updated')->sole();
 
         $this->assertSame($admin->id, $audit->actor_id);
-        $this->assertSame(1, $audit->metadata['before']['rate_credits_per_minute']);
-        $this->assertSame(2, $audit->metadata['after']['rate_credits_per_minute']);
-        $this->assertSame(3, $audit->metadata['after']['rate_credits_per_minute_audio']);
-        $this->assertSame(5, $audit->metadata['after']['rate_credits_per_minute_video']);
-        $this->assertSame(300, $audit->metadata['after']['rate_credits_per_minute'] * $audit->metadata['after']['credit_unit_price_cents']);
+        $this->assertSame(100, $audit->metadata['before']['credit_unit_price_cents']);
+        $this->assertSame(1, $audit->metadata['before']['minimum_balance_minutes']);
+        $this->assertSame(150, $audit->metadata['after']['credit_unit_price_cents']);
+        $this->assertSame(3, $audit->metadata['after']['minimum_balance_minutes']);
+        $this->assertArrayNotHasKey('rate_credits_per_minute', $audit->metadata['after']);
 
         $this->actingAs($admin)
             ->get(route('admin.finance.index'))
             ->assertOk()
-            ->assertSee('Tarifas por modalidade')
-            ->assertSee('R$ 3,00')
-            ->assertSee('R$ 4,50')
-            ->assertSee('R$ 7,50');
+            ->assertSee('Valor do crédito e saldo mínimo')
+            ->assertSee('Preços por atendente')
+            ->assertDontSee('Créditos por minuto');
     }
 
     public function test_pricing_update_validates_values_and_blocks_non_admin(): void
@@ -219,26 +214,17 @@ class AdminFinanceTest extends TestCase
         $this->actingAs($admin)
             ->from(route('admin.finance.index'))
             ->patch(route('admin.finance.pricing.update'), [
-                'rate_credits_per_minute_text' => 0,
-                'rate_credits_per_minute_audio' => 0,
-                'rate_credits_per_minute_video' => 0,
                 'credit_unit_price_cents' => 0,
                 'minimum_balance_minutes' => 0,
             ])
             ->assertRedirect(route('admin.finance.index'))
             ->assertSessionHasErrors([
-                'rate_credits_per_minute_text',
-                'rate_credits_per_minute_audio',
-                'rate_credits_per_minute_video',
                 'credit_unit_price_cents',
                 'minimum_balance_minutes',
             ]);
 
         $this->actingAs($client)
             ->patch(route('admin.finance.pricing.update'), [
-                'rate_credits_per_minute_text' => 2,
-                'rate_credits_per_minute_audio' => 3,
-                'rate_credits_per_minute_video' => 5,
                 'credit_unit_price_cents' => 150,
                 'minimum_balance_minutes' => 1,
             ])

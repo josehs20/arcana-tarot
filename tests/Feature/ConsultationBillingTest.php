@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\ConsultationEndReason;
 use App\Enums\ConsultationStatus;
 use App\Enums\LedgerEntryType;
+use App\Models\AttendantModalityPrice;
 use App\Models\AttendantProfile;
 use App\Models\AuditLog;
 use App\Models\Consultation;
@@ -29,7 +30,6 @@ class ConsultationBillingTest extends TestCase
     {
         parent::setUp();
 
-        Setting::query()->create(['key' => 'rate_credits_per_minute', 'value' => '2', 'type' => 'integer']);
         Setting::query()->create(['key' => 'credit_unit_price_cents', 'value' => '150', 'type' => 'integer']);
         Setting::query()->create(['key' => 'minimum_balance_minutes', 'value' => '1', 'type' => 'integer']);
     }
@@ -66,10 +66,15 @@ class ConsultationBillingTest extends TestCase
         return $client;
     }
 
-    private function onlineAttendant(): User
+    private function onlineAttendant(int $pricePerMinuteCents = 300): User
     {
         $attendant = User::factory()->attendant()->create();
-        AttendantProfile::factory()->online()->for($attendant)->create(['commission_rate_bps' => 3000]);
+
+        AttendantProfile::factory()
+            ->online()
+            ->for($attendant)
+            ->withModalityPrices(['text' => $pricePerMinuteCents])
+            ->create(['commission_rate_bps' => 3000]);
 
         return $attendant;
     }
@@ -78,15 +83,13 @@ class ConsultationBillingTest extends TestCase
         User $client,
         User $attendant,
         Carbon $startedAt,
-        int $rate = 2,
-        int $unitPriceCents = 150,
+        int $pricePerMinuteCents = 300,
     ): Consultation {
         return Consultation::factory()->active()->create([
             'client_id' => $client->id,
             'attendant_id' => $attendant->id,
             'started_at' => $startedAt,
-            'rate_credits_per_minute' => $rate,
-            'credit_unit_price_cents' => $unitPriceCents,
+            'price_per_minute_cents' => $pricePerMinuteCents,
             'billed_minutes' => 0,
         ]);
     }
@@ -327,16 +330,23 @@ class ConsultationBillingTest extends TestCase
         $this->assertSame(3, $this->debitCount());
     }
 
-    public function test_rate_snapshot_is_used_instead_of_current_settings(): void
+    public function test_price_snapshot_is_used_instead_of_current_settings(): void
     {
         Carbon::setTestNow('2026-01-10 12:00:00');
 
         $client = $this->clientWithBalance(2000);
-        $attendant = $this->onlineAttendant();
-        $consultation = $this->activeConsultation($client, $attendant, now(), rate: 2, unitPriceCents: 150);
+        $attendant = $this->onlineAttendant(300);
+        $consultation = $this->activeConsultation($client, $attendant, now(), pricePerMinuteCents: 300);
 
-        Setting::query()->where('key', 'rate_credits_per_minute')->update(['value' => '5']);
         Setting::query()->where('key', 'credit_unit_price_cents')->update(['value' => '200']);
+
+        AttendantModalityPrice::query()
+            ->where('modality', 'text')
+            ->where(
+                'attendant_profile_id',
+                AttendantProfile::query()->where('user_id', $attendant->id)->value('id'),
+            )
+            ->update(['price_per_minute_cents' => 900]);
 
         $result = $this->billing()->billDue($consultation);
 

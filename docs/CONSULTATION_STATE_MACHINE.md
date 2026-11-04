@@ -95,8 +95,10 @@ As validações retornam `ValidationException` (erro de formulário) ou
 4. **Estados finais são terminais** — `open_client_id`/`active_attendant_id`
    voltam a `NULL`, liberando as travas para uma próxima consulta.
 5. **Snapshots no aceite** — `commission_rate_bps`,
-   `rate_credits_per_minute` e `credit_unit_price_cents` são copiados do perfil
-   e da configuração vigente. Alterações posteriores não afetam a consulta.
+   `price_per_minute_cents` (preço do atendente para a modalidade),
+   `credit_unit_price_cents` e a coluna legada `rate_credits_per_minute` são
+   copiados do perfil e da configuração vigente. Alterações posteriores não
+   afetam a consulta.
 6. **Toda transição é auditada** — `audit_logs` recebe `action`, `actor_id`,
    sujeito e metadados `from`/`to`/`reason` (sem conteúdo de conversa).
 7. **Cobrança é server-side e idempotente** — `billed_minutes` é o cursor de
@@ -259,14 +261,16 @@ para devolver 403 na borda.
 | `card_rate_per_minute` | `CONSULTATION_CARD_RATE_PER_MINUTE` | 15 | Limite de cartas por participante/consulta. |
 
 O saldo mínimo em centavos é derivado de
-`rate_credits_per_minute × credit_unit_price_cents × minimum_balance_minutes`
-por `ConsultationPricing`. Nenhum valor de negócio fica fixo no código.
+`price_per_minute_cents do atendente × minimum_balance_minutes`
+por `ConsultationPricing::minimumBalanceCentsFor()`. Nenhum valor de negócio
+fica fixo no código.
 
-`rate_credits_per_minute`, `credit_unit_price_cents` e
-`minimum_balance_minutes` vivem em `settings` e são editáveis em
-`/admin/financeiro` (admin), com auditoria `consultation_pricing.updated`. O
-aceite copia os dois primeiros para a consulta; mudanças posteriores não
-alteram sessões em andamento.
+`price_per_minute_cents` (por atendente e modalidade) vive em
+`attendant_modality_prices` e é editável em `/admin/modalidades`. Já
+`credit_unit_price_cents` e `minimum_balance_minutes` vivem em `settings` e são
+editáveis em `/admin/financeiro` (admin), com auditoria
+`consultation_pricing.updated`. O aceite copia o preço efetivo para a consulta;
+mudanças posteriores não alteram sessões em andamento.
 
 O contador visual é carregado por `resources/js/consultation-timer.js` a partir
 de `started_at`/`ended_at`; ele não calcula saldo e não participa da cobrança.
@@ -288,7 +292,10 @@ Ações registradas em `audit_logs` (metadados sem conteúdo sensível):
 - `consultation.interrupted` — motivo e minutos/centavos liquidados.
 - `consultation_safety.updated` — limites anteriores e novos de inatividade e
   reconexão.
-- `consultation_pricing.updated` — valores anteriores e novos da tarifa.
+- `consultation_pricing.updated` — valores anteriores e novos do valor do
+  crédito e do saldo mínimo.
+- `attendant.modalities_updated` — modalidades ofertadas e preços por minuto
+  anteriores e novos do atendente.
 - `attendant.availability_changed` — mudança automática de presença.
 
 ---
@@ -326,8 +333,9 @@ leitura em tempo real e emissão de estado somente após mudança commitada.
 `tests/Feature/ConsultationBillingTest.php` cobre primeiro minuto no aceite,
 avanço idempotente por minuto, encerramento automático por saldo, liquidação no
 encerramento/interrupção, ausência de cobrança após estado final e snapshot de
-tarifa. `tests/Feature/AdminFinanceTest.php` cobre a edição da tarifa e sua
-auditoria.
+tarifa. `tests/Feature/AdminFinanceTest.php` cobre a edição do valor do crédito
+e do saldo mínimo e sua auditoria; `tests/Feature/ConsultationModalityTest.php`
+cobre a edição dos preços por atendente e o bloqueio sem preço configurado.
 
 `tests/Feature/ConsultationSafetyTest.php` cobre batimento e sessões de
 presença, saída sem encerramento, logout idempotente, interrupção por

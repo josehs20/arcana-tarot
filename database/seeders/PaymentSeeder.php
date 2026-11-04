@@ -22,7 +22,11 @@ class PaymentSeeder extends DemoSeeder
         $this->ensureDemoEnvironment();
 
         $unit = DemoData::creditUnitPriceCents();
-        $minimumCredits = max(1, DemoData::rateCreditsPerMinute() * DemoData::minimumBalanceMinutes());
+        $textPrice = DemoData::modalityPricePerMinuteCents('text');
+        $minimumCredits = max(
+            1,
+            (int) ceil(($textPrice * DemoData::minimumBalanceMinutes()) / $unit),
+        );
         $now = now();
 
         $this->createPayment(

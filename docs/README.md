@@ -25,6 +25,7 @@
 | [SECURITY_PRIVACY.md](SECURITY_PRIVACY.md) | Revisão de segurança, controles, riscos residuais e proposta de retenção |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Runbook de implantação, Docker, migrations, backups, monitoramento e checklist |
 | [ARQUITETURA_PRODUCAO_HOSTOO.md](ARQUITETURA_PRODUCAO_HOSTOO.md) | Produção em hospedagem compartilhada: polling no lugar do Reverb, fila/cache no MySQL e crons obrigatórios |
+| [TESTE_LOCAL_MODO_HOSTOO.md](TESTE_LOCAL_MODO_HOSTOO.md) | Reproduzir localmente o modo Hostoo (sem Redis/Reverb), cron emulado, checklist de fumaça e limites do teste |
 | [SEEDERS_E_DADOS_DE_TESTE.md](SEEDERS_E_DADOS_DE_TESTE.md) | Seeders, contas fictícias, dados de demonstração, cenários manuais e idempotência |
 | [IMPORTACAO_DADOS_LEGADO.md](IMPORTACAO_DADOS_LEGADO.md) | Importação de usuários, senhas compatíveis e saldos do banco legado (`arcana:import-legacy-users`) |
 

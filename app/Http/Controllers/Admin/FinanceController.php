@@ -71,13 +71,8 @@ class FinanceController extends Controller
                 ->where('type', LedgerEntryType::Debit->value)
                 ->sum('amount_cents'),
             'pricing' => [
-                'rate_credits_per_minute' => $pricing->rateCreditsPerMinute(),
                 'credit_unit_price_cents' => $pricing->creditUnitPriceCents(),
                 'minimum_balance_minutes' => $pricing->minimumBalanceMinutes(),
-                'price_per_minute_label' => $pricing->pricePerMinuteLabel(),
-                'rates_by_modality' => $pricing->ratesByModality(),
-                'prices_by_modality' => $pricing->pricesByModality(),
-                'labels_by_modality' => $pricing->labelsByModality(),
             ],
             'modalities' => ConsultationModality::cases(),
             'creditPackages' => $packages->configured(),
@@ -95,27 +90,17 @@ class FinanceController extends Controller
     ): RedirectResponse {
         $validated = $request->validated();
 
-        $rateText = (int) $validated['rate_credits_per_minute_text'];
-        $rateAudio = (int) $validated['rate_credits_per_minute_audio'];
-        $rateVideo = (int) $validated['rate_credits_per_minute_video'];
-
         $before = [
-            'rate_credits_per_minute' => $pricing->rateCreditsPerMinute(),
             'credit_unit_price_cents' => $pricing->creditUnitPriceCents(),
             'minimum_balance_minutes' => $pricing->minimumBalanceMinutes(),
-            'rates_by_modality' => $pricing->ratesByModality(),
         ];
 
         /*
-         * `rate_credits_per_minute` permanece como espelho da modalidade
-         * texto para integracoes antigas. As tarifas por modalidade sao a
-         * fonte usada por novas consultas.
+         * `rate_credits_per_minute*` nao e mais gravado: o preco por minuto vem
+         * de cada atendente (`attendant_modality_prices`). As chaves antigas
+         * permanecem apenas como leitura historica.
          */
         $after = [
-            'rate_credits_per_minute' => $rateText,
-            'rate_credits_per_minute_text' => $rateText,
-            'rate_credits_per_minute_audio' => $rateAudio,
-            'rate_credits_per_minute_video' => $rateVideo,
             'credit_unit_price_cents' => (int) $validated['credit_unit_price_cents'],
             'minimum_balance_minutes' => (int) $validated['minimum_balance_minutes'],
         ];
@@ -140,7 +125,7 @@ class FinanceController extends Controller
 
         return redirect()
             ->route('admin.finance.index')
-            ->with('success', 'Tarifas por modalidade atualizadas. Novas consultas usarão os novos valores; consultas já iniciadas mantêm o preço congelado.');
+            ->with('success', 'Valor do crédito e saldo mínimo atualizados. O preço por minuto é definido em Modalidades dos atendentes.');
     }
 
     public function show(User $user): View

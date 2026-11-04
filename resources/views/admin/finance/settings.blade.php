@@ -17,7 +17,7 @@
             <x-ui.stat-card
                 label="Valor do crédito"
                 :value="$creditUnitPriceLabel ?? 'Não configurado'"
-                hint="Definido em Tarifas por modalidade"
+                hint="Definido em Financeiro, no cartão de valor do crédito"
                 icon="credit-card"
             />
         </div>

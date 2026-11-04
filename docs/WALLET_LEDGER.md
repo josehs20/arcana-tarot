@@ -104,7 +104,7 @@ serializa operações concorrentes na mesma carteira.
 
 `App\Support\ConsultationBillingManager` debita minutos de consulta:
 
-- tarifa = `rate_credits_per_minute × credit_unit_price_cents`, congelada no
+- tarifa = `price_per_minute_cents` do atendente para a modalidade, congelada no
   aceite;
 - cada minuto iniciado gera **um** débito inteiro com a chave
   `consultation:{id}:minute:{n}`;
@@ -138,9 +138,11 @@ desconexão, está em `docs/TIME_BILLING.md`.
   histórico paginado apenas da própria carteira. A rota é `GET`; não existe
   endpoint de escrita do cliente para saldo/débito.
 - **Admin**: `/admin/financeiro` lista o livro-razão com filtros por cliente e
-  tipo, mostra a tarifa por minuto e permite editá-la
-  (`admin.finance.pricing.update`, auditada); `/admin/financeiro/carteiras/{user}`
-  mostra a carteira individual e o formulário de ajuste.
+  tipo, mostra o valor do crédito e o saldo mínimo e permite editá-los
+  (`admin.finance.pricing.update`, auditada); os preços por minuto de cada
+  atendente ficam em `/admin/modalidades`
+  (`admin.modalities.update`). `/admin/financeiro/carteiras/{user}` mostra a
+  carteira individual e o formulário de ajuste.
 - Valores são exibidos com `App\Support\Money`; o formulário administrativo
   trabalha explicitamente com **centavos inteiros**.
 

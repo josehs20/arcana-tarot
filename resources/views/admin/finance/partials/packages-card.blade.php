@@ -27,7 +27,7 @@
         @if ($creditUnitPriceCents === null)
             <x-ui.alert type="warning" :dismissible="false" class="mb-3">
                 Defina o valor do crédito em
-                <a href="{{ route('admin.finance.index') }}">Tarifas por modalidade</a>
+                <a href="{{ route('admin.finance.index') }}">Valor do crédito e saldo mínimo</a>
                 para que os pacotes voltem a aparecer no checkout.
             </x-ui.alert>
         @endif

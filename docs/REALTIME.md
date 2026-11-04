@@ -418,8 +418,8 @@ restante do painel. Os números exibidos vêm sempre do servidor.
 ### 9.2 Contrato de `consultations.metrics`
 
 `ConsultationMetricsPresenter` calcula tudo com os snapshots gravados no
-aceite (`rate_credits_per_minute`, `credit_unit_price_cents`,
-`commission_rate_bps`), nunca com a configuração atual de preços:
+aceite (`price_per_minute_cents`, `credit_unit_price_cents`,
+`commission_rate_bps`), nunca com o preço atual do atendente:
 
 ```json
 {

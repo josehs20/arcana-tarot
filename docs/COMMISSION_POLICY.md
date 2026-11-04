@@ -49,9 +49,9 @@ Regras:
   `consultations.credit_unit_price_cents` no aceite. Portanto a conversão
   crédito→dinheiro é a configuração oficial da plataforma, não uma suposição
   de que 1 crédito equivale a R$ 1.
-- O valor por minuto é
-  `rate_credits_per_minute × credit_unit_price_cents`, também congelado no
-  aceite.
+- O valor por minuto vem do preço do **atendente para a modalidade**
+  (`attendant_modality_prices.price_per_minute_cents`), congelado no aceite em
+  `consultations.price_per_minute_cents`.
 - Consulta recusada, cancelada ou expirada antes de começar não possui débitos
   e não gera comissão.
 - Consulta iniciada com cobrança positiva gera comissão mesmo que termine como

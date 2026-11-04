@@ -59,7 +59,9 @@ class DemoSeedersTest extends TestCase
         $this->assertSame(3, AttendantProfile::query()->count());
         $this->assertSame(3, AttendantProfile::query()->where('request_sound', 'siren')->count());
         $this->assertSame(4, AttendantApplication::query()->count());
-        $this->assertSame(8, Setting::query()->count());
+        $this->assertSame(4, Setting::query()->count());
+        $this->assertSame('100', Setting::query()->where('key', 'credit_unit_price_cents')->value('value'));
+        $this->assertSame('1', Setting::query()->where('key', 'minimum_balance_minutes')->value('value'));
         $this->assertSame('5', Setting::query()->where('key', 'consultation_inactivity_timeout_minutes')->value('value'));
         $this->assertSame('90', Setting::query()->where('key', 'consultation_reconnection_tolerance_seconds')->value('value'));
         $this->assertSame(2, TarotDeck::query()->count());
@@ -136,12 +138,21 @@ class DemoSeedersTest extends TestCase
         $this->assertSame(AttendantAvailability::Offline, $rafael->attendantProfile->availability);
         $this->assertSame('offline', $rafael->attendantProfile->publicStatus());
 
+        // Cada perfil nasce com o preço por minuto da sua modalidade.
+        $this->assertSame(
+            DemoData::modalityPricePerMinuteCents('text'),
+            $marina->attendantProfile->priceForModality('text'),
+        );
+
         $irisProfile = $iris->attendantProfile->load('activeConsultation');
         $this->assertSame(AttendantAvailability::Online, $irisProfile->availability);
         $this->assertNotNull($irisProfile->activeConsultation);
         $this->assertSame('busy', $irisProfile->publicStatus());
 
-        $minimum = (int) app(ConsultationPricing::class)->minimumBalanceCents();
+        // O saldo mínimo agora depende do preço do atendente: usamos o preço
+        // demonstrativo da modalidade mais barata como referência.
+        $minimum = app(ConsultationPricing::class)
+            ->minimumBalanceCentsFor(DemoData::modalityPricePerMinuteCents('text'));
 
         $free = DemoData::user(DemoData::CLIENTS['free']['email']);
         $withoutBalance = DemoData::user(DemoData::CLIENTS['no_balance']['email']);

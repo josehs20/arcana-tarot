@@ -43,6 +43,10 @@ class ConsultationRealtimeTest extends TestCase
     private function conversation(): array
     {
         $client = User::factory()->create();
+        Wallet::factory()->create([
+            'user_id' => $client->id,
+            'balance_cents' => 10_000,
+        ]);
         $attendant = User::factory()->attendant()->create();
 
         $consultation = Consultation::factory()->active()->create([
@@ -152,12 +156,6 @@ class ConsultationRealtimeTest extends TestCase
      */
     public function test_consultation_request_is_announced_on_the_attendant_private_channel(): void
     {
-        Setting::query()->create([
-            'key' => 'rate_credits_per_minute',
-            'value' => '2',
-            'type' => 'integer',
-        ]);
-
         Setting::query()->create([
             'key' => 'credit_unit_price_cents',
             'value' => '150',

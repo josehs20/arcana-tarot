@@ -19,7 +19,9 @@
                 <p class="dashboard-section__eyebrow">Visão geral</p>
                 <h2 class="dashboard-section__title" id="client-overview">Sua conta</h2>
             </div>
-            <p class="dashboard-section__meta">Valor por minuto: {{ $pricePerMinuteLabel }}</p>
+            <p class="dashboard-section__meta">
+                Valor por minuto: {{ $startingPriceLabel ? 'a partir de '.$startingPriceLabel : 'definido pelo atendente' }}
+            </p>
         </div>
 
         <div class="row g-3 g-xl-4">
@@ -360,7 +362,16 @@
                                     <div>
                                         <p class="panel-list__title mb-1">{{ $attendantProfile->display_name }}</p>
                                         <p class="panel-list__meta mb-0">
-                                            {{ $pricePerMinuteLabel ? $pricePerMinuteLabel.' / min' : 'Valor por minuto definido pela plataforma' }}
+                                            @php
+                                                $attendantPrices = array_filter(
+                                                    $attendantProfile->pricesByModality(),
+                                                    static fn (?int $cents): bool => $cents !== null,
+                                                );
+                                                $attendantStartingPrice = $attendantPrices === []
+                                                    ? null
+                                                    : \App\Support\Money::format(min($attendantPrices));
+                                            @endphp
+                                            {{ $attendantStartingPrice ? 'A partir de '.$attendantStartingPrice.' / min' : 'Preço não configurado' }}
                                         </p>
                                     </div>
                                     <x-ui.status-badge status="online" label="Online" />

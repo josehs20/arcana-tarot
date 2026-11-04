@@ -9,13 +9,11 @@
     Uso:
         <x-public.attendant-card
             :attendant="$attendant"
-            :price="$pricePerMinute"
             :modalities="$options"
         />
 --}}
 @props([
     'attendant',
-    'price' => null,
     'requestable' => false,
     'modalities' => [],
 ])
@@ -74,10 +72,8 @@
         <p class="attendant-card__price mb-0">
             @if ($modalities !== [])
                 Preço confirmado pelo servidor
-            @elseif ($price)
-                {{ $price }} <small>/ minuto</small>
             @else
-                Valor sob consulta
+                Preço não configurado
             @endif
         </p>
         @if ($requestable)

@@ -6,6 +6,7 @@ use App\Enums\ConsultationModality;
 use App\Enums\ConsultationStatus;
 use App\Enums\LedgerEntryType;
 use App\Models\AttendantProfile;
+use App\Models\AuditLog;
 use App\Models\CommissionLedgerEntry;
 use App\Models\Consultation;
 use App\Models\CreditLedgerEntry;
@@ -34,10 +35,6 @@ class ConsultationModalityTest extends TestCase
         parent::setUp();
 
         Setting::query()->create(['key' => 'credit_unit_price_cents', 'value' => '100', 'type' => 'integer']);
-        Setting::query()->create(['key' => 'rate_credits_per_minute', 'value' => '1', 'type' => 'integer']);
-        Setting::query()->create(['key' => 'rate_credits_per_minute_text', 'value' => '1', 'type' => 'integer']);
-        Setting::query()->create(['key' => 'rate_credits_per_minute_audio', 'value' => '2', 'type' => 'integer']);
-        Setting::query()->create(['key' => 'rate_credits_per_minute_video', 'value' => '4', 'type' => 'integer']);
         Setting::query()->create(['key' => 'minimum_balance_minutes', 'value' => '1', 'type' => 'integer']);
     }
 
@@ -70,6 +67,7 @@ class ConsultationModalityTest extends TestCase
             ->online()
             ->offering($modalities)
             ->for($user)
+            ->withModalityPrices(['text' => 100, 'audio' => 200, 'video' => 400])
             ->create(['commission_rate_bps' => 3000]);
 
         return [$user, $profile];
@@ -356,6 +354,7 @@ class ConsultationModalityTest extends TestCase
         $this->actingAs($admin)
             ->patch(route('admin.modalities.update', $attendant), [
                 'offered_modalities' => ['text', 'audio'],
+                'prices' => ['text' => 150, 'audio' => 250],
             ])
             ->assertRedirect()
             ->assertSessionHas('success');
@@ -365,17 +364,45 @@ class ConsultationModalityTest extends TestCase
             ->assertOk()
             ->assertSee('Modalidades dos atendentes')
             ->assertSee($attendant->name)
-            ->assertSee('Salvar modalidades');
+            ->assertSee('Salvar modalidades e preços')
+            ->assertSee('Preço por atendente');
 
         $this->assertSame(['text', 'audio'], $profile->refresh()->offeredModalityValues());
         $this->assertTrue($profile->offersModality(ConsultationModality::Audio));
         $this->assertFalse($profile->offersModality(ConsultationModality::Video));
+        $this->assertSame(150, $profile->priceForModality(ConsultationModality::Text));
+        $this->assertSame(250, $profile->priceForModality(ConsultationModality::Audio));
+
+        $audit = AuditLog::query()->where('action', 'attendant.modalities_updated')->latest('id')->firstOrFail();
+
+        $this->assertSame(100, $audit->metadata['prices_before']['text']);
+        $this->assertSame(150, $audit->metadata['prices_after']['text']);
+        $this->assertSame(250, $audit->metadata['prices_after']['audio']);
 
         $this->actingAs($client)
             ->patch(route('admin.modalities.update', $attendant), [
                 'offered_modalities' => ['text', 'audio', 'video'],
+                'prices' => ['text' => 150, 'audio' => 250, 'video' => 400],
             ])
             ->assertForbidden();
+    }
+
+    public function test_admin_must_inform_a_price_for_every_selected_modality(): void
+    {
+        $admin = User::factory()->admin()->create();
+        [$attendant] = $this->attendant(['text']);
+
+        $this->actingAs($admin)
+            ->from(route('admin.modalities.index'))
+            ->patch(route('admin.modalities.update', $attendant), [
+                'offered_modalities' => ['text', 'audio'],
+                'prices' => ['text' => 150],
+            ])
+            ->assertRedirect(route('admin.modalities.index'))
+            ->assertSessionHasErrors('prices');
+
+        $this->assertSame(['text'], $attendant->attendantProfile->refresh()->offeredModalityValues());
+        $this->assertFalse($attendant->attendantProfile->offersModality(ConsultationModality::Audio));
     }
 
     public function test_modality_and_price_cannot_change_after_consultation_started(): void

@@ -20,6 +20,8 @@ class ConsultationFactory extends Factory
             'status' => ConsultationStatus::Requested->value,
             'modality' => 'text',
             'commission_rate_bps' => 3000,
+            'credit_unit_price_cents' => 100,
+            'price_per_minute_cents' => 200,
         ];
     }
 

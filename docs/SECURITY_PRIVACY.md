@@ -205,6 +205,30 @@ Em **2026-10-21**:
 - Nenhuma varredura de infraestrutura, pentest, DAST ou teste de carga foi
   executado. Esses passos continuam recomendados antes de produção.
 
+Em **2026-11-04** (revalidado após a exigência de PHP 8.4):
+
+- **PHP**: `composer.json` passou a exigir `^8.4` e a imagem roda **8.4.27**
+  (o container antigo estava em 8.4.26). Abaixo de **8.4.1** o
+  `vendor/composer/platform_check.php` aborta a requisição — verificado
+  executando o mesmo arquivo sob `php:8.3-cli-alpine`
+  (`Composer detected issues in your platform ... require a PHP version ">= 8.4.1"`).
+- **suíte completa** no container com PHP 8.4.27: **427 testes, 4350 asserções,
+  aprovada**.
+- **`composer audit` agora reporta 8 advisories em 5 pacotes** do Symfony
+  (`http-foundation`, `http-kernel`, `mime`, `mailer`, `routing`, `yaml`), todos
+  publicados entre 28/10/2026 e 04/11/2026 e todos **corrigidos nas versões
+  8.1.10/8.1.11** — o lock está em 8.1.7–8.1.9. Entre eles: injeção de cabeçalho
+  em e-mail (CVE-2026-45070), injeção de host em URLs geradas
+  (GHSA-5mx8-mwrp-5693), `X-Forwarded-*` de origem não confiável
+  (GHSA-wg5q-m2ww-f3c9), bypass de `security.access_control` por `HEAD`
+  (CVE-2026-118514), match de host em rotas compiladas
+  (CVE-2026-118516) e complexidade quadrática no parser YAML.
+  **Pendência resolvida no mesmo dia**: `composer update "symfony/*"
+  --with-dependencies` subiu os 20 pacotes afetados (patch, sem breaking),
+  `composer audit` e `composer audit --no-dev` passaram a responder
+  `No security vulnerability advisories found`, e a suíte completa continuou
+  **427 testes / 4350 asserções** aprovada em PHP 8.4.27.
+
 
 ## 7. Riscos residuais e mitigações
 

@@ -40,7 +40,7 @@
 
 - **Status**: Aceita e implementada no Prompt 15
 - **Contexto**: cobrança por tempo sem confiar no navegador.
-- **Decisão**: o servidor calcula a duração a partir de `started_at`/`ended_at`, cobra **por minuto iniciado** (`max(1, ceil(segundos/60))`, mínimo de 1 minuto e sem carência) e grava débitos idempotentes com a chave `consultation:{id}:minute:{n}`. A tarifa (`rate_credits_per_minute × credit_unit_price_cents`) é congelada no aceite. O primeiro minuto é cobrado no aceite; os seguintes pelo comando `consultations:charge-minutes` a cada minuto; o último é liquidado no encerramento/interrupção. Sem saldo, não há débito parcial: a consulta é encerrada como `out_of_credits` e **nunca** fica negativa.
+- **Decisão**: o servidor calcula a duração a partir de `started_at`/`ended_at`, cobra **por minuto iniciado** (`max(1, ceil(segundos/60))`, mínimo de 1 minuto e sem carência) e grava débitos idempotentes com a chave `consultation:{id}:minute:{n}`. A tarifa (hoje `price_per_minute_cents` do atendente; originalmente `rate_credits_per_minute × credit_unit_price_cents`, ver D-027) é congelada no aceite. O primeiro minuto é cobrado no aceite; os seguintes pelo comando `consultations:charge-minutes` a cada minuto; o último é liquidado no encerramento/interrupção. Sem saldo, não há débito parcial: a consulta é encerrada como `out_of_credits` e **nunca** fica negativa.
 - **Consequências**: previsível para o cliente e independente do navegador; exige scheduler ativo e relógio controlável nos testes. O encerramento automático cobre saldo esgotado, inatividade e logout; tempo máximo de sessão continua fora do MVP. Regras detalhadas em `docs/TIME_BILLING.md` e `docs/SEGURANCA_E_USABILIDADE_CHAT.md`.
 
 ### D-006 — Comissão percentual individual com snapshot
@@ -133,6 +133,7 @@
 - **Contexto**: o cartão público exige preço por minuto e status atual, mas o modelo não tinha preço individual nem presença persistida.
 - **Decisão**: o preço público é calculado no servidor por `rate_credits_per_minute × credit_unit_price_cents`, sem coluna de preço por atendente. `attendant_profiles.availability` guarda apenas `offline`/`online`; `busy` é derivado de consulta ativa e nunca editável. As consultas do diretório selecionam apenas colunas aprovadas (nome, bio, foto, especialidades, disponibilidade), sem carregar e-mail, comissão ou dados financeiros.
 - **Consequências**: sem configurações válidas, a UI mostra "Valor sob consulta"; o Prompt 08 reutiliza `availability` para o toggle do atendente; mudanças futuras na regra global de preço não exigem alterar o diretório.
+- **Atualização (2026-11-06, D-027)**: a parte de preço foi substituída — o valor público vem de `attendant_modality_prices` (preço por atendente e modalidade), com "a partir de" calculado a partir do menor preço do perfil. A parte de `availability`/`busy` continua válida.
 
 ### D-019 — Candidaturas: transições auditadas, duplicidade e ativação manual
 
@@ -230,6 +231,19 @@
   - O sandbox é desabilitado por padrão em produção; driver desconhecido falha na resolução em vez de usar fallback inseguro.
 - **Consequências**: é possível testar ponta a ponta sem provedor real; a produção exige escolher o provedor, implementar o contrato e cumprir os requisitos específicos de assinatura/mTLS/conciliação documentados em `docs/PIX_SANDBOX.md`.
 
+### D-027 — Preço por minuto definido por atendente e modalidade
+
+- **Status**: Aceita e implementada em novembro de 2026
+- **Contexto**: a tarifa global (`rate_credits_per_minute` × `credit_unit_price_cents`) impedia que cada profissional praticasse o próprio preço e obrigava a plataforma a manter uma tabela de créditos por modalidade para todos.
+- **Decisão**:
+  - `attendant_modality_prices` (`attendant_profile_id`, `modality`, `price_per_minute_cents`) é a única fonte de preço das novas consultas, com índice único por par e edição em **Admin → Modalidades** (auditoria `attendant.modalities_updated`).
+  - O aceite resolve o preço no perfil do atendente e grava `consultations.price_per_minute_cents`; não há fallback global. Sem preço, o pedido e o aceite falham com mensagem explícita.
+  - `credit_unit_price_cents` e `minimum_balance_minutes` continuam globais (recargas e saldo mínimo). O saldo mínimo é `minimum_balance_minutes × price_per_minute_cents` do atendente.
+  - As colunas `rate_credits_per_minute` e `credit_unit_price_cents` da consulta permanecem apenas como registro legado/auditoria; a cobrança usa `price_per_minute_cents` (com fallback de leitura para consultas antigas).
+  - A comissão continua sobre os débitos efetivamente cobrados, portanto acompanha o preço do atendente sem cálculo paralelo.
+  - Perfis públicos e diretório exibem o menor preço disponível como "a partir de" e "Preço não configurado" quando falta valor.
+- **Consequências**: cada atendente pode praticar preços diferentes por modalidade; mudanças de preço valem apenas para novas consultas (snapshot); a administração precisa manter os preços por atendente antes de publicá-lo.
+
 ---
 
 ## 2. Dúvidas que precisam de confirmação
@@ -239,7 +253,7 @@
 | ID | Dúvida | Por que importa | Bloqueia |
 |---|---|---|---|
 | **Q-01** | Qual provedor de PIX será usado em sandbox (ex.: Asaas, Efí/Gerencianet, Mercado Pago, outro)? **Mitigada no Prompt 14**: o mock `pix_sandbox` foi implementado atrás de contrato; a decisão continua bloqueando produção. | Define SDK, formato de webhook e assinatura | Produção (Prompt 14 entregue em sandbox) |
-| **Q-02** | Qual o valor de **1 crédito** (`credit_unit_price_cents`) e a **tarifa por minuto** (`rate_credits_per_minute`)? **Mitigada no Prompt 15**: os dois valores e o saldo mínimo são editáveis em `/admin/financeiro` com auditoria; o seed de desenvolvimento usa 1 crédito = 100 centavos e 1 crédito/minuto. Os valores comerciais finais continuam sendo decisão de negócio. | Base da conversão crédito→dinheiro e da cobrança | Produção (Prompt 15 entregue configurável) |
+| **Q-02** | Qual o valor de **1 crédito** (`credit_unit_price_cents`) e os **preços por minuto**? **Mitigada no Prompt 15**: o valor do crédito e o saldo mínimo são editáveis em `/admin/financeiro` com auditoria; **atualização (D-027)**: o preço por minuto passou a ser definido por atendente e modalidade em `/admin/modalidades`. O seed de desenvolvimento usa 1 crédito = 100 centavos, saldo mínimo de 1 minuto e preços demo de R$ 1,00 a R$ 3,00 por minuto. Os valores comerciais finais continuam sendo decisão de negócio. | Base da conversão crédito→dinheiro e da cobrança | Produção (Prompt 15 entregue configurável) |
 | **Q-03** | Confirmar arredondamento: minuto iniciado, mínimo de 1 minuto, tolerância/grace period? **Resolvida por D-005**: minuto iniciado, mínimo de 1, sem tolerância/carência. | Disputas de cobrança e testes | Prompt 15 |
 | **Q-04** | Comissão em **basis points** (0–10000) ou `decimal(5,2)`? Alguma taxa padrão? | Precisão e cálculo | Prompt 16 |
 | **Q-05** | Atendente pode ficar `online` sem aceitar automaticamente? Há tempo limite para aceite? | Fluxo de solicitação/expiração | Prompt 10 |
@@ -290,3 +304,4 @@
 | 2026-10-21 | Prompt 19 | Fluxo integrado do MVP coberto por teste ponta a ponta e cenários negativos; suíte completa e build validados |
 | 2026-10-21 | Prompt 20 | Runbook de implantação, backups/restauração, onboarding manual de atendente e avaliação de prontidão; `docs/DEPLOYMENT.md` e `docs/ATTENDANT_ONBOARDING.md` criados |
 | 2026-11-04 | Segurança do chat | Presença por aba, inatividade configurável, avisos de saída, encerramento no logout, compra de créditos com retorno e limites administrativos auditados; `docs/SEGURANCA_E_USABILIDADE_CHAT.md` criado |
+| 2026-11-06 | Preço por atendente | D-027 adicionada: `attendant_modality_prices` como fonte única do preço por minuto, edição em `/admin/modalidades`, snapshot em `consultations.price_per_minute_cents` e remoção da tarifa global de `/admin/financeiro`; D-018 e Q-02 atualizadas |

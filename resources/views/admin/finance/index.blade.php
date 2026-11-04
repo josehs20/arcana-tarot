@@ -70,16 +70,17 @@
 
     <x-ui.card class="mb-4">
         <x-ui.card-header class="d-flex flex-wrap justify-content-between align-items-center gap-2">
-            <h2 class="h6 mb-0">Tarifas por modalidade</h2>
+            <h2 class="h6 mb-0">Valor do crédito e saldo mínimo</h2>
             <a class="btn btn-ghost btn-sm" href="{{ route('admin.modalities.index') }}">
-                Modalidades dos atendentes
+                Preços por atendente
             </a>
         </x-ui.card-header>
         <x-ui.card-body>
             <p class="form-text mb-3">
-                A cobrança ocorre por minuto iniciado, sempre no servidor. O preço de cada modalidade é
-                <strong>créditos por minuto × valor do crédito</strong>. Consultas já aceitas mantêm o preço
-                congelado no aceite; alterações futuras valem apenas para novas consultas.
+                O preço por minuto é definido <strong>por atendente e modalidade</strong> na tela de modalidades.
+                Aqui ficam apenas o valor do crédito, usado nas recargas, e o saldo mínimo exigido para aceitar uma
+                consulta. Consultas já aceitas mantêm o preço congelado no aceite; alterações futuras valem apenas
+                para novas consultas.
             </p>
 
             <div class="row g-3 mb-4">
@@ -91,13 +92,10 @@
                                 {{ $modality->label() }}
                             </span>
                             <span class="modality-price-summary__value">
-                                {{ $pricing['labels_by_modality'][$modality->value] ?? 'Não configurado' }}
-                                @if ($pricing['labels_by_modality'][$modality->value] !== null)
-                                    <small>/ minuto</small>
-                                @endif
+                                Preço por atendente
                             </span>
                             <span class="form-text">
-                                {{ $pricing['rates_by_modality'][$modality->value] ?? '—' }} crédito(s)/minuto
+                                Configurado em Modalidades dos atendentes
                             </span>
                         </div>
                     </div>
@@ -107,31 +105,6 @@
             <form method="POST" action="{{ route('admin.finance.pricing.update') }}" class="row g-3 align-items-end">
                 @csrf
                 @method('PATCH')
-
-                @foreach ($modalities as $modality)
-                    @php
-                        $field = 'rate_credits_per_minute_'.$modality->value;
-                    @endphp
-                    <div class="col-md-4">
-                        <label class="form-label" for="{{ $field }}">
-                            Créditos por minuto — {{ $modality->label() }}
-                        </label>
-                        <input
-                            class="form-control @error($field) is-invalid @enderror"
-                            type="number"
-                            id="{{ $field }}"
-                            name="{{ $field }}"
-                            min="1"
-                            max="100000"
-                            step="1"
-                            value="{{ old($field, $pricing['rates_by_modality'][$modality->value]) }}"
-                            required
-                        >
-                        @error($field)
-                            <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
-                    </div>
-                @endforeach
 
                 <div class="col-md-4">
                     <label class="form-label" for="credit_unit_price_cents">Valor do crédito (centavos)</label>
@@ -170,7 +143,7 @@
                 </div>
 
                 <div class="col-md-4">
-                    <x-ui.button type="submit" variant="primary" size="sm">Salvar tarifas</x-ui.button>
+                    <x-ui.button type="submit" variant="primary" size="sm">Salvar valores</x-ui.button>
                 </div>
             </form>
         </x-ui.card-body>

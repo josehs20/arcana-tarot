@@ -12,8 +12,8 @@ use Illuminate\Support\Facades\DB;
  *
  * Regras (ver docs/TIME_BILLING.md):
  * - o relógio é `consultations.started_at`, sempre do servidor;
- * - cada minuto iniciado custa `rate_credits_per_minute × credit_unit_price_cents`
- *   usando os snapshots gravados no aceite;
+ * - cada minuto iniciado custa `price_per_minute_cents`, o preço do atendente
+ *   para a modalidade congelado no aceite;
  * - o primeiro minuto é cobrado no aceite e o último no encerramento;
  * - cada intervalo possui uma chave idempotente `consultation:{id}:minute:{n}`;
  * - não há débito parcial nem saldo negativo: o primeiro minuto sem saldo
@@ -38,19 +38,13 @@ final class ConsultationBillingManager
 
             $billedMinutes = max(0, (int) $locked->billed_minutes);
             $startedAt = $locked->started_at;
-            $rate = $locked->rate_credits_per_minute;
-            $unitPriceCents = $locked->credit_unit_price_cents;
 
             /*
              * O preco congelado no aceite e a fonte da cobranca. Consultas
-             * anteriores a modalidade nao possuem a coluna preenchida e usam
-             * o mesmo snapshot em creditos x valor do credito.
+             * anteriores a modalidade nao possuem a coluna preenchida e o model
+             * recorre ao snapshot legado em creditos x valor do credito.
              */
-            $pricePerMinuteCents = $locked->price_per_minute_cents;
-
-            if ($pricePerMinuteCents === null && $rate !== null && $unitPriceCents !== null) {
-                $pricePerMinuteCents = $rate * $unitPriceCents;
-            }
+            $pricePerMinuteCents = $locked->pricePerMinuteCents();
 
             if ($startedAt === null || $pricePerMinuteCents === null || $pricePerMinuteCents <= 0) {
                 return new ConsultationBillingResult(

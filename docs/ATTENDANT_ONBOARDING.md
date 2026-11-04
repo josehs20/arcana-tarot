@@ -54,11 +54,20 @@ docker compose exec app php artisan arcana:create-attendant \
   --email="atendente@example.com" \
   --display-name="Nome público" \
   --commission-rate="25" \
+  --price-text="100" \
   --publish
 ```
 
 - `--commission-rate` aceita 0–100 com até duas casas; use o percentual aprovado
   pela administração.
+- `--price-text`, `--price-audio` e `--price-video` recebem o **preço por minuto
+  em centavos** de cada modalidade (`attendant_modality_prices`). O texto é a
+  modalidade base: se qualquer preço for informado, `--price-text` é
+  obrigatório. Áudio e vídeo só são aceitos quando a infraestrutura
+  correspondente está habilitada no servidor.
+- Sem `--price-*`, o perfil é criado sem preço; nesse estado o atendente pode
+  entrar no diretório, mas **não recebe solicitações** até que a administração
+  defina os valores em **Admin → Modalidades**.
 - `--publish` publica o perfil no diretório. Sem essa opção, o perfil fica
   offline e não publicado.
 - A senha pode ser informada via `--password` (evite deixar no histórico do

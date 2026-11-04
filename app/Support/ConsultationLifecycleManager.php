@@ -202,15 +202,21 @@ final class ConsultationLifecycleManager
                 throw ValidationException::withMessages(['consultation' => $modalityReason]);
             }
 
-            $rate = $this->pricing->rateCreditsPerMinute($modality);
-            $unit = $this->pricing->creditUnitPriceCents();
-            $minimum = $this->pricing->minimumBalanceCents($modality);
+            /*
+             * O preco aplicado vem do proprio atendente (perfil), nunca do
+             * navegador. Sem preco configurado a consulta nao inicia — nao ha
+             * fallback para tarifa global.
+             */
+            $pricePerMinuteCents = $profile->priceForModality($modality);
 
-            if ($rate === null || $unit === null || $minimum === null) {
+            if ($pricePerMinuteCents === null) {
                 throw ValidationException::withMessages([
-                    'consultation' => 'A tarifa desta modalidade ainda não está configurada.',
+                    'consultation' => 'O preço desta modalidade ainda não foi configurado para este atendente.',
                 ]);
             }
+
+            $unit = $this->pricing->creditUnitPriceCents();
+            $minimum = $this->pricing->minimumBalanceCentsFor($pricePerMinuteCents);
 
             $wallet = Wallet::query()
                 ->where('user_id', $lockedClient->getKey())
@@ -228,9 +234,9 @@ final class ConsultationLifecycleManager
             $locked->fill([
                 'status' => ConsultationStatus::Active->value,
                 'commission_rate_bps' => $profile->commission_rate_bps,
-                'rate_credits_per_minute' => $rate,
+                'rate_credits_per_minute' => $this->legacyCreditsPerMinute($pricePerMinuteCents, $unit),
                 'credit_unit_price_cents' => $unit,
-                'price_per_minute_cents' => $rate * $unit,
+                'price_per_minute_cents' => $pricePerMinuteCents,
                 'started_at' => now(),
                 'last_activity_at' => now(),
                 'client_last_activity_at' => now(),
@@ -260,7 +266,7 @@ final class ConsultationLifecycleManager
                 'from' => ConsultationStatus::Requested->value,
                 'to' => ConsultationStatus::Active->value,
                 'modality' => $modality->value,
-                'price_per_minute_cents' => $rate * $unit,
+                'price_per_minute_cents' => $pricePerMinuteCents,
                 'minimum_balance_cents' => $minimum,
                 'commission_rate_bps' => $profile->commission_rate_bps,
                 'billed_minutes' => $billing->billedMinutes,
@@ -884,5 +890,25 @@ final class ConsultationLifecycleManager
     private function formatCents(int $cents): string
     {
         return 'R$ '.number_format($cents / 100, 2, ',', '.');
+    }
+
+    /**
+     * Coluna legada `rate_credits_per_minute`.
+     *
+     * O preco atual vem do atendente e pode nao ser multiplo do valor do
+     * credito. A coluna so e preenchida quando a conversao e exata; do
+     * contrario fica nula e a cobranca usa `price_per_minute_cents`.
+     */
+    private function legacyCreditsPerMinute(int $pricePerMinuteCents, ?int $unitPriceCents): ?int
+    {
+        if ($unitPriceCents === null || $unitPriceCents <= 0) {
+            return null;
+        }
+
+        if ($pricePerMinuteCents % $unitPriceCents !== 0) {
+            return null;
+        }
+
+        return intdiv($pricePerMinuteCents, $unitPriceCents);
     }
 }

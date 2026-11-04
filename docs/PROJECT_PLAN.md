@@ -114,7 +114,7 @@ Observação: os testes emitem saída JSON (`{"tool":"phpunit","result":"passed"
 | Componente | Pretendido | Estado atual | Ação necessária |
 |---|---|---|---|
 | Laravel | 13 | **13.38.0** | ✔ Atende |
-| PHP | 8.4 | **8.5.4** no host | Fixar **8.4** na imagem Docker (Prompt 02); 8.5 é compatível com Laravel 13 (`^8.3`) |
+| PHP | 8.4 | **8.4.x** no container (8.4.26 → 8.4.27 no rebuild de 04/11/2026) e **8.5.4** no host | Imagem `php:8.4-fpm-alpine` (Prompt 02) + `composer.json` com `^8.4`; o `platform_check` exige ≥ 8.4.1; no Hostoo, escolher 8.4 no painel |
 | Docker Compose | sim | **ausente** | Criar em Prompt 02 |
 | Nginx | sim | **ausente no projeto** (imagem `nginx:1.27-alpine` já baixada) | Criar em Prompt 02 |
 | MySQL | 8.4 LTS | **SQLite** por padrão; imagem `mysql:8.4` já baixada | Configurar em Prompt 02/03 |
@@ -131,7 +131,7 @@ Observação: os testes emitem saída JSON (`{"tool":"phpunit","result":"passed"
 
 1. **Driver de banco no host**: sem `pdo_sqlite` e `pdo_mysql`, qualquer teste com `RefreshDatabase` ou acesso real ao banco falha no host. Os testes atuais só passam porque não consultam o banco.
 2. **Redis no host**: sem extensão `redis` e sem cliente alternativo (`predis`) instalado. `REDIS_CLIENT=phpredis` não funciona fora do container.
-3. **PHP 8.5 × 8.4**: o host tem 8.5; a stack pretendida cita 8.4. Não há incompatibilidade com Laravel 13, mas a paridade de ambientes exige pinar 8.4 no Docker.
+3. **PHP 8.5 × 8.4**: o host tem 8.5; o container (e o alvo de produção) tem 8.4.26. O `composer.json` declara `^8.4`, então 8.5 também satisfaz, mas a paridade exige rodar tudo em 8.4; abaixo de **8.4.1** o `vendor/composer/platform_check.php` aborta com `Composer detected issues in your platform`.
 4. **Tailwind × Bootstrap**: o esqueleto Laravel 13 vem com Tailwind 4. A stack pretendida exige Bootstrap 5.3. É preciso uma decisão explícita no Prompt 05 para não misturar dois sistemas de utilidades sem controle.
 5. **Sem versionamento**: não há repositório Git; commits por etapa (exigidos pelo README do pacote) dependem de `git init` no Prompt 01.
 6. **Sem Docker/CI**: não há ambiente reproduzível ainda; os testes rodam no host com limitações acima.
@@ -245,7 +245,7 @@ tests/
 
 | Entidade | Campos-chave | Observações |
 |---|---|---|
-| `consultations` | `client_id`, `attendant_id`, `status`, `accepted_at`, `started_at`, `ended_at`, `rate_credits_per_minute` (snapshot), `credit_unit_price_cents` (snapshot), `commission_rate_bps` (snapshot), `ended_reason` | Estados em §6.3 |
+| `consultations` | `client_id`, `attendant_id`, `status`, `accepted_at`, `started_at`, `ended_at`, `price_per_minute_cents` (snapshot), `credit_unit_price_cents` (snapshot legado), `commission_rate_bps` (snapshot), `ended_reason` | Estados em §6.3 |
 | `consultation_messages` | `consultation_id`, `sender_id`, `type`, `body`, `card_snapshot_id`, `created_at` | `type` ∈ {text, card}. Persistir **antes** de transmitir (D-007) |
 
 ### 5.4 Financeiro
@@ -256,7 +256,7 @@ tests/
 | `credit_ledger_entries` | `wallet_id`, `type` (credit/debit), `amount_cents`, `balance_after_cents`, `reference_type`, `reference_id`, `idempotency_key`, `created_at` | **Imutável**; correções = novos lançamentos |
 | `payments` | `user_id`, `provider`, `provider_payment_id`, `amount_cents`, `credits`, `status`, `paid_at`, `raw_status` | `status` ∈ {pending, confirmed, expired, failed}; confirmação **somente** por webhook validado no servidor |
 | `commission_ledger_entries` | `attendant_id`, `consultation_id`, `base_amount_cents`, `commission_rate_bps`, `commission_amount_cents`, `status`, `idempotency_key`, `created_at` | **Imutável**; sem saque/pagamento no MVP |
-| `settings` | `key`, `value`, `type` | Parâmetros configuráveis (preço do crédito, tarifa por minuto, etc.) |
+| `settings` | `key`, `value`, `type` | Parâmetros configuráveis (valor do crédito, saldo mínimo etc.) |
 
 ### 5.5 Auditoria
 
@@ -305,10 +305,10 @@ requested ──(atendente aceita)──► active ──(encerrada)──► en
 Modelo implementado no Prompt 13 (ver `docs/WALLET_LEDGER.md`):
 
 1. Todo valor monetário é armazenado em **centavos inteiros**.
-2. Existe um parâmetro configurável `credit_unit_price_cents` = valor em centavos de **1 crédito**.
-3. A cobrança por tempo usa `rate_credits_per_minute` (configurável) e gera débitos no livro-razão em créditos **e** o valor monetário correspondente.
+2. Existe um parâmetro configurável `credit_unit_price_cents` = valor em centavos de **1 crédito**, usado nas recargas.
+3. A cobrança por tempo usa o preço por minuto **do atendente para a modalidade** (`attendant_modality_prices.price_per_minute_cents`, editável em Admin → Modalidades) e gera débitos no livro-razão em centavos.
 4. **Conversão oficial**: `valor_monetario_cents = creditos_cobrados × credit_unit_price_cents`, arredondada para centavos no servidor.
-5. `credit_unit_price_cents` e `rate_credits_per_minute` são **congelados no aceite da consulta** (snapshot), para que mudanças futuras não alterem histórico.
+5. `price_per_minute_cents`, `credit_unit_price_cents` e a taxa de comissão (e a coluna legada `rate_credits_per_minute`) são **congelados no aceite da consulta** (snapshot), para que mudanças futuras não alterem histórico.
 6. **Não se assume que 1 crédito = R$ 1,00.** O valor é definido pelo administrador.
 
 > O Prompt 15 implementou a leitura e a edição auditada desses valores em `/admin/financeiro`; os valores comerciais finais continuam sendo decisão de negócio (Q-02).
@@ -530,9 +530,9 @@ Diretrizes:
 |---|---|---|---|
 | R-01 | Extensões PHP ausentes no host (`pdo_sqlite`, `pdo_mysql`, `redis`) | Alto — testes com banco falham | Executar testes no container; instalar extensões no host; documentar |
 | R-02 | Tailwind 4 × Bootstrap 5.3 | Médio — conflito visual/técnico | Decisão explícita no Prompt 05; remover Tailwind se não for usado |
-| R-03 | PHP 8.5 no host × 8.4 pretendido | Baixo | Pinar `php:8.4` no Docker; validar compatibilidade |
+| R-03 | Painel do Hostoo entregando PHP < 8.4.1 (padrão do provedor pode ser 5.6/7.x) | Alto — aplicação responde 500 | Selecionar 8.4 no painel para o site **e** para os crons; `platform_check` do Composer falha fechado; conferir com `php -v` (§1.1 de `ARQUITETURA_PRODUCAO_HOSTOO.md`) |
 | R-04 | Provedor PIX indefinido | Alto — bloqueia produção | Prompt 14 mitigado com mock `pix_sandbox` atrás de contrato; decidir provedor real antes de ativar cobranças (Q-01) |
-| R-05 | Conversão crédito→dinheiro e tarifas indefinidas | Alto — bloqueia cobrança por tempo | Prompt 15 entrega tarifa e saldo mínimo editáveis com auditoria (Q-02); definir valores comerciais antes de produção |
+| R-05 | Conversão crédito→dinheiro e preços por minuto indefinidos | Alto — bloqueia cobrança por tempo | Prompt 15 entrega valor do crédito e saldo mínimo editáveis com auditoria; D-027 move o preço por minuto para o atendente (Q-02); definir valores comerciais antes de produção |
 | R-06 | Regra de arredondamento ambígua | Alto — disputas de cobrança | Regra de minuto iniciado documentada e testada (D-005/Q-03 em `docs/TIME_BILLING.md`) |
 | R-07 | Concorrência em aceite de consulta/saldo | Alto — dupla cobrança/sessão | Transações + locks + idempotência |
 | R-08 | Reverb/Redis mal configurados | Médio — chat sem tempo real | Healthchecks, canais autorizados, fallback de polling |
@@ -570,7 +570,8 @@ pagamentos, auditoria, testes integrados e runbook de implantação.
 - MFA administrativo, verificação de e-mail e revisão de acessos;
 - backup/restauração testada, TLS/proxy, monitoramento e resposta a incidentes;
 - definição dos valores comerciais de `credit_unit_price_cents`,
-  `rate_credits_per_minute` e taxas de comissão.
+  `minimum_balance_minutes` e dos preços por atendente
+  (`attendant_modality_prices`) e taxas de comissão.
 
 A avaliação objetiva está em `docs/DEPLOYMENT.md` (seção 14): **pronto com
 ressalvas para homologação; não pronto para produção**. Nenhuma conformidade

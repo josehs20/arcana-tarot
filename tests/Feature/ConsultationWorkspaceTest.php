@@ -43,7 +43,6 @@ class ConsultationWorkspaceTest extends TestCase
         Broadcast::forgetDrivers();
         require base_path('routes/channels.php');
 
-        Setting::query()->create(['key' => 'rate_credits_per_minute', 'value' => '2', 'type' => 'integer']);
         Setting::query()->create(['key' => 'credit_unit_price_cents', 'value' => '150', 'type' => 'integer']);
         Setting::query()->create(['key' => 'minimum_balance_minutes', 'value' => '1', 'type' => 'integer']);
     }
@@ -78,7 +77,11 @@ class ConsultationWorkspaceTest extends TestCase
     private function onlineAttendant(): User
     {
         $attendant = User::factory()->attendant()->create();
-        AttendantProfile::factory()->online()->for($attendant)->create(['commission_rate_bps' => 3000]);
+        AttendantProfile::factory()
+            ->online()
+            ->for($attendant)
+            ->withModalityPrices(['text' => 300])
+            ->create(['commission_rate_bps' => 3000]);
 
         return $attendant;
     }
@@ -90,7 +93,7 @@ class ConsultationWorkspaceTest extends TestCase
             'attendant_id' => $attendant->id,
             // Snapshots congelados no aceite: preço e comissão nunca são
             // recalculados com a configuração atual do sistema.
-            'rate_credits_per_minute' => 2,
+            'price_per_minute_cents' => 300,
             'credit_unit_price_cents' => 150,
             'billed_minutes' => 2,
             'commission_rate_bps' => 3000,

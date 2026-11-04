@@ -109,26 +109,29 @@ final class DemoData
         return $price;
     }
 
-    public static function rateCreditsPerMinute(): int
+    /**
+     * Créditos por minuto usados no cenário de demonstração. O preço real é
+     * sempre por atendente; aqui servem apenas para gerar preços iniciais
+     * distintos por modalidade.
+     */
+    public const DEMO_CREDITS_PER_MINUTE = [
+        'text' => 1,
+        'audio' => 2,
+        'video' => 3,
+    ];
+
+    /**
+     * Preço por minuto de demonstração em centavos para a modalidade.
+     */
+    public static function modalityPricePerMinuteCents(string $modality): int
     {
-        $rate = app(ConsultationPricing::class)->rateCreditsPerMinute();
+        $credits = self::DEMO_CREDITS_PER_MINUTE[$modality] ?? 1;
 
-        if ($rate === null) {
-            throw new InvalidArgumentException(
-                'Configure rate_credits_per_minute antes de semear os dados financeiros de demonstração.',
-            );
-        }
-
-        return $rate;
+        return $credits * self::creditUnitPriceCents();
     }
 
     public static function minimumBalanceMinutes(): int
     {
         return app(ConsultationPricing::class)->minimumBalanceMinutes();
-    }
-
-    public static function pricePerMinuteCents(): int
-    {
-        return self::rateCreditsPerMinute() * self::creditUnitPriceCents();
     }
 }

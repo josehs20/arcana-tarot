@@ -207,7 +207,7 @@ no disco `public` e exige `php artisan storage:link` no ambiente.
 | `pending` | Paulo Mendes | `cliente.pendente@arcana.local` | Solicitação pendente para Marina; saldo 20 créditos |
 | `active` | Alice Ribeiro | `cliente.ativo@arcana.local` | Consulta ativa com Íris, 6 minutos cobrados; saldo 14 créditos |
 
-Valores em centavos: 1 crédito = R$ 1,00 e saldo mínimo de 1 minuto, conforme `SettingsSeeder`. As tarifas de demonstração por modalidade são 1 crédito/minuto (texto), 2 créditos/minuto (áudio) e 3 créditos/minuto (vídeo), ou seja, R$ 1,00, R$ 2,00 e R$ 3,00 por minuto. Se o banco já possuir configurações diferentes, os pagamentos e saldos são calculados com os valores vigentes, sem sobrescrever as configurações.
+Valores em centavos: 1 crédito = R$ 1,00 e saldo mínimo de 1 minuto, conforme `SettingsSeeder`. Os preços de demonstração ficam em `attendant_modality_prices` (R$ 1,00/min no texto, R$ 2,00/min no áudio e R$ 3,00/min no vídeo para cada atendente demo), criados por `AttendantSeeder` via `DemoData::modalityPricePerMinuteCents()`. O saldo mínimo em centavos é o preço do atendente multiplicado pelos minutos mínimos. Se o banco já possuir configurações diferentes, os pagamentos e saldos são calculados com os valores vigentes, sem sobrescrever as configurações.
 
 ### Candidaturas
 

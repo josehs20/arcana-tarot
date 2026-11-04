@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Client\StoreCreditPurchaseRequest;
 use App\Models\Payment;
 use App\Support\ActiveConsultationResolver;
+use App\Support\ConsultationModalityCatalog;
 use App\Support\ConsultationPricing;
 use App\Support\CreditWalletManager;
 use App\Support\InfinitePayCheckoutManager;
@@ -27,6 +28,7 @@ class CreditPurchaseController extends Controller
     public function index(
         Request $request,
         ConsultationPricing $pricing,
+        ConsultationModalityCatalog $catalog,
         CreditWalletManager $wallets,
         ActiveConsultationResolver $activeConsultations,
         InfinitePayCheckoutManager $checkout,
@@ -52,7 +54,7 @@ class CreditPurchaseController extends Controller
                 ->latest('id')
                 ->paginate(10, ['*'], 'payments_page')
                 ->withQueryString(),
-            'pricePerMinuteLabel' => $pricing->pricePerMinuteLabel(),
+            'startingPriceLabel' => $catalog->startingPriceLabel(),
             'creditUnitPriceCents' => $unitPriceCents,
             'operationId' => (string) Str::uuid(),
             'checkoutEnabled' => $checkout->enabled(),

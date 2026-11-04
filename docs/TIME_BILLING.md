@@ -15,13 +15,18 @@ aceito do cliente.
 A tarifa é **congelada no aceite**:
 
 ```text
-preço do minuto = rate_credits_per_minute × credit_unit_price_cents
+preço do minuto = attendant_modality_prices.price_per_minute_cents
+                  (modalidade escolhida no pedido)
 ```
 
-- `rate_credits_per_minute`: créditos cobrados por minuto iniciado;
-- `credit_unit_price_cents`: valor de 1 crédito em centavos;
-- ambos são copiados para a consulta no aceite (`snapshot`);
-- alterações posteriores na configuração só afetam novas consultas.
+- o preço é definido **por atendente e por modalidade** no painel
+  administrativo (`/admin/modalidades`);
+- `credit_unit_price_cents` continua global e é usado apenas para converter
+  recargas em créditos e para consultas legadas;
+- `consultations.price_per_minute_cents` é copiado no aceite (`snapshot`);
+- alterações posteriores no preço do atendente só afetam novas consultas;
+- sem preço configurado para a modalidade, o servidor recusa a solicitação e o
+  aceite (`Preço não configurado`), sem fallback global.
 
 ## 2. Regra de arredondamento
 
@@ -99,8 +104,9 @@ saldo:
 - novas execuções não cobram a consulta finalizada.
 
 O aceite também exige o saldo mínimo configurado
-(`minimum_balance_minutes × preço do minuto`). Esse valor apenas autoriza o
-início; a sessão continua enquanto cada novo minuto puder ser pago.
+(`minimum_balance_minutes × price_per_minute_cents` do atendente). Esse valor
+apenas autoriza o início; a sessão continua enquanto cada novo minuto puder ser
+pago.
 
 ## 6. Falha, desconexão e reconexão
 
@@ -125,15 +131,21 @@ início; a sessão continua enquanto cada novo minuto puder ser pago.
 
 ## 7. Administração da tarifa
 
-- Rota: `PATCH /admin/financeiro/tarifa`
-  (`admin.finance.pricing.update`), exclusiva de administrador ativo.
-- Campos: `rate_credits_per_minute`, `credit_unit_price_cents` e
-  `minimum_balance_minutes` (inteiros positivos).
-- A atualização grava os três valores em `settings` e um
+- Preço por minuto: **Admin → Modalidades** (`/admin/modalidades`), por
+  atendente e por modalidade; grava em `attendant_modality_prices` e audita
+  `attendant.modalities_updated`.
+- Valor do crédito e saldo mínimo: **Admin → Financeiro**
+  (`PATCH /admin/financeiro/tarifa`, rota `admin.finance.pricing.update`),
+  exclusiva de administrador ativo.
+- Campos globais: `credit_unit_price_cents` e `minimum_balance_minutes`
+  (inteiros positivos).
+- A atualização global grava os dois valores em `settings` e um
   `audit_logs.action = consultation_pricing.updated` com `before`/`after` na
   mesma transação.
-- O painel `/admin/financeiro` mostra o preço atual por minuto e alerta quando a
-  tarifa está incompleta; nesse caso novos aceites são recusados.
+- O painel `/admin/financeiro` mostra o valor do crédito e o saldo mínimo e
+  encaminha para **Modalidades**, onde os preços por atendente são definidos.
+  Sem preço para a modalidade, o pedido e o aceite daquele atendente são
+  recusados.
 - Consultas já aceitas continuam usando o snapshot gravado.
 
 ## 8. Interface
@@ -149,20 +161,23 @@ início; a sessão continua enquanto cada novo minuto puder ser pago.
 
 Além do livro-razão, a auditoria registra:
 
-- `consultation.accepted`: preço do minuto, saldo mínimo, comissão snapshot,
-  minutos e centavos cobrados no aceite;
+- `consultation.accepted`: preço do minuto (snapshot do atendente), saldo
+  mínimo, comissão snapshot, minutos e centavos cobrados no aceite;
 - `consultation.ended`: motivo final, duração em segundos, minutos e centavos
   liquidados;
 - `consultation.interrupted`: motivo da interrupção e valores liquidados;
-- `consultation_pricing.updated`: valores anteriores e novos da tarifa.
+- `consultation_pricing.updated`: valor do crédito e saldo mínimo (anteriores e
+  novos);
+- `attendant.modalities_updated`: modalidades e preços por modalidade do
+  atendente (anteriores e novos).
 
 ## 10. Configuração
 
 | Chave | Origem | Uso |
 |---|---|---|
-| `rate_credits_per_minute` | `settings` (admin) | Créditos por minuto; snapshot no aceite. |
-| `credit_unit_price_cents` | `settings` (admin/PIX) | Valor do crédito em centavos; snapshot no aceite. |
-| `minimum_balance_minutes` | `settings` (admin), fallback `config('consultation.minimum_balance_minutes')` | Minutos mínimos exigidos no aceite. |
+| `attendant_modality_prices.price_per_minute_cents` | `admin/modalities` (por atendente) | Preço do minuto da modalidade; snapshot no aceite. |
+| `credit_unit_price_cents` | `settings` (admin/PIX) | Valor do crédito em centavos, usado nas recargas. |
+| `minimum_balance_minutes` | `settings` (admin), fallback `config('consultation.minimum_balance_minutes')` | Minutos mínimos exigidos no aceite (× preço do atendente). |
 | `consultation_inactivity_timeout_minutes` | `settings` (admin), fallback `CONSULTATION_INACTIVITY_TIMEOUT_MINUTES` | Tempo sem interação antes da interrupção automática. |
 | `consultation_reconnection_tolerance_seconds` | `settings` (admin), fallback `CONSULTATION_RECONNECTION_TOLERANCE_SECONDS` | Margem extra para quedas breves de rede. |
 | `CONSULTATION_ACTIVITY_PING_SECONDS` | `.env`/config | Intervalo do batimento de presença do navegador. |
@@ -192,10 +207,13 @@ Todos com `everyMinute()` e `withoutOverlapping()`.
 - encerramento manual liquidando o último minuto e bloqueando cobranças futuras;
 - encerramento manual sem saldo com motivo `out_of_credits`;
 - interrupção por desconexão liquidando minutos e mantendo o motivo;
-- uso do snapshot de tarifa após alteração da configuração.
+- uso do snapshot de preço após alteração do preço do atendente.
 
-`tests/Feature/AdminFinanceTest.php` cobre a atualização da tarifa, validação,
-bloqueio de não administradores e auditoria `before`/`after`.
+`tests/Feature/AdminFinanceTest.php` cobre a atualização do valor do crédito e
+do saldo mínimo, validação, bloqueio de não administradores e auditoria
+`before`/`after`.
+`tests/Feature/ConsultationModalityTest.php` cobre o preço por atendente e
+modalidade, incluindo a recusa quando falta preço configurado.
 `tests/Feature/CreditWalletTest.php` cobre as invariantes de saldo e
 idempotência reutilizadas pela cobrança.
 

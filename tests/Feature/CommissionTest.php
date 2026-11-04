@@ -32,12 +32,6 @@ class CommissionTest extends TestCase
         parent::setUp();
 
         Setting::query()->create([
-            'key' => 'rate_credits_per_minute',
-            'value' => '1',
-            'type' => 'integer',
-        ]);
-
-        Setting::query()->create([
             'key' => 'credit_unit_price_cents',
             'value' => '100',
             'type' => 'integer',
@@ -67,9 +61,13 @@ class CommissionTest extends TestCase
     private function attendant(int $rateBps = 2500): array
     {
         $attendant = User::factory()->attendant()->create();
-        $profile = AttendantProfile::factory()->online()->for($attendant)->create([
-            'commission_rate_bps' => $rateBps,
-        ]);
+        $profile = AttendantProfile::factory()
+            ->online()
+            ->for($attendant)
+            ->withModalityPrices(['text' => 100, 'audio' => 100, 'video' => 100])
+            ->create([
+                'commission_rate_bps' => $rateBps,
+            ]);
 
         return [$attendant, $profile];
     }
@@ -83,8 +81,7 @@ class CommissionTest extends TestCase
             'client_id' => $client->id,
             'attendant_id' => $attendant->id,
             'commission_rate_bps' => $rateBps,
-            'rate_credits_per_minute' => 1,
-            'credit_unit_price_cents' => 100,
+            'price_per_minute_cents' => 100,
             'started_at' => now()->subSeconds($secondsAgo),
         ]);
 
@@ -268,8 +265,7 @@ class CommissionTest extends TestCase
     {
         $consultation = Consultation::factory()->active()->create([
             'commission_rate_bps' => 2500,
-            'rate_credits_per_minute' => null,
-            'credit_unit_price_cents' => null,
+            'price_per_minute_cents' => null,
             'started_at' => now(),
         ]);
 

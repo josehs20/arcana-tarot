@@ -35,7 +35,6 @@
                         <div class="col-md-6 col-xl-4">
                             <x-public.attendant-card
                                 :attendant="$attendant"
-                                :price="$pricePerMinute"
                                 :modalities="$modalityOptions[$attendant->getKey()] ?? []"
                             />
                         </div>

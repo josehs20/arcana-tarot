@@ -1,10 +1,10 @@
 <x-layouts.panel variant="admin" title="Modalidades dos atendentes | Arcana Tarot">
     <x-layouts.page-header
-        title="Modalidades dos atendentes"
-        subtitle="Defina quais modalidades cada profissional pode atender. Texto é sempre oferecido; áudio e vídeo exigem habilitação."
+        title="Modalidades e preços dos atendentes"
+        subtitle="Defina quais modalidades cada profissional atende e o preço por minuto de cada uma. Texto é sempre oferecido; áudio e vídeo exigem habilitação. Sem preço configurado a consulta não pode ser solicitada."
     >
         <x-slot name="actions">
-            <a class="btn btn-ghost btn-sm" href="{{ route('admin.finance.index') }}">Tarifas por modalidade</a>
+            <a class="btn btn-ghost btn-sm" href="{{ route('admin.finance.index') }}">Crédito e saldo mínimo</a>
             <a class="btn btn-ghost btn-sm" href="{{ route('admin.dashboard') }}">Voltar ao painel</a>
         </x-slot>
     </x-layouts.page-header>
@@ -18,10 +18,7 @@
                         {{ $modality->label() }}
                     </span>
                     <span class="modality-price-summary__value">
-                        {{ $labelsByModality[$modality->value] ?? 'Não configurado' }}
-                        @if ($labelsByModality[$modality->value] !== null)
-                            <small>/ minuto</small>
-                        @endif
+                        Preço por atendente
                     </span>
                     <span class="form-text">
                         @if ($catalog->isEnabled($modality))
@@ -36,6 +33,9 @@
     </div>
 
     @error('offered_modalities')
+        <x-ui.alert type="danger" class="mb-4">{{ $message }}</x-ui.alert>
+    @enderror
+    @error('prices')
         <x-ui.alert type="danger" class="mb-4">{{ $message }}</x-ui.alert>
     @enderror
 
@@ -93,36 +93,58 @@
                                                 @php
                                                     $enabled = $catalog->isEnabled($modality);
                                                     $fieldId = 'modality-'.$user->id.'-'.$modality->value;
+                                                    $priceField = 'price-'.$user->id.'-'.$modality->value;
+                                                    $priceKey = 'prices.'.$modality->value;
                                                     $checked = $profile->offersModality($modality) || ! $modality->requiresMedia();
+                                                    $currentPrice = $profile->priceForModality($modality);
                                                 @endphp
-                                                <div class="form-check modality-checkbox">
-                                                    <input
-                                                        class="form-check-input"
-                                                        type="checkbox"
-                                                        name="offered_modalities[]"
-                                                        value="{{ $modality->value }}"
-                                                        id="{{ $fieldId }}"
-                                                        @checked($checked)
-                                                        @disabled(! $enabled)
-                                                    >
-                                                    <label class="form-check-label" for="{{ $fieldId }}">
-                                                        {{ $modality->label() }}
+                                                <div class="modality-checkbox">
+                                                    <div class="form-check">
+                                                        <input
+                                                            class="form-check-input"
+                                                            type="checkbox"
+                                                            name="offered_modalities[]"
+                                                            value="{{ $modality->value }}"
+                                                            id="{{ $fieldId }}"
+                                                            @checked($checked)
+                                                            @disabled(! $enabled)
+                                                        >
+                                                        <label class="form-check-label" for="{{ $fieldId }}">
+                                                            {{ $modality->label() }}
+                                                        </label>
+                                                    </div>
+
+                                                    @if ($enabled)
+                                                        <label class="form-label small mt-1 mb-1" for="{{ $priceField }}">
+                                                            Preço por minuto (centavos)
+                                                        </label>
+                                                        <input
+                                                            class="form-control form-control-sm @error($priceKey) is-invalid @enderror"
+                                                            type="number"
+                                                            id="{{ $priceField }}"
+                                                            name="prices[{{ $modality->value }}]"
+                                                            min="1"
+                                                            max="1000000"
+                                                            step="1"
+                                                            value="{{ old($priceKey, $currentPrice) }}"
+                                                            placeholder="Ex.: 200"
+                                                        >
                                                         <span class="form-text d-block">
-                                                            @if (! $enabled)
-                                                                Indisponível na infraestrutura
-                                                            @elseif ($modality->requiresMedia())
-                                                                Chamada WebRTC
+                                                            @if ($currentPrice !== null)
+                                                                {{ $profile->pricePerMinuteLabel($modality) }} / min
                                                             @else
-                                                                Chat e cartas
+                                                                Sem preço: consultas bloqueadas
                                                             @endif
                                                         </span>
-                                                    </label>
+                                                    @else
+                                                        <span class="form-text d-block">Indisponível na infraestrutura</span>
+                                                    @endif
                                                 </div>
                                             @endforeach
                                         </div>
 
                                         <x-ui.button type="submit" variant="ghost" size="sm" class="mt-2">
-                                            Salvar modalidades
+                                            Salvar modalidades e preços
                                         </x-ui.button>
                                     </form>
                                 </td>

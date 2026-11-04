@@ -6,6 +6,7 @@ use App\Enums\AttendantAvailability;
 use App\Enums\AttendantRequestSound;
 use App\Enums\ConsultationModality;
 use App\Enums\ConsultationStatus;
+use App\Support\Money;
 use Carbon\CarbonInterface;
 use Database\Factories\AttendantProfileFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -14,6 +15,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -139,6 +141,89 @@ class AttendantProfile extends Model
             : ConsultationModality::tryFrom($modality);
 
         return $modality !== null && in_array($modality, $this->offeredModalities(), true);
+    }
+
+    /**
+     * Preços por minuto configurados pela administração para o profissional.
+     */
+    public function modalityPrices(): HasMany
+    {
+        return $this->hasMany(AttendantModalityPrice::class);
+    }
+
+    /**
+     * Preço por minuto da modalidade em centavos.
+     *
+     * Devolve `null` quando o preço ainda não foi configurado — o servidor usa
+     * esse resultado para recusar a consulta em vez de aplicar tarifa global.
+     */
+    public function priceForModality(ConsultationModality|string|null $modality = null): ?int
+    {
+        $modality = $modality instanceof ConsultationModality
+            ? $modality
+            : ConsultationModality::tryFrom((string) $modality);
+        $modality ??= ConsultationModality::Text;
+
+        $prices = $this->relationLoaded('modalityPrices')
+            ? $this->modalityPrices
+            : $this->modalityPrices()->get();
+
+        $cents = $prices
+            ->first(static fn (AttendantModalityPrice $price): bool => $price->modality === $modality)
+            ?->price_per_minute_cents;
+
+        return $cents !== null && $cents > 0 ? (int) $cents : null;
+    }
+
+    /**
+     * Ex.: "R$ 1,20". Retorna null quando a modalidade não tem preço.
+     */
+    public function pricePerMinuteLabel(ConsultationModality|string|null $modality = null): ?string
+    {
+        $cents = $this->priceForModality($modality);
+
+        return $cents === null ? null : Money::format($cents);
+    }
+
+    /**
+     * @return array<string, int|null>
+     */
+    public function pricesByModality(): array
+    {
+        $prices = [];
+
+        foreach (ConsultationModality::cases() as $modality) {
+            $prices[$modality->value] = $this->priceForModality($modality);
+        }
+
+        return $prices;
+    }
+
+    /**
+     * @return array<string, string|null>
+     */
+    public function priceLabelsByModality(): array
+    {
+        $labels = [];
+
+        foreach ($this->pricesByModality() as $value => $cents) {
+            $labels[$value] = $cents === null ? null : Money::format($cents);
+        }
+
+        return $labels;
+    }
+
+    /**
+     * Modalidades com preço configurado.
+     *
+     * @return array<int, string>
+     */
+    public function pricedModalityValues(): array
+    {
+        return array_keys(array_filter(
+            $this->pricesByModality(),
+            static fn (?int $cents): bool => $cents !== null,
+        ));
     }
 
     /**
