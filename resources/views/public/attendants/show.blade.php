@@ -10,28 +10,21 @@
             ? route('admin.dashboard')
             : (auth()->user()->isAttendant() ? route('attendant.dashboard') : route('client.dashboard')))
         : route('login');
+    $availableOptions = array_values(array_filter($options, fn (array $option): bool => $option['available']));
+    $defaultModality = old('modality', $availableOptions[0]['value'] ?? null);
 @endphp
 
 <x-layouts.public
     :title="$attendant->display_name . ' — Atendente | Arcana Tarot'"
     :description="$description"
 >
-    <section class="arcana-hero arcana-hero--compact arcana-stars">
-        <div class="container-wide">
-            <nav aria-label="Trilha de navegação">
-                <ol class="breadcrumb-arcana">
-                    <li><a href="{{ route('home') }}">Início</a></li>
-                    <li aria-hidden="true">/</li>
-                    <li><a href="{{ route('attendants.index') }}">Atendentes</a></li>
-                    <li aria-hidden="true">/</li>
-                    <li aria-current="page">{{ $attendant->display_name }}</li>
-                </ol>
-            </nav>
-
-            <p class="arcana-eyebrow mb-2">Perfil público</p>
-            <h1 class="arcana-hero__title">{{ $attendant->display_name }}</h1>
-        </div>
-    </section>
+    <x-public.page-hero
+        eyebrow="Perfil público"
+        :title="$attendant->display_name"
+        :current="$attendant->display_name"
+        parent-label="Atendentes"
+        :parent-route="route('attendants.index')"
+    />
 
     <section class="arcana-section">
         <div class="container-wide">
@@ -75,6 +68,31 @@
                             @else
                                 <p class="text-ivory-dim mb-0">Especialidades não informadas.</p>
                             @endif
+
+                            <h2 class="h5 mt-4 mb-3">Modalidades e preços</h2>
+                            <ul class="modality-list list-unstyled mb-0" aria-label="Modalidades oferecidas">
+                                @foreach ($options as $option)
+                                    <li class="modality-list__item {{ $option['available'] ? '' : 'is-unavailable' }}">
+                                        <span class="modality-list__icon" aria-hidden="true">
+                                            <x-ui.icon :name="$option['icon']" width="18" height="18" />
+                                        </span>
+                                        <span class="modality-list__body">
+                                            <span class="modality-list__title">{{ $option['label'] }}</span>
+                                            <span class="modality-list__text">{{ $option['description'] }}</span>
+                                            @if (! $option['available'] && $option['reason'])
+                                                <span class="modality-list__text text-warning">{{ $option['reason'] }}</span>
+                                            @endif
+                                        </span>
+                                        <span class="modality-list__price">
+                                            @if ($option['price_label'])
+                                                {{ $option['price_label'] }} <small>/min</small>
+                                            @else
+                                                <span class="text-ivory-dim">Não configurado</span>
+                                            @endif
+                                        </span>
+                                    </li>
+                                @endforeach
+                            </ul>
                         </x-ui.card-body>
                     </x-ui.card>
                 </div>
@@ -82,24 +100,9 @@
                 <aside class="col-lg-4">
                     <x-ui.card class="card-gilded">
                         <x-ui.card-header>
-                            <h2 class="h6 mb-0">Consulta</h2>
+                            <h2 class="h6 mb-0">Iniciar consulta</h2>
                         </x-ui.card-header>
                         <x-ui.card-body>
-                            <p class="profile-price-label">Valor por minuto</p>
-                            <p class="profile-price">
-                                @if ($pricePerMinute)
-                                    {{ $pricePerMinute }} <span>/ minuto</span>
-                                @else
-                                    <span class="profile-price__unknown">Valor sob consulta</span>
-                                @endif
-                            </p>
-                            <p class="small text-ivory-dim">
-                                O valor é calculado pelo servidor e confirmado antes de
-                                iniciar a consulta.
-                            </p>
-
-                            <hr class="profile-divider">
-
                             <p class="profile-status-hint mb-3">
                                 @if ($status === 'online')
                                     Disponível para novas solicitações.
@@ -110,24 +113,108 @@
                                 @endif
                             </p>
 
-                            @if ($status === 'online')
+                            @if ($availableOptions === [])
+                                <x-ui.alert type="warning" :dismissible="false">
+                                    Nenhuma modalidade está disponível para este atendente agora.
+                                </x-ui.alert>
+                            @endif
+
+                            @if ($status === 'online' && $availableOptions !== [])
                                 @guest
+                                    <ul class="modality-list list-unstyled mb-3" aria-label="Preços por modalidade">
+                                        @foreach ($availableOptions as $option)
+                                            <li class="modality-list__item">
+                                                <span class="modality-list__body">
+                                                    <span class="modality-list__title">{{ $option['label'] }}</span>
+                                                    <span class="modality-list__text">{{ $option['description'] }}</span>
+                                                </span>
+                                                <span class="modality-list__price">{{ $option['price_label'] }} <small>/min</small></span>
+                                            </li>
+                                        @endforeach
+                                    </ul>
                                     <a class="btn btn-primary w-100" href="{{ route('login') }}">Entrar para solicitar</a>
                                     <a class="btn btn-ghost w-100 mt-2" href="{{ route('register') }}">Criar conta</a>
                                     <p class="small text-ivory-dim mt-3 mb-0">
                                         Você precisa estar autenticado para solicitar uma consulta.
                                     </p>
                                 @else
-                                    <a class="btn btn-primary w-100" href="{{ $panelRoute }}">Ir para o meu painel</a>
-                                    <p class="small text-ivory-dim mt-3 mb-0">
-                                        A solicitação de consulta é feita pelo painel, com saldo e
-                                        status visíveis.
-                                    </p>
+                                    @if (auth()->user()->isClient() && auth()->user()->is_active)
+                                        <form
+                                            method="POST"
+                                            action="{{ route('client.consultations.store') }}"
+                                            data-modality-form
+                                            data-modality-audio="{{ collect($options)->firstWhere('value', 'audio')['available'] ?? false ? '1' : '0' }}"
+                                            data-modality-video="{{ collect($options)->firstWhere('value', 'video')['available'] ?? false ? '1' : '0' }}"
+                                        >
+                                            @csrf
+                                            <input type="hidden" name="attendant_id" value="{{ $attendant->user_id }}">
+
+                                            <fieldset class="modality-picker">
+                                                <legend class="visually-hidden">Escolha a modalidade</legend>
+
+                                                @foreach ($options as $option)
+                                                    <label @class(['modality-option', 'is-disabled' => ! $option['available']])>
+                                                        <input
+                                                            class="modality-option__input"
+                                                            type="radio"
+                                                            name="modality"
+                                                            value="{{ $option['value'] }}"
+                                                            data-requires-video="{{ $option['requires_video'] ? '1' : '0' }}"
+                                                            @checked($defaultModality === $option['value'])
+                                                            @disabled(! $option['available'])
+                                                            required
+                                                        >
+                                                        <span class="modality-option__icon" aria-hidden="true">
+                                                            <x-ui.icon :name="$option['icon']" />
+                                                        </span>
+                                                        <span class="modality-option__body">
+                                                            <span class="modality-option__title">{{ $option['label'] }}</span>
+                                                            <span class="modality-option__price">
+                                                                @if ($option['price_label'])
+                                                                    {{ $option['price_label'] }} <small>/ minuto</small>
+                                                                @else
+                                                                    Preço não configurado
+                                                                @endif
+                                                            </span>
+                                                            <span class="modality-option__hint">
+                                                                {{ $option['reason'] ?? $option['description'] }}
+                                                            </span>
+                                                        </span>
+                                                    </label>
+                                                @endforeach
+                                            </fieldset>
+
+                                            @error('modality')
+                                                <div class="invalid-feedback d-block mb-2">{{ $message }}</div>
+                                            @enderror
+
+                                            <div class="alert alert-warning py-2 px-3 mt-3 d-none" data-modality-notice role="status" aria-live="polite"></div>
+
+                                            <p class="small text-ivory-dim mt-3">
+                                                A cobrança é por minuto iniciado, calculada e confirmada pelo servidor.
+                                                Áudio e vídeo pedem permissão de microfone (e câmera) antes de conectar.
+                                            </p>
+
+                                            <x-ui.button type="submit" variant="primary" block data-modality-submit>
+                                                Confirmar e solicitar
+                                            </x-ui.button>
+                                        </form>
+                                        <p class="small text-ivory-dim mt-3 mb-0">
+                                            O preço é validado pelo servidor ao iniciar a consulta. Você pode cancelar
+                                            enquanto aguarda o aceite.
+                                        </p>
+                                    @else
+                                        <a class="btn btn-primary w-100" href="{{ $panelRoute }}">Ir para o meu painel</a>
+                                        <p class="small text-ivory-dim mt-3 mb-0">
+                                            Apenas clientes ativos podem solicitar consultas. Atendentes e administradores
+                                            acompanham os atendimentos pelos próprios painéis.
+                                        </p>
+                                    @endif
                                 @endguest
-                            @else
+                            @elseif ($status !== 'online')
                                 <a class="btn btn-primary w-100" href="{{ route('attendants.index') }}">Ver outros atendentes</a>
                                 <p class="small text-ivory-dim mt-3 mb-0">
-                                    Você pode conhecer o perfil, mas a solicitação só é liberada
+                                    Você pode conhecer o perfil e os preços, mas a solicitação só é liberada
                                     quando o atendente está online.
                                 </p>
                             @endif

@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Enums\AttendantAvailability;
+use App\Enums\AttendantRequestSound;
 use App\Models\AttendantProfile;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -20,6 +21,8 @@ class AttendantProfileFactory extends Factory
             'bio' => fake()->sentence(),
             'photo_path' => null,
             'specialties' => ['Amor', 'Carreira', 'Saúde'],
+            'offered_modalities' => ['text'],
+            'request_sound' => AttendantRequestSound::Siren->value,
             'commission_rate_bps' => 3000,
             'is_published' => true,
             'availability' => AttendantAvailability::Offline->value,
@@ -30,6 +33,7 @@ class AttendantProfileFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'availability' => AttendantAvailability::Online->value,
+            'last_seen_at' => now(),
         ]);
     }
 
@@ -37,6 +41,30 @@ class AttendantProfileFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'availability' => AttendantAvailability::Offline->value,
+        ]);
+    }
+
+    /**
+     * @param  array<int, string>  $modalities
+     */
+    public function offering(array $modalities): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'offered_modalities' => array_values($modalities),
+        ]);
+    }
+
+    public function offeringAllModalities(): static
+    {
+        return $this->offering(['text', 'audio', 'video']);
+    }
+
+    public function withRequestSound(AttendantRequestSound|string $sound): static
+    {
+        $value = $sound instanceof AttendantRequestSound ? $sound->value : $sound;
+
+        return $this->state(fn (array $attributes) => [
+            'request_sound' => $value,
         ]);
     }
 }

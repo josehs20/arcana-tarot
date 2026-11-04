@@ -13,23 +13,40 @@
     'title' => 'Painel — Arcana Tarot',
 ])
 
+@inject('siteContent', 'App\Support\SiteContent')
+
 @php
     $isAdmin = $variant === 'admin';
 @endphp
 
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-theme="{{ \App\Support\Theme::current()->value }}" data-theme-user="{{ \App\Support\Theme::isPersisted() ? '1' : '0' }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta name="theme-endpoint" content="{{ route('preferences.theme.update') }}">
+    <meta name="robots" content="noindex, nofollow">
     <title>{{ $title }}</title>
+
+    @include('layouts.partials.theme-bootstrap')
 
     @vite(['resources/css/app.scss', 'resources/js/app.js'])
 
-    <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
+    {{-- Aplica o estado da sidebar antes da primeira pintura para não piscar aberta. --}}
+    <script>
+        try {
+            if (window.localStorage.getItem('arcana.panel.sidebar') === 'collapsed') {
+                document.documentElement.dataset.panelSidebar = 'collapsed';
+            }
+        } catch (error) {
+            // Navegadores com armazenamento bloqueado mantêm o estado padrão (aberta).
+        }
+    </script>
+
+    <link rel="icon" type="image/svg+xml" href="{{ $siteContent->faviconUrl() }}">
 </head>
-<body class="bg-body d-flex flex-column min-vh-100">
+<body class="panel-body">
     <a class="visually-hidden-focusable" href="#conteudo-principal">Pular para o conteúdo</a>
 
     @if ($isAdmin)
@@ -38,23 +55,31 @@
         @include('layouts.partials.navbar-auth')
     @endif
 
-    <div class="container-fluid flex-grow-1">
-        <div class="row g-0">
-            @if ($isAdmin)
-                @include('layouts.partials.sidebar-admin')
-            @else
-                @include('layouts.partials.sidebar-client')
-            @endif
+    <div class="panel-shell">
+        @if ($isAdmin)
+            @include('layouts.partials.sidebar-admin')
+        @else
+            @include('layouts.partials.sidebar-client')
+        @endif
 
-            {{-- `col` sem largura fixa: a sidebar consome 260px e o conteúdo
-                 ocupa o restante. `col-lg-10` causaria quebra de linha no flex. --}}
-            <main id="conteudo-principal" class="col px-3 px-md-4 py-4">
-                @include('layouts.partials.flash-messages')
+        <main id="conteudo-principal" class="panel-content" tabindex="-1">
+            <div class="panel-content__inner">
+                @include('layouts.partials.flash-messages', ['container' => 'flash-region'])
                 {{ $slot }}
-            </main>
-        </div>
+            </div>
+        </main>
     </div>
+
+    {{--
+        Avisos em tempo real do `user.{id}`: modal de aceite/recusa e sirene do
+        atendente, navegação automática do cliente para a tela de atendimento.
+        Fica no layout para valer em qualquer tela do painel, não só no dashboard.
+    --}}
+    @unless ($isAdmin)
+        @include('layouts.partials.realtime-alerts')
+    @endunless
 
     @stack('scripts')
 </body>
 </html>
+

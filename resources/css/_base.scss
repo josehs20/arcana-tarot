@@ -5,38 +5,10 @@
 @use 'tokens' as *;
 
 :root {
-    // Superfícies
-    --arcana-bg: #{$arcana-night};
-    --arcana-bg-soft: #{$arcana-night-soft};
-    --arcana-surface: #{$arcana-surface};
-    --arcana-surface-2: #{$arcana-surface-2};
-
-    // Marca
-    --arcana-purple: #{$arcana-purple};
-    --arcana-purple-light: #{$arcana-purple-light};
-    --arcana-purple-soft: #{$arcana-purple-soft};
-    --arcana-gold: #{$arcana-gold};
-    --arcana-gold-light: #{$arcana-gold-light};
-    --arcana-gold-dark: #{$arcana-gold-dark};
-
-    // Texto
-    --arcana-ivory: #{$arcana-ivory};
-    --arcana-ivory-muted: #{$arcana-ivory-muted};
-    --arcana-ivory-dim: #{$arcana-ivory-dim};
-
-    // Estados
-    --arcana-success: #{$arcana-success};
-    --arcana-warning: #{$arcana-warning};
-    --arcana-danger: #{$arcana-danger};
-    --arcana-info: #{$arcana-info};
-
     // Medidas
     --arcana-radius: #{$arcana-radius};
     --arcana-radius-sm: #{$arcana-radius-sm};
     --arcana-radius-lg: #{$arcana-radius-lg};
-    --arcana-shadow: #{$arcana-shadow};
-    --arcana-shadow-lg: #{$arcana-shadow-lg};
-    --arcana-ring-gold: #{$arcana-ring-gold};
 
     // Movimento
     --arcana-transition: .2s ease;
@@ -44,6 +16,8 @@
     // Medidas de layout
     --arcana-navbar-height: 3.9rem;
 }
+
+// Cores, sombras e filtros são definidos por tema em `_theme.scss`.
 
 html {
     scroll-behavior: smooth;
@@ -106,14 +80,14 @@ a {
 
 // ---- Seleção ----------------------------------------------------------
 ::selection {
-    background: rgba(201, 168, 76, .3);
+    background: rgba(var(--arcana-gold-rgb), .3);
     color: var(--arcana-ivory);
 }
 
 // ---- Barras de rolagem ------------------------------------------------
 * {
     scrollbar-width: thin;
-    scrollbar-color: rgba(201, 168, 76, .35) transparent;
+    scrollbar-color: rgba(var(--arcana-gold-rgb), .35) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -126,14 +100,14 @@ a {
 }
 
 *::-webkit-scrollbar-thumb {
-    background: rgba(201, 168, 76, .3);
+    background: rgba(var(--arcana-gold-rgb), .3);
     border-radius: 999px;
     border: 2px solid transparent;
     background-clip: content-box;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-    background: rgba(201, 168, 76, .5);
+    background: rgba(var(--arcana-gold-rgb), .5);
     background-clip: content-box;
 }
 
@@ -174,13 +148,8 @@ a {
         inset: 0;
         z-index: -1;
         pointer-events: none;
-        opacity: .5;
-        background-image:
-            radial-gradient(1px 1px at 12% 18%, rgba(244, 241, 232, .55) 50%, transparent 50%),
-            radial-gradient(1px 1px at 68% 8%, rgba(244, 241, 232, .35) 50%, transparent 50%),
-            radial-gradient(1.5px 1.5px at 84% 62%, rgba(226, 200, 116, .4) 50%, transparent 50%),
-            radial-gradient(1px 1px at 32% 74%, rgba(244, 241, 232, .3) 50%, transparent 50%),
-            radial-gradient(1px 1px at 52% 42%, rgba(244, 241, 232, .22) 50%, transparent 50%);
+        opacity: var(--arcana-stars-opacity, .5);
+        background-image: var(--arcana-stars-image);
         background-size: 220px 220px, 300px 300px, 260px 260px, 340px 340px, 180px 180px;
     }
 }

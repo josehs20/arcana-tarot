@@ -17,7 +17,10 @@
 // 3. Bootstrap 5.3 completo.
 @import 'bootstrap/scss/bootstrap';
 
-// 4. Camadas de estilo do Arcana.
+// 4. Temas claro/escuro: tokens e reapontamento das variáveis do Bootstrap.
+@import 'theme';
+
+// 5. Camadas de estilo do Arcana.
 @import 'base';
 @import 'components';
 @import 'layouts';

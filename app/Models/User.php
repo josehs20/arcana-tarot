@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ThemePreference;
 use App\Enums\UserRole;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -12,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-#[Fillable(['name', 'email', 'email_verified_at', 'password', 'remember_token', 'role', 'is_active'])]
+#[Fillable(['name', 'email', 'phone', 'phone_verified_at', 'email_verified_at', 'password', 'remember_token', 'role', 'is_active', 'theme_preference', 'chat_send_on_enter', 'chat_sound_enabled'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -26,9 +27,13 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            'phone_verified_at' => 'datetime',
             'password' => 'hashed',
             'role' => UserRole::class,
             'is_active' => 'boolean',
+            'theme_preference' => ThemePreference::class,
+            'chat_send_on_enter' => 'boolean',
+            'chat_sound_enabled' => 'boolean',
         ];
     }
 

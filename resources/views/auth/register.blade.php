@@ -34,6 +34,18 @@
         />
 
         <x-ui.field
+            name="phone"
+            label="Celular / WhatsApp"
+            type="tel"
+            placeholder="(11) 99999-9999"
+            autocomplete="tel"
+            inputmode="tel"
+            maxlength="20"
+            help="Com DDD. Futuramente enviaremos um código por SMS para confirmar seu número."
+            required
+        />
+
+        <x-ui.field
             name="password"
             label="Senha"
             type="password"

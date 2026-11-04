@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\PhoneNumber;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -27,15 +28,8 @@ class StoreAttendantApplicationRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        $rawPhone = $this->input('phone');
-        $phone = is_scalar($rawPhone)
-            ? (preg_replace('/\D+/', '', (string) $rawPhone) ?? '')
-            : '';
-
         // Aceita o formato +55 (DDD) número e guarda apenas DDD + número.
-        if (in_array(strlen($phone), [12, 13], true) && str_starts_with($phone, '55')) {
-            $phone = substr($phone, 2);
-        }
+        $phone = PhoneNumber::normalize($this->input('phone'));
 
         $state = $this->clean($this->input('state'));
 

@@ -16,3 +16,22 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+
+/**
+ * Echo exposes an expressive API for subscribing to channels and listening
+ * for events that are broadcast by Laravel. Echo and event broadcasting
+ * allow your team to quickly build robust real-time web applications.
+ */
+
+import './echo';
+import './chat';
+import './consultation-workspace';
+import './consultation-timer';
+import './consultation-presence';
+import './consultation-modalities';
+import './consultation-call';
+import './user-channel';
+import './attendant-sound-preview';
+import './credit-packages';
+import './panel-sidebar';
+import './theme';

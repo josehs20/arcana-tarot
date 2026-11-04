@@ -6,7 +6,6 @@ use App\Enums\MessageType;
 use App\Models\Consultation;
 use App\Models\ConsultationMessage;
 use App\Models\TarotCard;
-use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -17,8 +16,10 @@ class ConsultationMessageFactory extends Factory
     public function definition(): array
     {
         return [
-            'consultation_id' => Consultation::factory(),
-            'sender_id' => User::factory(),
+            'consultation_id' => Consultation::factory()->active(),
+            'sender_id' => fn (array $attributes) => Consultation::query()
+                ->findOrFail($attributes['consultation_id'])
+                ->attendant_id,
             'type' => MessageType::Text->value,
             'body' => fake()->sentence(),
         ];

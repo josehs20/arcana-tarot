@@ -25,12 +25,21 @@
         'approved' => ['label' => 'Aprovado', 'dot' => 'online', 'text' => 'status-text--online'],
         'rejected' => ['label' => 'Rejeitado', 'dot' => 'offline', 'text' => 'status-text--offline'],
 
+        // Contas
+        'inactive' => ['label' => 'Inativa', 'dot' => 'offline', 'text' => 'status-text--offline'],
+
         // Consultas
         'requested' => ['label' => 'Solicitada', 'dot' => 'busy', 'text' => 'status-text--busy'],
         'active' => ['label' => 'Em andamento', 'dot' => 'online', 'text' => 'status-text--online'],
         'ended' => ['label' => 'Encerrada', 'dot' => 'offline', 'text' => 'status-text--offline'],
         'cancelled' => ['label' => 'Cancelada', 'dot' => 'offline', 'text' => 'status-text--offline'],
         'expired' => ['label' => 'Expirada', 'dot' => 'offline', 'text' => 'status-text--offline'],
+        'interrupted' => ['label' => 'Interrompida', 'dot' => 'offline', 'text' => 'status-text--offline'],
+
+        // Pagamentos
+        'confirmed' => ['label' => 'Confirmado', 'dot' => 'online', 'text' => 'status-text--online'],
+        'failed' => ['label' => 'Falhou', 'dot' => 'offline', 'text' => 'status-text--offline'],
+        'refunded' => ['label' => 'Estornado', 'dot' => 'offline', 'text' => 'status-text--offline'],
     ];
 
     $entry = $map[$status] ?? $map['offline'];
