@@ -382,6 +382,10 @@ continuam existindo.
    npm ci && npm run build
    ```
 
+   `public/build` **não** é versionado (`.gitignore`). Se o Hostoo não tiver Node,
+   compile localmente e envie a pasta `public/build` junto do código; sem o
+   manifest o site responde com "Unable to locate file in Vite manifest".
+
 9. **Otimizar** — nesta ordem, para o cache refletir o `.env` final:
 
    ```bash

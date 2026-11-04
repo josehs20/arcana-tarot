@@ -111,6 +111,25 @@ Regras:
 - Faça backup do banco e dos arquivos privados antes de qualquer migration em
   produção (seção 9).
 
+### 4.1 Catálogo de baralhos em produção
+
+`db:seed` está bloqueado em produção, então a vitrine não pode ser preenchida por
+seeder. O catálogo real é instalado pelo comando operacional:
+
+```bash
+docker compose exec app php artisan arcana:import-tarot-catalog
+```
+
+- lê o acervo versionado em `database/seeders/assets/tarot` (114 JPEGs em domínio
+  público) e grava as frentes em `storage/app/private/tarot/cards/`;
+- cria/atualiza baralhos e cartas pelo `slug`, sem duplicar em reexecuções;
+- nunca sobrescreve imagem enviada pela administração;
+- aceita `--source=/caminho/do/acervo` quando as imagens forem enviadas fora do
+  projeto.
+
+Sem esse passo a loja sobe com os seletores de carta vazios, e não há como
+enviar cartas no chat.
+
 ## 5. Criar o primeiro administrador
 
 O cadastro público cria somente clientes. Crie o primeiro admin no servidor:
