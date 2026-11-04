@@ -119,11 +119,11 @@ Observação: os testes emitem saída JSON (`{"tool":"phpunit","result":"passed"
 | Nginx | sim | **ausente no projeto** (imagem `nginx:1.27-alpine` já baixada) | Criar em Prompt 02 |
 | MySQL | 8.4 LTS | **SQLite** por padrão; imagem `mysql:8.4` já baixada | Configurar em Prompt 02/03 |
 | Redis | sim | Config presente (`REDIS_CLIENT=phpredis`), **sem servidor nem extensão no host**; imagem `redis:7-alpine` já baixada | Subir no Compose e instalar cliente no container (Prompt 02) |
-| Laravel Reverb | sim | **não instalado**; `BROADCAST_CONNECTION=log` | Instalar/configurar em Prompt 12 |
+| Laravel Reverb | sim | **1.12.0**; `BROADCAST_CONNECTION=reverb` | ✔ Configurado no Prompt 12 (`docs/REALTIME.md`) |
 | Blade | sim | **presente** (`welcome.blade.php`) | ✔ Base pronta |
 | Bootstrap 5.3 | sim | **Tailwind CSS 4** no `package.json`/`vite.config.js` | Prompt 05: introduzir Bootstrap 5.3 e decidir sobre o Tailwind existente (ver D-013) |
 | JavaScript | sim | `resources/js/app.js` mínimo | Evoluir nos prompts de layout/chat |
-| Laravel Echo + cliente Pusher | sim | **ausente** | Prompt 12 |
+| Laravel Echo + cliente Pusher | sim | **Echo 2.6.1 + pusher-js 8.6.0** | ✔ Implementado no Prompt 12 |
 | Vite | sim | **Vite 8** + `laravel-vite-plugin` 3.1 | ✔ Atende |
 | PHPUnit | sim (ou Pest) | **PHPUnit 12.5.40** | ✔ Atende (manter PHPUnit; Pest não instalado) |
 
@@ -230,7 +230,7 @@ tests/
 | Entidade | Campos-chave | Observações |
 |---|---|---|
 | `users` | `name`, `email`, `password`, `role`, `is_active`, timestamps | `role` ∈ {admin, attendant, client}. Sem `spatie/laravel-permission` (ver D-003) |
-| `attendant_profiles` | `user_id`, `display_name`, `bio`, `specialties`, `status`, `commission_rate_bps` | `status` ∈ {online, offline, busy}; `busy` **derivado** de consulta ativa (D-008) |
+| `attendant_profiles` | `user_id`, `display_name`, `bio`, `specialties`, `status`, `request_sound`, `request_sound_path`, `commission_rate_bps` | `status` ∈ {online, offline, busy}; `busy` **derivado** de consulta ativa (D-008); `request_sound` padrão `siren`, com opção `custom` para MP3 de até 5 s |
 | `attendant_applications` | `name`, `email`, `phone`, `experience`, `message`, `status`, `reviewed_by`, `reviewed_at`, `review_notes` | `status` ∈ {pending, approved, rejected}; aprovação **não** cria usuário (D-010) |
 
 ### 5.2 Catálogo
@@ -297,21 +297,21 @@ requested ──(atendente aceita)──► active ──(encerrada)──► en
 
 - A cobrança só começa quando o **servidor** confirma `active` (aceite do atendente).
 - Transições explícitas, validadas no servidor; navegador nunca define estado/duração.
-- Encerramento por: cliente, atendente, saldo insuficiente ou expiração por inatividade (política a confirmar — Q-13).
+- Encerramento por: cliente, atendente, saldo insuficiente (`out_of_credits`), inatividade (`inactivity`) ou logout (`client_logged_out`/`attendant_logged_out`). Tempo máximo de sessão continua fora do MVP; a política de inatividade está em `docs/SEGURANCA_E_USABILIDADE_CHAT.md`.
 - Reconexão WebSocket **não** cria nova sessão nem duplica débitos.
 
 ### 6.4 Créditos e conversão crédito → dinheiro
 
-Modelo proposto (a ser implementado no Prompt 13):
+Modelo implementado no Prompt 13 (ver `docs/WALLET_LEDGER.md`):
 
 1. Todo valor monetário é armazenado em **centavos inteiros**.
 2. Existe um parâmetro configurável `credit_unit_price_cents` = valor em centavos de **1 crédito**.
 3. A cobrança por tempo usa `rate_credits_per_minute` (configurável) e gera débitos no livro-razão em créditos **e** o valor monetário correspondente.
 4. **Conversão oficial**: `valor_monetario_cents = creditos_cobrados × credit_unit_price_cents`, arredondada para centavos no servidor.
-5. `credit_unit_price_cents` e `rate_credits_per_minute` são **congelados na abertura da consulta** (snapshot), para que mudanças futuras não alterem histórico.
+5. `credit_unit_price_cents` e `rate_credits_per_minute` são **congelados no aceite da consulta** (snapshot), para que mudanças futuras não alterem histórico.
 6. **Não se assume que 1 crédito = R$ 1,00.** O valor é definido pelo administrador.
 
-> Valores iniciais de `credit_unit_price_cents` e `rate_credits_per_minute` **não serão fixados neste plano** (Q-02).
+> O Prompt 15 implementou a leitura e a edição auditada desses valores em `/admin/financeiro`; os valores comerciais finais continuam sendo decisão de negócio (Q-02).
 
 ### 6.5 Cobrança por tempo
 
@@ -448,9 +448,10 @@ A ordem abaixo segue `arcana-tarot-prompts/prompts/`. Cada etapa deve ser conclu
 ### Prompt 13 — Carteira e livro-razão de créditos
 
 - **Objetivo**: créditos auditáveis.
-- **Entregas**: wallet + `credit_ledger_entries` imutáveis, crédito/débito idempotentes, saldo como cache, conversão documentada crédito→centavos, prevenção de saldo negativo.
-- **Testes**: idempotência, concorrência, consistência saldo×ledger, saldo insuficiente.
+- **Entregas**: wallet + `credit_ledger_entries` imutáveis, crédito/débito idempotentes, saldo como cache, conversão documentada crédito→centavos, prevenção de saldo negativo, histórico do cliente e ajuste administrativo auditado.
+- **Testes**: idempotência, concorrência, consistência saldo×ledger, saldo insuficiente, histórico e autorização.
 - **Critério de saída**: nenhum saldo editável sem lançamento correspondente.
+- **Status**: implementado em 2026-10-21; invariantes em `docs/WALLET_LEDGER.md`.
 
 ### Prompt 14 — Pagamentos PIX em modo de teste
 
@@ -458,6 +459,7 @@ A ordem abaixo segue `arcana-tarot-prompts/prompts/`. Cada etapa deve ser conclu
 - **Entregas**: criação de cobrança sandbox, webhook validado, idempotência, liberação de créditos somente após confirmação do provedor, estados de pagamento.
 - **Testes**: webhook válido/inválido, duplicidade, pagamento expirado, crédito liberado uma única vez.
 - **Critério de saída**: créditos só entram após confirmação server-side do provedor.
+- **Status**: sandbox implementado em 2026-10-21 com contrato `PixProvider`; provedor real continua pendente (Q-01). Ver `docs/PIX_SANDBOX.md`.
 
 ### Prompt 15 — Cobrança por tempo e encerramento
 
@@ -465,6 +467,7 @@ A ordem abaixo segue `arcana-tarot-prompts/prompts/`. Cada etapa deve ser conclu
 - **Entregas**: job/rotina de cobrança idempotente por minuto iniciado, snapshot de tarifa, encerramento automático por saldo, política de falha/reconexão.
 - **Testes**: relógio controlado, idempotência por minuto, encerramento por saldo zero, sem saldo negativo.
 - **Critério de saída**: débitos corretos e reprodutíveis, independentes do navegador.
+- **Status**: implementado em 2026-10-21; regras em `docs/TIME_BILLING.md`.
 
 ### Prompt 16 — Comissão por atendente e lançamentos auditáveis
 
@@ -528,9 +531,9 @@ Diretrizes:
 | R-01 | Extensões PHP ausentes no host (`pdo_sqlite`, `pdo_mysql`, `redis`) | Alto — testes com banco falham | Executar testes no container; instalar extensões no host; documentar |
 | R-02 | Tailwind 4 × Bootstrap 5.3 | Médio — conflito visual/técnico | Decisão explícita no Prompt 05; remover Tailwind se não for usado |
 | R-03 | PHP 8.5 no host × 8.4 pretendido | Baixo | Pinar `php:8.4` no Docker; validar compatibilidade |
-| R-04 | Provedor PIX indefinido | Alto — bloqueia Prompt 14 | Decidir provedor sandbox antes do Prompt 14 (Q-01) |
-| R-05 | Conversão crédito→dinheiro e tarifas indefinidas | Alto — bloqueia carteira/cobrança | Definir `credit_unit_price_cents` e `rate_credits_per_minute` antes do Prompt 13 (Q-02) |
-| R-06 | Regra de arredondamento ambígua | Alto — disputas de cobrança | Documentar e testar (Q-03) |
+| R-04 | Provedor PIX indefinido | Alto — bloqueia produção | Prompt 14 mitigado com mock `pix_sandbox` atrás de contrato; decidir provedor real antes de ativar cobranças (Q-01) |
+| R-05 | Conversão crédito→dinheiro e tarifas indefinidas | Alto — bloqueia cobrança por tempo | Prompt 15 entrega tarifa e saldo mínimo editáveis com auditoria (Q-02); definir valores comerciais antes de produção |
+| R-06 | Regra de arredondamento ambígua | Alto — disputas de cobrança | Regra de minuto iniciado documentada e testada (D-005/Q-03 em `docs/TIME_BILLING.md`) |
 | R-07 | Concorrência em aceite de consulta/saldo | Alto — dupla cobrança/sessão | Transações + locks + idempotência |
 | R-08 | Reverb/Redis mal configurados | Médio — chat sem tempo real | Healthchecks, canais autorizados, fallback de polling |
 | R-09 | Imagens de cartas expostas | Alto — privacidade | Disco privado + rota autorizada + snapshot |
@@ -552,15 +555,24 @@ Diretrizes:
 
 ---
 
-## 11. Próximo passo recomendado
+## 11. Estado final e próximo passo
 
-**Prompt 01 — Fundação Laravel e qualidade do repositório**, iniciando por:
+**Prompts 01–20 concluídos no código e na documentação.** O MVP possui
+autenticação por papéis, site público, candidaturas, catálogo com imagens
+privadas, consultas com chat em tempo real, carteira e PIX sandbox, cobrança por
+tempo, comissões auditáveis, históricos, dashboard administrativo, lista de
+pagamentos, auditoria, testes integrados e runbook de implantação.
 
-1. `git init` e primeiro commit do estado atual;
-2. cópia de `arcana-tarot-prompts/.cursor/rules/*.mdc` para `.cursor/rules/`;
-3. ajuste de locale/timezone e nome da aplicação;
-4. configuração de Pint e scripts de teste;
-5. README do projeto.
+**Pendências que bloqueiam produção:**
 
-Antes do Prompt 13/14, confirmar as decisões **Q-01**, **Q-02** e **Q-03** (provedor PIX, preço do crédito/tarifa e arredondamento).
+- **Q-01**: provedor PIX real, conciliação e teste no sandbox oficial;
+- revisão jurídica de termos/privacidade e aprovação da política de retenção;
+- MFA administrativo, verificação de e-mail e revisão de acessos;
+- backup/restauração testada, TLS/proxy, monitoramento e resposta a incidentes;
+- definição dos valores comerciais de `credit_unit_price_cents`,
+  `rate_credits_per_minute` e taxas de comissão.
+
+A avaliação objetiva está em `docs/DEPLOYMENT.md` (seção 14): **pronto com
+ressalvas para homologação; não pronto para produção**. Nenhuma conformidade
+jurídica é garantida.
 
