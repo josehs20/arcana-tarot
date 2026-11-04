@@ -57,6 +57,9 @@ RUN addgroup -g 1000 appuser \
 # Pool do PHP-FPM escutando na porta 9000 para o Nginx.
 COPY docker/php/www.conf /usr/local/etc/php-fpm.d/www.conf
 
+# Limites de upload compatíveis com o catálogo de cartas (5 MB na aplicação).
+COPY docker/php/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
+
 WORKDIR /var/www/html
 
 EXPOSE 9000
