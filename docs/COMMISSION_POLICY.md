@@ -128,6 +128,24 @@ com tipo, motivo e autor.
 - As definições completas dos indicadores e o valor consumido por consulta estão
   em `docs/ADMIN_REPORTING.md`.
 
+### 7.1 Comissão estimada no atendimento em andamento
+
+O razão só recebe o `accrual` no encerramento, então uma consulta ativa não tem
+comissão lançada. Para o atendente não ver R$ 0,00 enquanto a conversa corre, a
+tela de atendimento (`GET /consultas/{id}/metrics`,
+`ConsultationMetricsPresenter`) publica uma **estimativa**:
+
+- mesma regra do fechamento: `CommissionCalculator` com a taxa snapshot da
+  consulta e a base já cobrada (`billed_minutes` × preço do aceite — o cursor só
+  avança depois do débito registrado no razão de créditos);
+- o payload marca `commission_is_estimate: true` e a tela mostra
+  “X% de R$ Y — estimativa até o encerramento.”;
+- assim que existe lançamento no razão, o valor oficial tem precedência e
+  `commission_is_estimate` passa a `false` — inclusive um estorno total, que
+  continua aparecendo como R$ 0,00;
+- nenhuma estimativa é gravada: o razão permanece a única fonte contábil e a
+  comissão oficial continua sendo criada no encerramento.
+
 ## 8. Fora do escopo do MVP
 
 - Pagamento, transferência, saque ou antecipação de comissão.

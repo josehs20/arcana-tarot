@@ -9,9 +9,17 @@ use Illuminate\Support\Str;
  *
  * Cada carta é descrita como [nome, significado, significado invertido]. O
  * arquivo da imagem é o slug do nome, dentro do diretório do baralho em
- * database/seeders/assets/tarot. Os scans são digitalizações em domínio
- * público: o Tarot de Marseille de Jean Dodal (Lyon, 1701-1715) e uma
- * litografia oitocentista do Petit Lenormand.
+ * database/seeders/assets/tarot.
+ *
+ * Origem das frentes versionadas:
+ *
+ * - Tarot de Marseille: digitalizações em domínio público do baralho de Jean
+ *   Dodal (Lyon, 1701-1715).
+ * - Lenormand: litografia oitocentista em domínio público do Petit Lenormand.
+ * - Rider-Waite-Smith: digitalizações em domínio público da primeira edição
+ *   de 1909, ilustrada por Pamela Colman Smith para a Rider & Son.
+ * - Baralho de 52 cartas e Baralho Espanhol: frentes originais desenhadas para
+ *   o Arcana na identidade visual da casa, sem dependência de terceiros.
  *
  * É dado de produto, não de demonstração: a seeder e o comando
  * `arcana:import-tarot-catalog` leem esta mesma fonte, e o comando pode ser
@@ -50,12 +58,46 @@ final class TarotCatalog
     ];
 
     /**
+     * Arcanos maiores do Rider-Waite-Smith, do Louco (0) ao Mundo (21).
+     *
+     * A lista segue a ordem canônica desta tradição, que difere do Marseille:
+     * Mago, Sacerdotisa e Hierofante substituem Bateleur, Papisa e Papa, e a
+     * Força ocupa a posição 8 enquanto a Justiça ocupa a 11.
+     *
+     * @var list<array{0: string, 1: string, 2: string}>
+     */
+    private const RIDER_WAITE_MAJORS = [
+        ['O Louco', 'Salto de fé, abertura para o novo e confiança no caminho que se apresenta.', 'Imprudência, medo de dar o primeiro passo e queda por falta de chão.'],
+        ['O Mago', 'Vontade consciente, ferramenta na mão e capacidade de realizar.', 'Manipulação, talento desperdiçado e promessa sem obra.'],
+        ['A Sacerdotisa', 'Intuição, silêncio fecundo e saber que amadurece no oculto.', 'Segredo usado como fuga e intuição abafada pelo ruído.'],
+        ['A Imperatriz', 'Fertilidade, abundância e criação que ganha corpo.', 'Esterilidade criativa, excesso de zelo e dependência.'],
+        ['O Imperador', 'Ordem, autoridade legítima e estrutura que protege.', 'Rigidez, controle excessivo e liderança que oprime.'],
+        ['O Hierofante', 'Tradição, aprendizado com mestre e pertencimento a uma linhagem.', 'Dogma vazio, moralismo e ruptura com a instituição.'],
+        ['Os Namorados', 'Escolha do coração, alinhamento de valores e união consciente.', 'Dúvida afetiva, escolha por conveniência e desalinhamento.'],
+        ['O Carro', 'Determinação, vitória pelo esforço e domínio da própria direção.', 'Direção perdida, esforço em vão e arrogância na condução.'],
+        ['A Força', 'Firmeza suave, coragem paciente e domínio sereno do instinto.', 'Força usada como violência, medo e confiança abalada.'],
+        ['O Eremita', 'Retiro voluntário, maturidade e luz que se leva para os outros.', 'Isolamento amargo, solidão e conselho que não se ouve.'],
+        ['A Roda da Fortuna', 'Virada de ciclo, sorte em movimento e oportunidade que passa.', 'Ciclo travado, resistência à mudança e repetição do mesmo erro.'],
+        ['A Justiça', 'Verdade verificada, contrato claro e decisão equilibrada.', 'Injustiça, evasão de responsabilidade e julgamento torto.'],
+        ['O Enforcado', 'Pausa necessária, inversão de perspectiva e entrega consciente.', 'Espera estéril, sacrifício sem sentido e teimosia.'],
+        ['A Morte', 'Encerramento transformador e passagem para outra etapa.', 'Fim negado, apego a um ciclo já morto e medo da mudança.'],
+        ['A Temperança', 'Medida, paciência e mistura certa de elementos.', 'Excesso, impaciência e desequilíbrio entre as partes.'],
+        ['O Diabo', 'Desejo, apego e a sombra que precisa ser olhada de frente.', 'Laço rompido, vício reconhecido e libertação.'],
+        ['A Torre', 'Ruptura abrupta, queda da ilusão e reconstrução sobre o real.', 'Crise contida, estrutura abalada e colapso adiado.'],
+        ['A Estrela', 'Esperança serena, inspiração e fé que se restaura.', 'Descrença, promessa vazia e inspiração seca.'],
+        ['A Lua', 'Sonho, imaginação e emoção que pede travessia noturna.', 'Ilusão, medo difuso e engano.'],
+        ['O Sol', 'Clareza, alegria e sucesso que se mostra à luz do dia.', 'Brilho ofuscado, vaidade e alegria adiada.'],
+        ['O Julgamento', 'Despertar, chamado aceito e renascimento depois da revisão.', 'Culpa paralisante, chamado recusado e decisão adiada.'],
+        ['O Mundo', 'Realização plena, integração e ciclo coroado.', 'Ciclo inacabado, reconhecimento adiado e fuga do desfecho.'],
+    ];
+
+    /**
      * Posições do Ás ao Rei, na ordem em que as cartas numeradas e as figuras
-     * aparecem no baralho.
+     * aparecem nos baralhos de 78 cartas (Marseille e Rider-Waite-Smith).
      *
      * @var list<string>
      */
-    private const MARSEILLE_RANKS = [
+    private const MINOR_RANKS = [
         'Ás',
         'Dois',
         'Três',
@@ -73,11 +115,14 @@ final class TarotCatalog
     ];
 
     /**
-     * Significados dos naipes menores, na ordem de self::MARSEILLE_RANKS.
+     * Significados dos naipes menores, na ordem de self::MINOR_RANKS.
+     *
+     * Valem para os dois tarots de 78 cartas do catálogo: a leitura dos naipes
+     * menores é a mesma no Marseille e no Rider-Waite-Smith.
      *
      * @var array<string, list<array{0: string, 1: string}>>
      */
-    private const MARSEILLE_SUITS = [
+    private const MINOR_SUIT_MEANINGS = [
         'Paus' => [
             ['Faísca inicial, impulso criativo e força para começar.', 'Energia dispersa e projeto que não engata.'],
             ['Parceria que abre caminho e acordo em construção.', 'Desacordo por falta de escuta.'],
@@ -189,6 +234,114 @@ final class TarotCatalog
     ];
 
     /**
+     * Posições do baralho comum de 52 cartas, do Ás ao Rei.
+     *
+     * @var list<string>
+     */
+    private const PLAYING_RANKS = [
+        'Ás',
+        'Dois',
+        'Três',
+        'Quatro',
+        'Cinco',
+        'Seis',
+        'Sete',
+        'Oito',
+        'Nove',
+        'Dez',
+        'Valete',
+        'Dama',
+        'Rei',
+    ];
+
+    /**
+     * Leitura de cada posição do baralho comum, na ordem de self::PLAYING_RANKS.
+     *
+     * O baralho comum não tem significados tradicionais fechados como o tarot,
+     * então a carta é lida pela posição (aqui) cruzada com o campo de vida do
+     * naipe em self::PLAYING_SUIT_FIELDS.
+     *
+     * @var array<string, array{0: string, 1: string}>
+     */
+    private const PLAYING_RANK_MEANINGS = [
+        'Ás' => ['Começo, impulso e oportunidade única.', 'Oportunidade perdida e começo travado.'],
+        'Dois' => ['Parceria, escolha e equilíbrio entre duas partes.', 'Desacordo e escolha postergada.'],
+        'Três' => ['Crescimento inicial, esforço conjunto e primeiros resultados.', 'Esforço sem retorno e plano que não engata.'],
+        'Quatro' => ['Base firme, estabilidade e estrutura conquistada.', 'Instabilidade e estrutura que não se sustenta.'],
+        'Cinco' => ['Mudança, atrito e ajuste necessário no caminho.', 'Conflito arrastado e mudança evitada.'],
+        'Seis' => ['Harmonia, troca e retorno do que foi investido.', 'Desequilíbrio na troca e favor cobrado.'],
+        'Sete' => ['Avaliação, pausa estratégica e escolha de rumo.', 'Indecisão, plano parado e avaliação distorcida.'],
+        'Oito' => ['Movimento, repetição produtiva e avanço constante.', 'Pressa sem direção e repetição desgastante.'],
+        'Nove' => ['Conquista próxima, satisfação e resistência final.', 'Insegurança diante do resultado e cansaço.'],
+        'Dez' => ['Conclusão de um ciclo e peso do que foi construído.', 'Ciclo que não fecha e excesso de peso.'],
+        'Valete' => ['Notícia, aprendizado e energia jovem em ação.', 'Notícia atrasada e imaturidade na ação.'],
+        'Dama' => ['Escuta, cuidado e maturidade na condução da situação.', 'Cuidado sufocante e insegurança.'],
+        'Rei' => ['Autoridade, domínio e decisão consolidada.', 'Autoridade contestada e decisão imposta.'],
+    ];
+
+    /**
+     * Campo de vida de cada naipe do baralho comum, usado para compor a leitura
+     * da carta junto de self::PLAYING_RANK_MEANINGS.
+     *
+     * @var array<string, string>
+     */
+    private const PLAYING_SUIT_FIELDS = [
+        'Copas' => 'afetivo',
+        'Ouros' => 'material',
+        'Espadas' => 'mental',
+        'Paus' => 'da ação e do trabalho',
+    ];
+
+    /**
+     * Posições da baraja española de 40 cartas: do Ás ao Sete e as três figuras,
+     * sem os oitos e os noves do baralho comum.
+     *
+     * @var list<string>
+     */
+    private const SPANISH_RANKS = [
+        'Ás',
+        'Dois',
+        'Três',
+        'Quatro',
+        'Cinco',
+        'Seis',
+        'Sete',
+        'Sota',
+        'Cavalo',
+        'Rei',
+    ];
+
+    /**
+     * Leitura de cada posição da baraja española, na ordem de self::SPANISH_RANKS.
+     *
+     * @var array<string, array{0: string, 1: string}>
+     */
+    private const SPANISH_RANK_MEANINGS = [
+        'Ás' => ['Início, força própria e potencial ainda bruto.', 'Começo hesitante e força dispersa.'],
+        'Dois' => ['Duas forças em contato e escolha a fazer.', 'Rompimento e escolha forçada.'],
+        'Três' => ['Primeiros resultados e apoio que chega.', 'Atraso e ausência de apoio.'],
+        'Quatro' => ['Estabilidade conquistada e base que se firma.', 'Base abalada e insegurança.'],
+        'Cinco' => ['Instabilidade, perda e ajuste de rota.', 'Recuperação lenta e perda contida.'],
+        'Seis' => ['Caminho aberto e respostas que se esclarecem.', 'Confusão e caminho que se fecha.'],
+        'Sete' => ['Desafio, disputa e posição a defender.', 'Desistência da disputa e desgaste.'],
+        'Sota' => ['Mensagem nova, aprendizado e curiosidade.', 'Boato, imaturidade e recado mal dado.'],
+        'Cavalo' => ['Movimento decidido e notícia que chega com pressa.', 'Pressa atrapalhada e notícia que não vem.'],
+        'Rei' => ['Domínio maduro, autoridade e decisão final.', 'Autoridade abusada e decisão precipitada.'],
+    ];
+
+    /**
+     * Naipe espanhol e o campo de vida usado para compor a leitura da carta.
+     *
+     * @var array<string, string>
+     */
+    private const SPANISH_SUIT_FIELDS = [
+        'Ouros' => 'material',
+        'Copas' => 'afetivo',
+        'Espadas' => 'dos conflitos',
+        'Paus' => 'do trabalho',
+    ];
+
+    /**
      * Baralhos do catálogo inicial, na ordem em que aparecem no seletor.
      *
      * @return list<array{name: string, slug: string, description: string, assets: string, cards: list<array{name: string, slug: string, upright: string, reversed: string}>}>
@@ -210,6 +363,27 @@ final class TarotCatalog
                 'assets' => 'lenormand',
                 'cards' => self::lenormandCards(),
             ],
+            [
+                'name' => 'Rider-Waite-Smith',
+                'slug' => 'rider-waite-smith',
+                'description' => 'Baralho de 78 cartas do Rider-Waite-Smith, com as ilustrações de Pamela Colman Smith para a edição de 1909, em domínio público.',
+                'assets' => 'rider-waite',
+                'cards' => self::riderWaiteCards(),
+            ],
+            [
+                'name' => 'Baralho de 52 Cartas',
+                'slug' => 'baralho-de-52-cartas',
+                'description' => 'Baralho comum de 52 cartas, com frentes originais do Arcana e leitura por posição cruzada com o naipe.',
+                'assets' => 'baralho-52',
+                'cards' => self::playingCards(),
+            ],
+            [
+                'name' => 'Baralho Espanhol',
+                'slug' => 'baralho-espanhol',
+                'description' => 'Baraja española de 40 cartas, com frentes originais do Arcana e leitura por posição cruzada com o naipe.',
+                'assets' => 'baralho-espanhol',
+                'cards' => self::spanishCards(),
+            ],
         ];
     }
 
@@ -224,11 +398,75 @@ final class TarotCatalog
             $cards[] = self::card($name, $upright, $reversed);
         }
 
-        foreach (self::MARSEILLE_SUITS as $suit => $meanings) {
-            foreach (self::MARSEILLE_RANKS as $index => $rank) {
+        return [...$cards, ...self::minorArcanaCards()];
+    }
+
+    /**
+     * Arcanos menores compartilhados pelos dois tarots de 78 cartas.
+     *
+     * @return list<array{name: string, slug: string, upright: string, reversed: string}>
+     */
+    private static function minorArcanaCards(): array
+    {
+        $cards = [];
+
+        foreach (self::MINOR_SUIT_MEANINGS as $suit => $meanings) {
+            foreach (self::MINOR_RANKS as $index => $rank) {
                 [$upright, $reversed] = $meanings[$index];
 
                 $cards[] = self::card($rank.' de '.$suit, $upright, $reversed);
+            }
+        }
+
+        return $cards;
+    }
+
+    /**
+     * @return list<array{name: string, slug: string, upright: string, reversed: string}>
+     */
+    private static function riderWaiteCards(): array
+    {
+        $cards = [];
+
+        foreach (self::RIDER_WAITE_MAJORS as [$name, $upright, $reversed]) {
+            $cards[] = self::card($name, $upright, $reversed);
+        }
+
+        return [...$cards, ...self::minorArcanaCards()];
+    }
+
+    /**
+     * Baralho comum de 52 cartas: cada carta combina a leitura da posição com o
+     * campo de vida do naipe.
+     *
+     * @return list<array{name: string, slug: string, upright: string, reversed: string}>
+     */
+    private static function playingCards(): array
+    {
+        $cards = [];
+
+        foreach (self::PLAYING_SUIT_FIELDS as $suit => $field) {
+            foreach (self::PLAYING_RANKS as $rank) {
+                $cards[] = self::composedCard($rank.' de '.$suit, self::PLAYING_RANK_MEANINGS[$rank], $field);
+            }
+        }
+
+        return $cards;
+    }
+
+    /**
+     * Baraja española de 40 cartas: cada carta combina a leitura da posição com
+     * o campo de vida do naipe.
+     *
+     * @return list<array{name: string, slug: string, upright: string, reversed: string}>
+     */
+    private static function spanishCards(): array
+    {
+        $cards = [];
+
+        foreach (self::SPANISH_SUIT_FIELDS as $suit => $field) {
+            foreach (self::SPANISH_RANKS as $rank) {
+                $cards[] = self::composedCard($rank.' de '.$suit, self::SPANISH_RANK_MEANINGS[$rank], $field);
             }
         }
 
@@ -247,6 +485,24 @@ final class TarotCatalog
         }
 
         return $cards;
+    }
+
+    /**
+     * Carta de baralho comum: a leitura da posição vale para o campo de vida do
+     * naipe, e o texto gravado já traz essa combinação.
+     *
+     * @param  array{0: string, 1: string}  $meanings
+     * @return array{name: string, slug: string, upright: string, reversed: string}
+     */
+    private static function composedCard(string $name, array $meanings, string $field): array
+    {
+        [$upright, $reversed] = $meanings;
+
+        return self::card(
+            $name,
+            $upright.' Leitura voltada ao campo '.$field.'.',
+            $reversed.' Leitura voltada ao campo '.$field.'.',
+        );
     }
 
     /**

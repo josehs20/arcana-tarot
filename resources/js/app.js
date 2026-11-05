@@ -25,13 +25,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
 import './echo';
 import './chat';
+import './admin-consultation-history';
 import './consultation-workspace';
 import './consultation-timer';
 import './consultation-presence';
 import './consultation-modalities';
+import './testimonial-modal';
 import './consultation-call';
 import './user-channel';
 import './attendant-sound-preview';
 import './credit-packages';
 import './panel-sidebar';
 import './theme';
+import './auth-verification';

@@ -152,6 +152,17 @@ class AttendantProfile extends Model
     }
 
     /**
+     * Depoimentos recebidos nos atendimentos concluídos.
+     *
+     * A relação devolve todos os registros (inclusive ocultados) para a
+     * administração; a leitura pública aplica o escopo `visible()`.
+     */
+    public function testimonials(): HasMany
+    {
+        return $this->hasMany(ConsultationTestimonial::class, 'attendant_id', 'user_id');
+    }
+
+    /**
      * Preço por minuto da modalidade em centavos.
      *
      * Devolve `null` quando o preço ainda não foi configurado — o servidor usa

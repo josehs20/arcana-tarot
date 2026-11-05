@@ -6,7 +6,8 @@
  *  - marca atividade apenas em interações reais (abrir a tela, digitar, clicar,
  *    enviar mensagem), nunca no batimento automático, para que uma aba ociosa
  *    não mantenha a consulta aberta indefinidamente;
- *  - avisa antes de sair ou depois de um período sem interação;
+ *  - avisa antes de sair ou depois de um período sem interação, e encerra a
+ *    consulta quando o participante confirma a saída no aviso;
  *  - atualiza saldo e presença com os valores devolvidos pelo servidor.
  *
  * Ao navegar para a compra de créditos, o link é liberado sem aviso, mas a
@@ -334,6 +335,25 @@ function bindInteractions() {
         }
     });
 
+    /*
+     * Guarda de navegação para o que não passa por um clique: botão voltar do
+     * navegador, atalho de teclado, URL digitada e recarregamento da página. Os
+     * links continuam interceptados pelo modal "Sair do atendimento?".
+     *
+     * `leaveWithoutEnding` marca `leaving` antes de navegar, então a saída
+     * confirmada nos modais e o redirecionamento para o histórico não abrem o
+     * aviso do navegador. O texto exibido é o nativo do navegador — a página não
+     * pode personalizá-lo — e a decisão sobre a cobrança continua no servidor.
+     */
+    window.addEventListener('beforeunload', (event) => {
+        if (!isActive() || state.leaving) {
+            return;
+        }
+
+        event.preventDefault();
+        event.returnValue = '';
+    });
+
     window.addEventListener('pageshow', (event) => {
         if (event.persisted && state.leaving) {
             state.leaving = false;
@@ -369,7 +389,7 @@ function bindModals() {
     });
 
     document.querySelector('[data-consultation-leave-confirm]')?.addEventListener('click', () => {
-        leaveWithoutEnding(state.root.dataset.showUrl);
+        endAndLeave();
     });
 
     document.querySelector('[data-consultation-navigation-confirm]')?.addEventListener('click', () => {
@@ -430,5 +450,61 @@ function leaveWithoutEnding(nextUrl = null) {
 
     if (state.pendingNavigation) {
         window.location.assign(state.pendingNavigation);
+    }
+}
+
+/*
+ * "Sair do chat" encerra o atendimento.
+ *
+ * Quem confirma a saída no aviso de inatividade não quer mais o atendimento, e
+ * a tela não pode deixar a consulta aberta consumindo créditos em segundo
+ * plano. O `data-end-url` aponta para `consultations.end`: o servidor encerra a
+ * consulta, cobra o último minuto iniciado, libera as duas partes e avisa o
+ * outro lado. A navegação acontece depois da resposta para o encerramento não se
+ * perder no meio do caminho.
+ *
+ * Sem permissão de encerramento (visão de leitura) resta a saída simples, e se
+ * a requisição falhar o prazo de inatividade continua valendo como rede de
+ * segurança — o servidor encerra a consulta sozinho.
+ */
+async function endAndLeave() {
+    if (state.leaving) {
+        return;
+    }
+
+    const endUrl = state.root?.dataset.endUrl;
+    const showUrl = state.root?.dataset.showUrl;
+
+    state.leaving = true;
+    window.clearInterval(state.heartbeatTimer);
+    window.clearTimeout(state.warningTimer);
+    hideInactivityWarning();
+    state.navigationModal?.hide();
+
+    if (endUrl) {
+        try {
+            await fetch(endUrl, {
+                method: 'POST',
+                credentials: 'same-origin',
+                keepalive: true,
+                headers: {
+                    Accept: 'text/html',
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+                    'X-CSRF-TOKEN': csrfToken(),
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: new URLSearchParams({ _method: 'PATCH' }).toString(),
+            });
+        } catch {
+            // Sem rede: a saída registrada abaixo mantém o servidor informado e
+            // a inatividade encerra a consulta no prazo configurado.
+            postPresence('leave', { keepalive: true });
+        }
+    } else {
+        postPresence('leave', { keepalive: true });
+    }
+
+    if (showUrl) {
+        window.location.assign(showUrl);
     }
 }

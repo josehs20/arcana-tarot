@@ -738,6 +738,57 @@
     padding: 0;
 }
 
+// Área rolável da conversa.
+//
+// Sem altura máxima a linha do tempo empurrava o formulário para fora da tela e
+// a página inteira rolava junto com o cabeçalho do atendimento. Com a rolagem
+// contida aqui, escrever e anexar cartas continua sempre ao alcance enquanto o
+// histórico cresce (o chat.js acompanha o fim só quando o participante já está lá).
+.chat-stream {
+    max-height: min(60vh, 34rem);
+    min-height: 12rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: .25rem;
+    position: relative;
+    scrollbar-gutter: stable;
+
+    &:focus-within {
+        outline: none;
+    }
+}
+
+// Botão de atalho para o fim da conversa quando chegam mensagens novas.
+.chat-jump {
+    align-items: center;
+    background: var(--arcana-surface);
+    border: 1px solid rgba(var(--arcana-gold-rgb), .45);
+    border-radius: 999px;
+    bottom: .5rem;
+    box-shadow: 0 .35rem 1rem rgba(0, 0, 0, .18);
+    color: var(--arcana-ivory);
+    display: flex;
+    font-size: .78rem;
+    gap: .4rem;
+    margin-inline: auto;
+    padding: .35rem .8rem;
+    // Sticky mantém o atalho visível na base da área rolável.
+    position: sticky;
+    width: fit-content;
+    z-index: 2;
+
+    &:hover,
+    &:focus-visible {
+        border-color: var(--arcana-gold);
+        color: var(--arcana-gold);
+    }
+}
+
+.chat-jump__icon {
+    font-size: .95rem;
+    line-height: 1;
+}
+
 .chat-message {
     align-self: flex-start;
     background: var(--arcana-chat-bubble-bg);
@@ -751,6 +802,19 @@
     align-self: flex-end;
     background: var(--arcana-chat-bubble-mine-bg);
     border-color: rgba(var(--arcana-gold-rgb), .3);
+}
+
+// Linha do tempo do painel administrativo: sem lado "meu", todas as bolhas
+// ocupam a largura disponível e as ocorrências aparecem como alerta no fluxo.
+.admin-history-timeline {
+    .chat-message {
+        align-self: stretch;
+        max-width: 100%;
+    }
+
+    .alert {
+        margin-bottom: 0;
+    }
 }
 
 .chat-message__meta {
@@ -802,6 +866,34 @@
 .chat-card figcaption strong {
     color: var(--arcana-ivory);
     font-weight: 500;
+}
+
+// Cartas de um mesmo envio ficam em um bloco único, lado a lado: uma tiragem
+// inteira cabe na tela em vez de empurrar a conversa para baixo.
+.chat-cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+
+    .chat-card {
+        flex: 0 1 clamp(6rem, 30%, 9rem);
+    }
+
+    .chat-card img {
+        max-width: 100%;
+    }
+}
+
+// Contador do lote de cartas ("3 cartas"), ao lado do horário do envio.
+.chat-message__badge {
+    background: rgba(var(--arcana-gold-rgb), .14);
+    border: 1px solid rgba(var(--arcana-gold-rgb), .25);
+    border-radius: 999px;
+    color: var(--arcana-ivory-muted);
+    font-size: .68rem;
+    letter-spacing: .02em;
+    margin-left: auto;
+    padding: .05rem .5rem;
 }
 
 .chat-form textarea {
@@ -896,7 +988,8 @@
     position: relative;
 }
 
-// O radio continua acessível pelo teclado, mas quem recebe o clique é o rótulo.
+// A caixa de seleção continua acessível pelo teclado, mas quem recebe o clique
+// é o rótulo.
 .chat-card-picker__input {
     height: 1px;
     opacity: 0;
@@ -916,6 +1009,7 @@
     height: 100%;
     margin: 0;
     padding: .3rem;
+    position: relative;
     text-align: center;
     transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
 
@@ -953,6 +1047,160 @@
 .chat-card-picker__input:focus-visible + .chat-card-picker__label {
     outline: 2px solid rgba(var(--arcana-gold-rgb), .62);
     outline-offset: 2px;
+}
+
+// Barra com o filtro por baralho e o contador da seleção múltipla.
+.chat-card-picker__toolbar {
+    align-items: end;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem .85rem;
+    justify-content: space-between;
+    margin-bottom: .85rem;
+}
+
+.chat-card-picker__deck-select {
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+    margin: 0;
+    max-width: 16rem;
+    min-width: 10rem;
+}
+
+.chat-card-picker__deck-select-label {
+    color: var(--arcana-ivory-muted);
+    font-size: .72rem;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+}
+
+.chat-card-picker__counter {
+    color: var(--arcana-ivory-muted);
+    font-size: .75rem;
+    margin: 0 0 .35rem;
+}
+
+// Marca visual da carta selecionada, sobre a imagem.
+.chat-card-picker__check {
+    align-items: center;
+    background: var(--arcana-gold);
+    border-radius: 999px;
+    color: var(--bs-body-bg);
+    display: none;
+    font-size: .7rem;
+    font-weight: 700;
+    height: 1.15rem;
+    justify-content: center;
+    position: absolute;
+    right: .2rem;
+    top: .2rem;
+    width: 1.15rem;
+}
+
+.chat-card-picker__input:checked + .chat-card-picker__label .chat-card-picker__check {
+    display: flex;
+}
+
+// Botão de ampliação: fica fora do rótulo para não disparar a seleção.
+.chat-card-picker__zoom {
+    align-items: center;
+    background: rgba(0, 0, 0, .55);
+    border: 0;
+    border-radius: 999px;
+    color: #fff;
+    display: inline-flex;
+    height: 1.4rem;
+    justify-content: center;
+    left: .2rem;
+    padding: 0;
+    position: absolute;
+    top: .2rem;
+    width: 1.4rem;
+    z-index: 1;
+
+    &:hover,
+    &:focus-visible {
+        background: rgba(var(--arcana-gold-rgb), .85);
+        color: #1a1636;
+    }
+}
+
+// Resumo do que foi marcado, com remoção individual.
+.chat-card-picker__selection {
+    border-top: 1px dashed rgba(var(--arcana-gold-rgb), .22);
+    margin-top: .85rem;
+    padding-top: .65rem;
+}
+
+.chat-card-picker__selection-title {
+    color: var(--arcana-ivory-muted);
+    font-size: .72rem;
+    letter-spacing: .04em;
+    margin-bottom: .4rem;
+    text-transform: uppercase;
+}
+
+.chat-card-picker__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.chat-card-picker__chip {
+    align-items: center;
+    background: var(--arcana-chat-bubble-bg);
+    border: 1px solid rgba(var(--arcana-gold-rgb), .3);
+    border-radius: 999px;
+    display: inline-flex;
+    font-size: .75rem;
+    gap: .35rem;
+    padding: .15rem .2rem .15rem .3rem;
+}
+
+.chat-card-picker__chip-image {
+    border-radius: 999px;
+    height: 1.15rem;
+    object-fit: cover;
+    width: .85rem;
+}
+
+.chat-card-picker__chip-name {
+    color: var(--arcana-ivory);
+}
+
+.chat-card-picker__chip-remove {
+    background: transparent;
+    border: 0;
+    border-radius: 999px;
+    color: var(--arcana-ivory-muted);
+    font-size: .95rem;
+    line-height: 1;
+    padding: 0 .2rem;
+
+    &:hover,
+    &:focus-visible {
+        color: var(--arcana-gold);
+    }
+}
+
+// Pré-visualização ampliada da carta.
+.chat-card-preview__body {
+    text-align: center;
+}
+
+.chat-card-preview__image {
+    border: 1px solid rgba(var(--arcana-gold-rgb), .28);
+    border-radius: $arcana-radius-sm;
+    display: block;
+    height: auto;
+    margin: 0 auto .6rem;
+    max-height: 60vh;
+    max-width: 100%;
+    object-fit: contain;
 }
 
 @media (max-width: 575.98px) {
@@ -1048,6 +1296,16 @@
     margin-top: .5rem;
 }
 
+// Contagem regressiva do saldo restante. Zerada, o servidor para de cobrar e
+// interrompe a consulta; o vermelho só sinaliza esse limite.
+[data-consultation-countdown] {
+    font-variant-numeric: tabular-nums;
+
+    &.is-empty {
+        color: var(--arcana-danger);
+    }
+}
+
 // =====================================================================
 // Listas e detalhes do painel
 // =====================================================================
@@ -1097,6 +1355,241 @@
         text-align: right;
     }
 }
+
+// =====================================================================
+// Aviso "Voltar ao atendimento" fora do chat
+// =====================================================================
+.consultation-return {
+    align-items: center;
+    background: var(--arcana-surface);
+    border: 1px solid rgba(var(--arcana-gold-rgb), .45);
+    border-radius: $arcana-radius-sm;
+    bottom: 1rem;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, .28);
+    display: flex;
+    flex-wrap: wrap;
+    gap: .75rem 1rem;
+    left: 1rem;
+    max-width: min(28rem, calc(100vw - 2rem));
+    padding: .85rem 1rem;
+    position: fixed;
+    z-index: 1045;
+
+    &__pulse {
+        background: var(--arcana-gold);
+        border-radius: 50%;
+        box-shadow: 0 0 0 0 rgba(var(--arcana-gold-rgb), .55);
+        flex: 0 0 auto;
+        height: .55rem;
+        width: .55rem;
+        animation: consultation-return-pulse 2.4s ease-out infinite;
+    }
+
+    &__body {
+        flex: 1 1 12rem;
+        min-width: 0;
+    }
+
+    &__title {
+        color: var(--arcana-ivory);
+        font-size: .88rem;
+        font-weight: 600;
+        margin: 0;
+    }
+
+    &__text {
+        color: var(--arcana-ivory-muted);
+        font-size: .78rem;
+        margin: .15rem 0 0;
+    }
+
+    &__action {
+        flex: 0 0 auto;
+        margin-left: auto;
+    }
+}
+
+@keyframes consultation-return-pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(var(--arcana-gold-rgb), .55);
+    }
+
+    70% {
+        box-shadow: 0 0 0 .55rem rgba(var(--arcana-gold-rgb), 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(var(--arcana-gold-rgb), 0);
+    }
+}
+
+@media (max-width: 575.98px) {
+    .consultation-return {
+        left: .75rem;
+        right: .75rem;
+        max-width: none;
+
+        &__action {
+            margin-left: 0;
+            width: 100%;
+        }
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .consultation-return__pulse {
+        animation: none;
+    }
+}
+
+// =====================================================================
+// Cartões de identificação das partes do atendimento
+// =====================================================================
+.party-card {
+    background: rgba(var(--arcana-gold-rgb), .04);
+    border: 1px solid rgba(var(--arcana-gold-rgb), .18);
+    border-radius: $arcana-radius-sm;
+    padding: .85rem .9rem;
+
+    &__heading {
+        color: var(--arcana-ivory-muted);
+        font-size: .72rem;
+        font-weight: 600;
+        letter-spacing: .08em;
+        margin: 0 0 .65rem;
+        text-transform: uppercase;
+    }
+
+    &__identity {
+        align-items: center;
+        display: flex;
+        gap: .65rem;
+    }
+
+    &__avatar {
+        align-items: center;
+        background: rgba(var(--arcana-gold-rgb), .14);
+        border: 1px solid rgba(var(--arcana-gold-rgb), .3);
+        border-radius: 50%;
+        color: var(--arcana-gold);
+        display: inline-flex;
+        flex: 0 0 auto;
+        font-size: .8rem;
+        font-weight: 600;
+        height: 2.5rem;
+        justify-content: center;
+        letter-spacing: .03em;
+        overflow: hidden;
+        text-transform: uppercase;
+        width: 2.5rem;
+
+        &--photo {
+            object-fit: cover;
+        }
+    }
+
+    &__who {
+        min-width: 0;
+    }
+
+    &__name {
+        color: var(--arcana-ivory);
+        font-size: .95rem;
+        font-weight: 600;
+        line-height: 1.2;
+        margin: 0;
+        overflow-wrap: anywhere;
+    }
+
+    &__role {
+        color: var(--arcana-ivory-muted);
+        font-size: .78rem;
+        margin: .1rem 0 0;
+    }
+
+    &__facts {
+        display: grid;
+        gap: .1rem;
+        margin: .75rem 0 0;
+    }
+
+    &__fact {
+        align-items: baseline;
+        border-top: 1px solid rgba(var(--arcana-gold-rgb), .1);
+        display: flex;
+        flex-wrap: wrap;
+        gap: .15rem .75rem;
+        justify-content: space-between;
+        padding: .45rem 0;
+
+        &:first-child {
+            border-top: 0;
+            padding-top: .25rem;
+        }
+
+        dt {
+            color: var(--arcana-ivory-muted);
+            font-size: .78rem;
+            font-weight: 500;
+        }
+
+        dd {
+            color: var(--arcana-ivory);
+            font-size: .86rem;
+            margin: 0;
+            text-align: right;
+        }
+    }
+
+    &__muted {
+        color: var(--arcana-ivory-muted);
+        font-size: .76rem;
+    }
+
+    &__specialties {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .3rem;
+        margin: .65rem 0 0;
+    }
+
+    &__bio {
+        color: var(--arcana-ivory-muted);
+        font-size: .8rem;
+        margin: .6rem 0 0;
+    }
+
+    &__own {
+        border-top: 1px solid rgba(var(--arcana-gold-rgb), .12);
+        padding-top: .6rem;
+
+        &-summary {
+            color: var(--arcana-ivory-muted);
+            cursor: pointer;
+            font-size: .82rem;
+            list-style: none;
+
+            &::-webkit-details-marker {
+                display: none;
+            }
+
+            &::before {
+                color: var(--arcana-gold);
+                content: "▸ ";
+            }
+        }
+
+        &[open] &-summary::before {
+            content: "▾ ";
+        }
+
+        &-name {
+            color: var(--arcana-ivory);
+            font-size: .86rem;
+        }
+    }
+}
+
 
 .dashboard-table {
     color: var(--arcana-ivory-muted);
@@ -1323,6 +1816,43 @@
         color: var(--arcana-ivory-dim);
         font-weight: 400;
     }
+}
+
+.testimonial-summary {
+    align-items: center;
+    color: var(--arcana-ivory-dim);
+    display: inline-flex;
+    flex-wrap: wrap;
+    font-size: .85rem;
+    gap: .15rem;
+}
+
+.testimonial-list {
+    display: grid;
+    gap: .85rem;
+}
+
+.testimonial-list__item {
+    border: 1px solid rgba(var(--arcana-gold-rgb), .16);
+    border-radius: $arcana-radius;
+    padding: .85rem 1rem;
+}
+
+.testimonial-list__author {
+    color: var(--arcana-ivory);
+    font-weight: 600;
+}
+
+.testimonial-list__meta {
+    color: var(--arcana-ivory-muted);
+    font-size: .8rem;
+    letter-spacing: .04em;
+}
+
+.testimonial-list__text {
+    color: var(--arcana-ivory-dim);
+    font-size: .9rem;
+    overflow-wrap: anywhere;
 }
 
 .attendant-card__modalities {

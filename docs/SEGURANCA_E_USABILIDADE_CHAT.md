@@ -47,10 +47,13 @@ navegador descarta o token e tenta uma única vez sem ele.
 | `POST` | `/consultas/{id}/presenca` (`consultations.presence.heartbeat`) | Renova a presença e devolve estado, presença, créditos e limites. |
 | `POST` | `/consultas/{id}/presenca/sair` (`consultations.presence.leave`) | Marca a sessão como desconectada com `user_left`, sem encerrar a consulta. |
 
-O batimento exige que o usuário seja participante ativo da consulta e que ela
-esteja `active`. Consulta finalizada responde 422 com
-`errors.consultation`; o cliente redireciona para a tela de histórico/recibo. O
-batimento é limitado pelo throttle `consultation-presence`.
+O batimento exige que o usuário seja participante ativo da consulta (fora
+disso, 403). Consulta já finalizada não abre sessão: a resposta volta com
+`status`/`ended_reason` finais e é isso que faz a tela sair para o
+histórico/recibo. Se o prazo de inatividade venceu (`last_activity_at` anterior
+a `agora - (inatividade + tolerância de reconexão)`), o próprio batimento
+interrompe a consulta antes de responder. O batimento é limitado pelo throttle
+`consultation-presence`.
 
 A resposta do batimento inclui o estado da consulta, o token, a presença dos
 dois papéis, os limites efetivos, o saldo do cliente e a URL de compra de
@@ -102,7 +105,7 @@ também atualizam a atividade no servidor.
 | Tempo de inatividade | `settings.consultation_inactivity_timeout_minutes` (admin) | 5 min | 1 a 120 min |
 | Tolerância de reconexão | `settings.consultation_reconnection_tolerance_seconds` (admin) | 90 s | 0 a 600 s |
 | Batimento de presença | `CONSULTATION_ACTIVITY_PING_SECONDS` | 20 s | 5 a 60 s |
-| Aviso local de inatividade | `CONSULTATION_NAVIGATION_WARNING_SECONDS` | 20 s | 5 a 120 s |
+| Aviso local de inatividade | `CONSULTATION_NAVIGATION_WARNING_SECONDS` | 60 s | 5 a 120 s |
 
 Cálculos derivados:
 
@@ -129,10 +132,15 @@ Depois de `navigation_warning_seconds` sem interação, o workspace abre o modal
 
 - informa que a consulta continua ativa e sendo cobrada;
 - permite **Continuar no atendimento**, que registra atividade e fecha o aviso;
-- permite **Sair do chat**, que registra a saída sem encerrar a consulta.
+- permite **Sair do chat**, que encerra a consulta na hora
+  (`consultations.end`, com o último minuto iniciado cobrado e as duas partes
+  liberadas). Sem permissão de encerramento (visão de leitura), a mesma ação
+  apenas registra a saída.
 
 O modal é apenas uma proteção de usabilidade. A decisão final é do servidor, no
-comando de interrupção.
+comando `consultations:interrupt-disconnected` ou, se ele estiver atrasado ou
+parado, na própria requisição de presença/abertura da tela
+(`interruptIfInactive`).
 
 ### 5.2 Navegação para fora do chat
 
@@ -206,6 +214,13 @@ O ID na URL nunca é usado diretamente como destino de redirecionamento. Isso
 evita open redirect e impede que um cliente volte para o atendimento de outra
 pessoa.
 
+Além desse retorno por sessão, todo o painel exibe um aviso permanente enquanto
+existir consulta ativa do usuário — montado no servidor por
+`ActiveConsultationResolver`, reconciliado pelo canal privado e nunca mostrado
+dentro do workspace. O mecanismo e o botão da carteira (`data-credit-return`) são
+independentes; detalhes em
+[MELHORIAS_CHAT_ATENDIMENTO.md](MELHORIAS_CHAT_ATENDIMENTO.md) §5.
+
 ## 8. Administração dos limites
 
 - Rota: `GET/PATCH /admin/atendimento/seguranca`
@@ -236,9 +251,16 @@ O comando:
   `charged_cents`;
 - reporta no console quantas consultas mudaram de estado.
 
-Sem o scheduler em execução, a tela continua avisando e os batimentos continuam
-funcionando, mas a interrupção automática não acontece. Em produção, mantenha o
-`schedule:run` (ou `schedule:work`) ativo.
+Sem o scheduler em execução, a rotina periódica não roda. Por isso o
+encerramento também é aplicado na própria requisição: o batimento de presença e
+a abertura da tela dedicada chamam
+`ConsultationLifecycleManager::interruptIfInactive()`, que interrompe na hora a
+consulta cujo prazo venceu antes de responder. A tela continua avisando e os
+batimentos continuam funcionando, mas quem deixa o chat aberto e parado vê o
+atendimento acabar dentro do próprio ciclo de presença.
+
+No Compose o scheduler é o serviço `scheduler` (`php artisan schedule:work`); em
+produção mantenha o `schedule:run` (ou `schedule:work`) ativo.
 
 ## 10. Arquivos principais
 

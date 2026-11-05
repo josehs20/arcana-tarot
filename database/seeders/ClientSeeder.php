@@ -19,6 +19,7 @@ class ClientSeeder extends DemoSeeder
                 [
                     'name' => $client['name'],
                     'email_verified_at' => now(),
+                    'birth_date' => $client['birth_date'],
                     'password' => Hash::make(DemoData::password()),
                     'role' => UserRole::Client->value,
                     'is_active' => true,

@@ -34,15 +34,23 @@ class TarotCatalogImportCommandTest extends TestCase
 
         $marseille = TarotDeck::query()->where('slug', 'tarot-de-marseille')->sole();
         $lenormand = TarotDeck::query()->where('slug', 'lenormand')->sole();
+        $riderWaite = TarotDeck::query()->where('slug', 'rider-waite-smith')->sole();
+        $playing = TarotDeck::query()->where('slug', 'baralho-de-52-cartas')->sole();
+        $spanish = TarotDeck::query()->where('slug', 'baralho-espanhol')->sole();
 
-        $this->assertTrue($marseille->is_active);
-        $this->assertTrue($lenormand->is_active);
+        foreach ([$marseille, $lenormand, $riderWaite, $playing, $spanish] as $deck) {
+            $this->assertTrue($deck->is_active, 'Baralho inativo após a importação: '.$deck->slug);
+        }
+
         $this->assertSame(78, $marseille->cards()->count());
         $this->assertSame(36, $lenormand->cards()->count());
-        $this->assertSame(114, TarotCard::query()->count());
+        $this->assertSame(78, $riderWaite->cards()->count());
+        $this->assertSame(52, $playing->cards()->count());
+        $this->assertSame(40, $spanish->cards()->count());
+        $this->assertSame(284, TarotCard::query()->count());
 
-        $this->assertSame(114, TarotCard::query()->whereNotNull('image_path')->count());
-        $this->assertSame(114, TarotCard::query()->whereNotNull('image_checksum')->count());
+        $this->assertSame(284, TarotCard::query()->whereNotNull('image_path')->count());
+        $this->assertSame(284, TarotCard::query()->whereNotNull('image_checksum')->count());
 
         $firstCard = TarotCard::query()
             ->where('deck_id', $marseille->getKey())
@@ -66,9 +74,39 @@ class TarotCatalogImportCommandTest extends TestCase
         $this->artisan('arcana:import-tarot-catalog')->assertExitCode(0);
         $this->artisan('arcana:import-tarot-catalog')->assertExitCode(0);
 
-        $this->assertSame(2, TarotDeck::query()->count());
-        $this->assertSame(114, TarotCard::query()->count());
+        $this->assertSame(5, TarotDeck::query()->count());
+        $this->assertSame(284, TarotCard::query()->count());
         $this->assertSame(78, TarotDeck::query()->where('slug', 'tarot-de-marseille')->sole()->cards()->count());
+        $this->assertSame(78, TarotDeck::query()->where('slug', 'rider-waite-smith')->sole()->cards()->count());
+    }
+
+    public function test_new_decks_carry_readings_composed_from_the_suit(): void
+    {
+        $this->artisan('arcana:import-tarot-catalog')->assertExitCode(0);
+
+        $spanishAce = TarotCard::query()
+            ->whereHas('deck', fn ($query) => $query->where('slug', 'baralho-espanhol'))
+            ->where('slug', 'as-de-ouros')
+            ->sole();
+
+        $this->assertStringContainsString('campo material', (string) $spanishAce->meaning_upright);
+        $this->assertStringContainsString('campo material', (string) $spanishAce->meaning_reversed);
+        $this->assertSame('cards/baralho-espanhol/as-de-ouros.jpg', $spanishAce->image_path);
+
+        $playingQueen = TarotCard::query()
+            ->whereHas('deck', fn ($query) => $query->where('slug', 'baralho-de-52-cartas'))
+            ->where('slug', 'dama-de-copas')
+            ->sole();
+
+        $this->assertStringContainsString('campo afetivo', (string) $playingQueen->meaning_upright);
+
+        $magician = TarotCard::query()
+            ->whereHas('deck', fn ($query) => $query->where('slug', 'rider-waite-smith'))
+            ->where('slug', 'o-mago')
+            ->sole();
+
+        $this->assertTrue($magician->is_active);
+        $this->assertSame('cards/rider-waite/o-mago.jpg', $magician->image_path);
     }
 
     public function test_command_preserves_an_image_replaced_by_the_administration(): void

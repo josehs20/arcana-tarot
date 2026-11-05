@@ -103,10 +103,16 @@ saldo:
 - `ended_reason` passa a `out_of_credits`;
 - novas execuções não cobram a consulta finalizada.
 
-O aceite também exige o saldo mínimo configurado
-(`minimum_balance_minutes × price_per_minute_cents` do atendente). Esse valor
-apenas autoriza o início; a sessão continua enquanto cada novo minuto puder ser
-pago.
+O saldo mínimo configurado (`minimum_balance_minutes × price_per_minute_cents`
+do atendente) é exigido em dois momentos:
+
+- **na solicitação**: sem crédito suficiente o pedido nem é criado (erro
+  `consultation` no formulário), então ele nunca aparece no painel do atendente;
+- **no aceite**: revalidado, porque o saldo pode ter sido gasto depois do pedido
+  (outra consulta encerrada, recarga pendente, ajuste administrativo).
+
+Esse valor apenas autoriza o início; a sessão continua enquanto cada novo minuto
+puder ser pago.
 
 ## 6. Falha, desconexão e reconexão
 

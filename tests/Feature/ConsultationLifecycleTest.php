@@ -6,6 +6,7 @@ use App\Enums\AttendantAvailability;
 use App\Enums\ConsultationEndReason;
 use App\Enums\ConsultationStatus;
 use App\Enums\MessageType;
+use App\Events\ConsultationRequested;
 use App\Models\AttendantProfile;
 use App\Models\AuditLog;
 use App\Models\Consultation;
@@ -17,6 +18,7 @@ use Carbon\Carbon;
 use Database\Factories\AttendantProfileFactory;
 use DomainException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Event;
 use Tests\TestCase;
 
 class ConsultationLifecycleTest extends TestCase
@@ -207,12 +209,18 @@ class ConsultationLifecycleTest extends TestCase
         );
     }
 
-    public function test_attendant_cannot_accept_without_minimum_balance(): void
+    public function test_attendant_cannot_accept_after_the_client_spends_the_balance(): void
     {
-        $client = $this->client(100);
+        $client = $this->client();
         [$attendant] = $this->onlineAttendant();
 
         $consultation = $this->requestConsultation($client, $attendant);
+
+        /*
+         * O saldo pode ser gasto entre a solicitação e o aceite — por isso o
+         * aceite revalida o mínimo mesmo depois da checagem feita no pedido.
+         */
+        Wallet::query()->where('user_id', $client->id)->update(['balance_cents' => 100]);
 
         $this->actingAs($attendant)
             ->from(route('attendant.dashboard'))
@@ -225,6 +233,40 @@ class ConsultationLifecycleTest extends TestCase
         $this->assertSame(ConsultationStatus::Requested, $consultation->status);
         $this->assertNull($consultation->started_at);
         $this->assertNull($consultation->price_per_minute_cents);
+    }
+
+    public function test_request_is_blocked_without_the_minimum_balance(): void
+    {
+        // Preço do minuto 200 + 1 minuto mínimo = R$ 2,00 exigidos.
+        $client = $this->client(150);
+        [$attendant, $profile] = $this->onlineAttendant();
+
+        Event::fake([ConsultationRequested::class]);
+
+        $this->actingAs($client)
+            ->from(route('attendants.show', $profile))
+            ->post(route('client.consultations.store'), ['attendant_id' => $attendant->id])
+            ->assertRedirect(route('attendants.show', $profile))
+            ->assertSessionHasErrors('consultation');
+
+        $this->assertStringContainsString(
+            'Saldo insuficiente',
+            (string) session('errors')->first('consultation'),
+        );
+
+        // Nada é criado nem anunciado: a solicitação nunca chega ao atendente.
+        $this->assertSame(0, Consultation::query()->count());
+        Event::assertNotDispatched(ConsultationRequested::class);
+    }
+
+    public function test_request_is_allowed_with_exactly_the_minimum_balance(): void
+    {
+        $client = $this->client(200);
+        [$attendant] = $this->onlineAttendant();
+
+        $consultation = $this->requestConsultation($client, $attendant);
+
+        $this->assertSame(ConsultationStatus::Requested, $consultation->status);
     }
 
     public function test_attendant_must_be_online_to_accept(): void
@@ -272,6 +314,37 @@ class ConsultationLifecycleTest extends TestCase
                 ->where('subject_id', $consultation->id)
                 ->count(),
         );
+    }
+
+    public function test_rejection_ends_the_chat_for_the_client_and_frees_a_new_request(): void
+    {
+        $client = $this->client();
+        [$attendant] = $this->onlineAttendant();
+        $consultation = $this->requestConsultation($client, $attendant);
+
+        $this->actingAs($attendant)
+            ->patch(route('attendant.consultations.reject', $consultation))
+            ->assertRedirect(route('consultations.show', $consultation))
+            ->assertSessionHas('success');
+
+        /*
+         * A recusa encerra a solicitação: o cliente vê o estado final, perde o
+         * botão de cancelar e não fica esperando um aceite que não vem.
+         */
+        $this->actingAs($client)
+            ->get(route('consultations.show', $consultation))
+            ->assertOk()
+            ->assertSee('Recusada')
+            ->assertSee('o chat foi encerrado')
+            ->assertDontSee('Cancelar solicitação')
+            ->assertDontSee('Aguardando aceite')
+            // Gancho que faz o modo polling recarregar quando a consulta fecha.
+            ->assertSee('data-consultation-watch="'.$consultation->id.'"', false);
+
+        $retry = $this->requestConsultation($client, $attendant);
+
+        $this->assertNotSame($consultation->id, $retry->id);
+        $this->assertSame(ConsultationStatus::Requested, $retry->status);
     }
 
     public function test_only_participants_and_admins_can_view_a_consultation(): void

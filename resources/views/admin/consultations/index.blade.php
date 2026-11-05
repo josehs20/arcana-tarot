@@ -11,7 +11,7 @@
     <x-ui.card class="mb-4">
         <x-ui.card-body>
             <form method="GET" action="{{ route('admin.consultations.index') }}" class="row g-3 align-items-end">
-                <div class="col-md-5">
+                <div class="col-md-4">
                     <label class="form-label" for="q">Buscar</label>
                     <input
                         class="form-control"
@@ -48,7 +48,28 @@
                     </select>
                 </div>
 
-                <div class="col-md-3 d-flex gap-2">
+                <div class="col-md-2">
+                    <label class="form-label" for="incidents">Ocorrências</label>
+                    <select class="form-select" id="incidents" name="incidents">
+                        <option value="">Todas</option>
+                        <option value="with" @selected(($filters['incidents'] ?? '') === 'with')>Com ocorrência</option>
+                        <option value="without" @selected(($filters['incidents'] ?? '') === 'without')>Sem ocorrência</option>
+                    </select>
+                </div>
+
+                <div class="col-md-2">
+                    <label class="form-label" for="incident_type">Tipo de dado</label>
+                    <select class="form-select" id="incident_type" name="incident_type">
+                        <option value="">Todos</option>
+                        @foreach ($incidentCategories as $category)
+                            <option value="{{ $category->value }}" @selected(($filters['incident_type'] ?? '') === $category->value)>
+                                {{ $category->label() }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <div class="col-12 d-flex gap-2">
                     <x-ui.button type="submit" variant="primary" size="sm">Filtrar</x-ui.button>
                     <a class="btn btn-ghost btn-sm" href="{{ route('admin.consultations.index') }}">Limpar</a>
                 </div>
@@ -78,8 +99,10 @@
                             <th scope="col">Duração</th>
                             <th scope="col">Total</th>
                             <th scope="col">Comissão</th>
+                            <th scope="col">Ocorrências</th>
                             <th scope="col">Solicitada em</th>
                             <th scope="col">Encerrada em</th>
+                            <th scope="col" class="text-end">Ações</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -109,8 +132,25 @@
                                     {{ \App\Support\Money::format($consultation->commissionNetCents()) }}
                                     <div class="form-text">{{ $consultation->commission_rate_bps !== null ? \App\Support\Rate::formatBps($consultation->commission_rate_bps) : '—' }}</div>
                                 </td>
+                                <td class="text-nowrap">
+                                    @if (($consultation->privacy_incidents_count ?? 0) > 0)
+                                        <x-ui.badge :variant="($consultation->open_privacy_incidents_count ?? 0) > 0 ? 'warning' : 'secondary'">
+                                            {{ $consultation->privacy_incidents_count }}
+                                            @if (($consultation->open_privacy_incidents_count ?? 0) > 0)
+                                                · {{ $consultation->open_privacy_incidents_count }} em aberto
+                                            @endif
+                                        </x-ui.badge>
+                                    @else
+                                        <span class="text-ivory-muted">—</span>
+                                    @endif
+                                </td>
                                 <td class="text-nowrap">{{ $consultation->created_at?->format('d/m/Y H:i') ?? '—' }}</td>
                                 <td class="text-nowrap">{{ $consultation->ended_at?->format('d/m/Y H:i') ?? '—' }}</td>
+                                <td class="text-end">
+                                    <a class="btn btn-ghost btn-sm" href="{{ route('admin.consultations.show', $consultation) }}">
+                                        Visualizar
+                                    </a>
+                                </td>
                             </tr>
                         @endforeach
                     </tbody>

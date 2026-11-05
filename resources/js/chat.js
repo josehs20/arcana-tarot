@@ -1,3 +1,4 @@
+import { Modal } from 'bootstrap';
 import { createPoller, readMilliseconds } from './polling';
 
 /*
@@ -22,6 +23,7 @@ const chatState = {
     sending: false,
     readTimer: null,
     poller: null,
+    pendingMessages: 0,
     sendOnEnter: true,
     soundEnabled: true,
     soundArmed: false,
@@ -268,6 +270,85 @@ function hasMessage(chat, messageId) {
     return chat.querySelector(`[data-message-id="${Number(messageId)}"]`) !== null;
 }
 
+/*
+ * Rolagem da conversa.
+ *
+ * A linha do tempo fica dentro de `[data-chat-stream]`, que tem altura limitada
+ * e rolagem própria. Acompanhar o fim só faz sentido quando o participante já
+ * está lá: quem subiu para reler o histórico não deve ser jogado para baixo a
+ * cada mensagem nova. Nesse caso o contador `data-chat-jump` sinaliza o que
+ * chegou e devolve a rolagem ao fim em um clique.
+ */
+function chatStream(chat) {
+    return chat?.querySelector('[data-chat-stream]') ?? null;
+}
+
+function isNearStreamBottom(stream) {
+    if (!stream) {
+        return true;
+    }
+
+    return stream.scrollHeight - stream.scrollTop - stream.clientHeight <= 140;
+}
+
+function scrollStreamToBottom(stream, behavior = 'smooth') {
+    if (!stream) {
+        return;
+    }
+
+    stream.scrollTo({ top: stream.scrollHeight, behavior });
+}
+
+function setJumpVisible(chat, visible) {
+    chat?.querySelector('[data-chat-jump]')?.classList.toggle('d-none', !visible);
+
+    if (!visible) {
+        chatState.pendingMessages = 0;
+    }
+
+    const label = chat?.querySelector('[data-chat-jump-label]');
+
+    if (!label) {
+        return;
+    }
+
+    label.textContent =
+        chatState.pendingMessages > 1
+            ? `${chatState.pendingMessages} novas mensagens`
+            : 'Nova mensagem';
+}
+
+function registerPendingMessage(chat) {
+    chatState.pendingMessages += 1;
+    setJumpVisible(chat, true);
+}
+
+function bindChatStream(chat) {
+    const stream = chatStream(chat);
+    const jump = chat?.querySelector('[data-chat-jump]');
+
+    if (!stream || stream.dataset.chatStreamBound === '1') {
+        return;
+    }
+
+    stream.dataset.chatStreamBound = '1';
+
+    stream.addEventListener('scroll', () => {
+        if (isNearStreamBottom(stream)) {
+            setJumpVisible(chat, false);
+        }
+    });
+
+    jump?.addEventListener('click', () => {
+        scrollStreamToBottom(stream);
+        setJumpVisible(chat, false);
+        markChatRead(chat);
+    });
+
+    // Abrir a conversa mostra sempre a mensagem mais recente.
+    scrollStreamToBottom(stream, 'auto');
+}
+
 function createTextElement(tag, className, text) {
     const element = document.createElement(tag);
 
@@ -280,13 +361,81 @@ function createTextElement(tag, className, text) {
     return element;
 }
 
+function createCardFigure(message) {
+    const figure = document.createElement('figure');
+    figure.className = 'chat-card mb-0';
+    figure.dataset.messageId = String(message.id);
+
+    if (message.image_url) {
+        const link = document.createElement('a');
+        link.href = message.image_url;
+        link.target = '_blank';
+        link.rel = 'noopener';
+
+        const image = document.createElement('img');
+        image.src = message.image_url;
+        image.alt = `Carta ${message.card_name ?? ''}`.trim();
+        image.loading = 'lazy';
+
+        link.append(image);
+        figure.append(link);
+    }
+
+    const caption = document.createElement('figcaption');
+    caption.append(
+        createTextElement('strong', '', message.card_name ?? 'Carta'),
+        createTextElement('span', '', message.deck_name ?? ''),
+    );
+
+    figure.append(caption);
+
+    return figure;
+}
+
+/*
+ * Cartas enviadas juntas compartilham `batch_id` e vivem em um único bloco
+ * (`[data-chat-cards]`), lado a lado. O contador "N cartas" só aparece quando o
+ * bloco tem mais de uma carta, igual ao histórico renderizado no servidor.
+ */
+function cardBatchGroup(timeline, message) {
+    if (!message?.batch_id) {
+        return null;
+    }
+
+    return timeline.querySelector(`[data-message-batch="${message.batch_id}"]`);
+}
+
+function updateCardsCount(group) {
+    const meta = group?.querySelector('.chat-message__meta');
+    const total = group?.querySelectorAll('[data-message-id]').length ?? 0;
+
+    if (!meta || total < 2) {
+        return;
+    }
+
+    let label = meta.querySelector('[data-chat-cards-count]');
+
+    if (!label) {
+        label = createTextElement('span', 'chat-message__badge', '');
+        label.dataset.chatCardsCount = '';
+        meta.insertBefore(label, meta.querySelector('time'));
+    }
+
+    label.textContent = `${total} cartas`;
+}
+
 function createMessageElement(message, currentUserId) {
     const mine = Number(message.sender_id) === Number(currentUserId);
     const isCard = message.type === 'tarot_card';
     const item = document.createElement('li');
 
     item.className = `chat-message${mine ? ' chat-message--mine' : ''}`;
-    item.dataset.messageId = String(message.id);
+
+    if (isCard) {
+        item.dataset.messageBatch = message.batch_id ?? '';
+    } else {
+        item.dataset.messageId = String(message.id);
+    }
 
     const meta = document.createElement('div');
     meta.className = 'chat-message__meta';
@@ -305,32 +454,11 @@ function createMessageElement(message, currentUserId) {
     item.append(meta);
 
     if (isCard) {
-        const figure = document.createElement('figure');
-        figure.className = 'chat-card mb-0';
-
-        if (message.image_url) {
-            const link = document.createElement('a');
-            link.href = message.image_url;
-            link.target = '_blank';
-            link.rel = 'noopener';
-
-            const image = document.createElement('img');
-            image.src = message.image_url;
-            image.alt = `Carta ${message.card_name ?? ''}`.trim();
-            image.loading = 'lazy';
-
-            link.append(image);
-            figure.append(link);
-        }
-
-        const caption = document.createElement('figcaption');
-        caption.append(
-            createTextElement('strong', '', message.card_name ?? 'Carta'),
-            createTextElement('span', '', message.deck_name ?? ''),
-        );
-
-        figure.append(caption);
-        item.append(figure);
+        const cards = document.createElement('div');
+        cards.className = 'chat-cards';
+        cards.dataset.chatCards = '';
+        cards.append(createCardFigure(message));
+        item.append(cards);
     } else {
         item.append(createTextElement('p', 'chat-message__body', message.body ?? ''));
     }
@@ -349,27 +477,51 @@ function insertMessage(chat, message) {
         return false;
     }
 
-    const nearBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 200;
-    const element = createMessageElement(message, chatState.userId);
-    const next = Array.from(timeline.querySelectorAll('[data-message-id]')).find(
-        (existing) => Number(existing.dataset.messageId) > Number(message.id),
-    );
+    const stream = chatStream(chat);
+    const stayAtBottom = isNearStreamBottom(stream);
+    const mine = Number(message.sender_id) === Number(chatState.userId);
+    const batchGroup = cardBatchGroup(timeline, message);
 
-    /*
-     * A ordem cronológica é garantida mesmo quando o eco do broadcast chega
-     * antes da resposta do envio (ou depois, em uma reconexão com backfill).
-     */
-    if (next) {
-        next.before(element);
+    if (batchGroup) {
+        /*
+         * As cartas do mesmo envio chegam em sequência (resposta do formulário
+         * ou um evento por carta). Cada uma entra no bloco já aberto: a conversa
+         * não ganha uma mensagem nova por carta e a ordem do envio é mantida.
+         */
+        const cards = batchGroup.querySelector('[data-chat-cards]');
+
+        if (!cards || cards.querySelector(`[data-message-id="${Number(message.id)}"]`)) {
+            return false;
+        }
+
+        cards.append(createCardFigure(message));
+        updateCardsCount(batchGroup);
     } else {
-        timeline.append(element);
+        const element = createMessageElement(message, chatState.userId);
+
+        /*
+         * A ordem cronológica é garantida mesmo quando o eco do broadcast chega
+         * antes da resposta do envio (ou depois, em uma reconexão com backfill).
+         */
+        const next = Array.from(timeline.querySelectorAll('[data-message-id]')).find(
+            (existing) => Number(existing.dataset.messageId) > Number(message.id),
+        );
+
+        if (next) {
+            next.before(element);
+        } else {
+            timeline.append(element);
+        }
     }
 
     timeline.classList.remove('d-none');
     chat.querySelector('[data-chat-empty]')?.classList.add('d-none');
 
-    if (nearBottom) {
-        element.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    if (stayAtBottom || mine) {
+        scrollStreamToBottom(stream);
+        setJumpVisible(chat, false);
+    } else {
+        registerPendingMessage(chat);
     }
 
     return true;
@@ -452,6 +604,8 @@ async function refreshState(chat) {
 
         if (refreshed) {
             bindChatForms(refreshed);
+            bindCardPicker(refreshed);
+            bindChatStream(refreshed);
             bindChatPreferences(refreshed);
             applyChatPreferences(refreshed);
             setConnection(refreshed, chatState.connection);
@@ -622,6 +776,248 @@ function setFormBusy(form, busy) {
 }
 
 /*
+ * Aviso antes do envio.
+ *
+ * A checagem definitiva é sempre do servidor — a rota devolve 422 e registra a
+ * ocorrência —, mas repetir as regras principais no navegador evita a ida e
+ * volta e deixa claro o motivo do bloqueio antes da mensagem sair.
+ */
+const SENSITIVE_PATTERNS = [
+    { label: 'CPF', pattern: /\b\d{3}\s*\.\s*\d{3}\s*\.\s*\d{3}\s*-\s*\d{2}\b/ },
+    { label: 'CNPJ', pattern: /\b\d{2}\s*\.\s*\d{3}\s*\.\s*\d{3}\s*\/\s*\d{4}\s*-\s*\d{2}\b/ },
+    { label: 'e-mail', pattern: /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i },
+    { label: 'e-mail disfarçado', pattern: /\[\s*at\s*\]|\(\s*at\s*\)|\barroba\b/i },
+    { label: 'link externo', pattern: /https?:\/\/|www\./i },
+    {
+        label: 'contato externo',
+        pattern: /\bwa\.me|api\.whatsapp\.com|chat\.whatsapp\.com|t\.me|telegram\.me|instagram\.com|facebook\.com|fb\.me|tiktok\.com|bit\.ly|linktr\.ee\b/i,
+    },
+    { label: 'telefone', pattern: /\(\d{2}\)\s*\d{4,5}[\s-]?\d{4}\b/ },
+    { label: 'telefone', pattern: /\b\d{2}\s+9?\d{4}[\s-]\d{4}\b/ },
+    { label: 'telefone', pattern: /\+\d{2}\s*\d{2}\s*\d{4,5}\s*\d{4}\b/ },
+    { label: 'sequência de dígitos', pattern: /\b\d{10,11}\b/ },
+    { label: 'contato disfarçado', pattern: /\b(?:(?:zero|um|dois|três|tres|quatro|cinco|seis|sete|oito|nove)\b[\s,.;:-]*){8,}/i },
+];
+
+function sensitiveLabels(text) {
+    if (!text) {
+        return [];
+    }
+
+    const labels = [];
+
+    SENSITIVE_PATTERNS.forEach(({ label, pattern }) => {
+        if (!labels.includes(label) && pattern.test(text)) {
+            labels.push(label);
+        }
+    });
+
+    return labels;
+}
+
+/*
+ * Devolve `true` quando o participante decidiu enviar mesmo após o aviso.
+ * Cancelar mantém o texto no campo para que ele possa reescrever.
+ */
+function confirmSensitiveSend(form, text) {
+    const labels = sensitiveLabels(text);
+
+    if (labels.length === 0) {
+        return true;
+    }
+
+    const confirmed = window.confirm(
+        `Sua mensagem parece conter ${labels.join(', ')}.\n\n` +
+            'Por segurança, o chat não permite compartilhar dados pessoais nem contatos fora da plataforma: ' +
+            'o servidor vai bloquear o envio.\n\nDeseja tentar enviar mesmo assim?',
+    );
+
+    if (!confirmed) {
+        setFormError(
+            form,
+            `Remova ${labels.join(', ')} para continuar. Dados pessoais e contatos externos são bloqueados pelo servidor.`,
+        );
+    }
+
+    return confirmed;
+}
+
+/*
+ * Envio de cartas.
+ *
+ * O seletor aceita várias cartas de qualquer baralho: o filtro por baralho é
+ * apenas visual, o limite publicado em `data-max-cards` é conferido aqui e
+ * novamente no servidor (`ConsultationMessageManager::MAX_CARDS_PER_SEND`).
+ */
+function selectedCardInputs(form) {
+    return Array.from(form?.querySelectorAll('[data-chat-card-input]') ?? []).filter((input) => input.checked);
+}
+
+function cardOption(input) {
+    return input?.closest('[data-chat-card-option]') ?? null;
+}
+
+function updateCardSelection(form) {
+    if (!form) {
+        return;
+    }
+
+    const max = Number(form.dataset.maxCards ?? 1) || 1;
+    const selected = selectedCardInputs(form);
+    const counter = form.querySelector('[data-chat-card-counter]');
+
+    if (counter) {
+        counter.textContent = `${selected.length} de ${max} cartas selecionadas`;
+    }
+
+    const box = form.querySelector('[data-chat-selection]');
+    const list = form.querySelector('[data-chat-selection-list]');
+
+    if (!box || !list) {
+        return;
+    }
+
+    list.replaceChildren();
+
+    selected.forEach((input) => {
+        const option = cardOption(input);
+        const chip = document.createElement('li');
+        chip.className = 'chat-card-picker__chip';
+
+        if (option?.dataset.cardImage) {
+            const image = document.createElement('img');
+            image.className = 'chat-card-picker__chip-image';
+            image.src = option.dataset.cardImage;
+            image.alt = '';
+
+            chip.append(image);
+        }
+
+        chip.append(createTextElement('span', 'chat-card-picker__chip-name', option?.dataset.cardName ?? 'Carta'));
+
+        const remove = createTextElement('button', 'chat-card-picker__chip-remove', '×');
+        remove.type = 'button';
+        remove.setAttribute('aria-label', `Remover ${option?.dataset.cardName ?? 'carta'} da seleção`);
+        remove.addEventListener('click', () => {
+            input.checked = false;
+            updateCardSelection(form);
+        });
+
+        chip.append(remove);
+        list.append(chip);
+    });
+
+    box.classList.toggle('d-none', selected.length === 0);
+}
+
+function resetCardPicker(form) {
+    form?.querySelectorAll('[data-chat-card-input]').forEach((input) => {
+        input.checked = false;
+    });
+
+    updateCardSelection(form);
+}
+
+function bindCardPreview(form) {
+    const modalElement = document.querySelector('[data-chat-card-preview-modal]');
+
+    if (!modalElement || modalElement.dataset.chatPreviewBound === '1') {
+        return;
+    }
+
+    modalElement.dataset.chatPreviewBound = '1';
+
+    const modal = Modal.getOrCreateInstance(modalElement);
+    const image = modalElement.querySelector('[data-chat-card-preview-image]');
+    const title = modalElement.querySelector('[data-chat-card-preview-title]');
+    const deck = modalElement.querySelector('[data-chat-card-preview-deck]');
+    const select = modalElement.querySelector('[data-chat-card-preview-select]');
+    let target = null;
+
+    form?.querySelectorAll('[data-chat-card-preview]').forEach((button) => {
+        button.addEventListener('click', () => {
+            target = cardOption(button.querySelector('[data-chat-card-input]')) ?? button.closest('[data-chat-card-option]');
+
+            if (!target) {
+                return;
+            }
+
+            const name = target.dataset.cardName ?? 'Carta';
+
+            if (image) {
+                image.src = target.dataset.cardImage ?? '';
+                image.alt = `Carta ${name}`;
+            }
+
+            if (title) {
+                title.textContent = name;
+            }
+
+            if (deck) {
+                deck.textContent = target.dataset.cardDeck ?? '';
+            }
+
+            if (select) {
+                select.textContent = selectedCardInputs(form).some(
+                    (input) => cardOption(input) === target,
+                )
+                    ? 'Remover da seleção'
+                    : 'Selecionar carta';
+            }
+
+            modal.show();
+        });
+    });
+
+    select?.addEventListener('click', () => {
+        const input = target?.querySelector('[data-chat-card-input]');
+
+        if (input) {
+            input.checked = !input.checked;
+            updateCardSelection(form);
+        }
+
+        modal.hide();
+    });
+}
+
+function bindCardPicker(root = document) {
+    root.querySelectorAll('[data-chat-card-form]').forEach((form) => {
+        updateCardSelection(form);
+        bindCardPreview(form);
+
+        if (form.dataset.chatCardBound === '1') {
+            return;
+        }
+
+        form.dataset.chatCardBound = '1';
+
+        const max = Number(form.dataset.maxCards ?? 1) || 1;
+
+        form.querySelectorAll('[data-chat-card-input]').forEach((input) => {
+            input.addEventListener('change', () => {
+                if (selectedCardInputs(form).length > max) {
+                    input.checked = false;
+                    setFormError(form, `Você pode enviar no máximo ${max} cartas por vez. Desmarque uma antes de escolher outra.`);
+                } else {
+                    setFormError(form, '');
+                }
+
+                updateCardSelection(form);
+            });
+        });
+
+        form.querySelector('[data-chat-deck-filter]')?.addEventListener('change', (event) => {
+            const deckId = event.target.value;
+
+            form.querySelectorAll('[data-chat-deck]').forEach((group) => {
+                group.classList.toggle('d-none', deckId !== '' && group.dataset.chatDeck !== deckId);
+            });
+        });
+    });
+}
+
+/*
  * Envio sem recarregar a página.
  *
  * A rota devolve a mensagem já persistida (JSON) quando o cabeçalho `Accept` é
@@ -637,7 +1033,9 @@ async function submitChatForm(form) {
     }
 
     const body = form.querySelector('textarea[name="body"]');
-    const card = form.querySelector('input[name="tarot_card_id"]:checked');
+    const isCardForm = form.dataset.chatForm === 'card';
+    const maxCards = Number(form.dataset.maxCards ?? 1) || 1;
+    const cards = isCardForm ? selectedCardInputs(form) : [];
 
     if (body && !body.value.trim()) {
         setFormError(form, 'Escreva uma mensagem antes de enviar.');
@@ -646,9 +1044,22 @@ async function submitChatForm(form) {
         return;
     }
 
-    if (form.dataset.chatForm === 'card' && !card) {
-        setFormError(form, 'Escolha uma carta antes de enviar.');
-        form.querySelector('input[name="tarot_card_id"]')?.focus();
+    if (isCardForm && cards.length === 0) {
+        setFormError(form, 'Escolha ao menos uma carta antes de enviar.');
+        form.querySelector('[data-chat-card-input]')?.focus();
+
+        return;
+    }
+
+    if (isCardForm && cards.length > maxCards) {
+        setFormError(form, `Envie no máximo ${maxCards} cartas por vez.`);
+
+        return;
+    }
+
+    if (body && !confirmSensitiveSend(form, body.value)) {
+        body.classList.add('is-invalid');
+        body.focus();
 
         return;
     }
@@ -683,10 +1094,21 @@ async function submitChatForm(form) {
 
         if (response.status === 422) {
             const payload = await response.json().catch(() => ({}));
-            const firstError = Object.values(payload.errors ?? {}).flat()[0];
+            const errors = payload.errors ?? {};
+            const firstError = Object.values(errors).flat()[0];
 
             setFormError(form, firstError ?? payload.message ?? 'Não foi possível enviar a mensagem.');
-            form.querySelector('.is-invalid')?.focus();
+
+            /*
+             * Bloqueio por dado pessoal: o destaque fica no campo da mensagem
+             * para que o texto continue visível e editável.
+             */
+            if (errors.body && body) {
+                body.classList.add('is-invalid');
+                body.focus();
+            } else {
+                form.querySelector('.is-invalid')?.focus();
+            }
 
             return;
         }
@@ -697,16 +1119,25 @@ async function submitChatForm(form) {
 
         const payload = await response.json();
         const current = currentChat();
+        const sent = Array.isArray(payload.messages)
+            ? payload.messages
+            : payload.message
+              ? [payload.message]
+              : [];
 
-        if (payload.message) {
-            insertMessage(current, payload.message);
-        }
+        sent.forEach((message) => insertMessage(current, message));
 
+        /*
+         * `form.reset()` não serve para os cartões: as caixas marcadas no HTML
+         * voltam ao estado renderizado pelo servidor. A seleção é limpa à parte
+         * para que o próximo envio comece vazio.
+         */
         form.reset();
+        resetCardPicker(form);
         setNotice(current, payload.notice ?? 'Mensagem enviada.');
         window.setTimeout(() => setNotice(currentChat(), ''), 4000);
 
-        (form.querySelector('textarea[name="body"]') ?? form.querySelector('input[name="tarot_card_id"]'))?.focus();
+        (form.querySelector('textarea[name="body"]') ?? form.querySelector('[data-chat-card-input]'))?.focus();
     } catch {
         setFormError(form, 'Não foi possível enviar agora. Verifique a conexão e tente novamente.');
     } finally {
@@ -799,6 +1230,8 @@ function initializeRealtime() {
     chatState.soundEnabled = chat.dataset.soundEnabled !== '0';
 
     bindChatForms(chat);
+    bindCardPicker(chat);
+    bindChatStream(chat);
     bindChatPreferences(chat);
     applyChatPreferences(chat);
 

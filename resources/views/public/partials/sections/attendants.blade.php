@@ -34,6 +34,12 @@
 
         @include('public.partials.sections.section-media', ['class' => 'mb-4'])
 
+        {{-- Ver comentário em `public/attendants/index.blade.php`: o cartão
+             envia a solicitação direto e o erro precisa aparecer aqui. --}}
+        @if ($errors->any())
+            @include('layouts.partials.flash-messages', ['container' => 'mb-4'])
+        @endif
+
         @if ($attendants->isEmpty())
             <x-ui.empty-state
                 icon="☾"

@@ -9,6 +9,14 @@ use Illuminate\Support\Str;
 
 class RegisterRequest extends FormRequest
 {
+    /**
+     * Idade mínima exigida no cadastro (termos de uso) e limite de sanidade
+     * para barrar datas digitadas por engano.
+     */
+    private const MINIMUM_AGE = 18;
+
+    private const MAXIMUM_AGE = 120;
+
     public function authorize(): bool
     {
         return true;
@@ -48,6 +56,12 @@ class RegisterRequest extends FormRequest
                     }
                 },
             ],
+            'birth_date' => [
+                'required',
+                'date_format:Y-m-d',
+                'before:'.now()->subYears(self::MINIMUM_AGE)->toDateString(),
+                'after:'.now()->subYears(self::MAXIMUM_AGE)->toDateString(),
+            ],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ];
     }
@@ -65,6 +79,10 @@ class RegisterRequest extends FormRequest
             'email.unique' => 'Já existe uma conta com este e-mail.',
             'phone.required' => 'Informe um celular ou telefone com DDD.',
             'phone.digits_between' => 'Informe um telefone com DDD (10 ou 11 dígitos).',
+            'birth_date.required' => 'Informe sua data de nascimento.',
+            'birth_date.date_format' => 'Informe a data de nascimento no formato DD/MM/AAAA.',
+            'birth_date.before' => 'É preciso ter 18 anos ou mais para se cadastrar.',
+            'birth_date.after' => 'Confira a data de nascimento informada.',
             'password.required' => 'Informe uma senha.',
             'password.min' => 'A senha deve ter pelo menos 8 caracteres.',
             'password.confirmed' => 'A confirmação da senha não confere.',

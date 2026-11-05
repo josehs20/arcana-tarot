@@ -252,6 +252,37 @@ class SiteContentCmsTest extends TestCase
             ->assertOk();
     }
 
+    public function test_home_renders_the_hero_body_alongside_the_subtitle(): void
+    {
+        Storage::fake('public');
+        Storage::disk('public')->put('site/hero.png', 'conteudo-fake');
+
+        SiteSection::query()->create([
+            'key' => 'hero',
+            'title' => 'Título do topo',
+            'subtitle' => 'Subtítulo do topo.',
+            'body' => "Primeira linha do topo.\nSegunda linha do topo.",
+            'image_path' => 'site/hero.png',
+            'image_alt' => 'Carta do topo',
+            'is_published' => true,
+            'sort_order' => 10,
+        ]);
+
+        $this->app->forgetInstance(SiteContent::class);
+
+        // O texto principal do topo já foi substituído pelo subtítulo na home;
+        // os dois campos precisam aparecer juntos, com as quebras preservadas.
+        $this->get(route('home'))
+            ->assertOk()
+            ->assertSee('Subtítulo do topo.')
+            ->assertSee('Primeira linha do topo.<br />', false)
+            ->assertSee('Segunda linha do topo.')
+            ->assertSee('arcana-section__body', false)
+            ->assertSee('class="arcana-hero__image"', false)
+            ->assertSee('alt="Carta do topo"', false)
+            ->assertSee(Storage::disk('public')->url('site/hero.png'), false);
+    }
+
     public function test_section_cta_accepts_the_page_path_shown_in_the_browser(): void
     {
         $admin = User::factory()->admin()->create();

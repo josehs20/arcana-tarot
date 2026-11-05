@@ -239,7 +239,7 @@ class MvpIntegratedFlowTest extends TestCase
             ->post(route('consultations.cards.store', $consultation), [
                 'tarot_card_id' => $card->id,
             ])
-            ->assertSessionHasErrors('tarot_card_id');
+            ->assertSessionHasErrors('tarot_card_ids');
 
         $this->assertSame(1, ConsultationMessage::query()
             ->where('type', MessageType::TarotCard->value)

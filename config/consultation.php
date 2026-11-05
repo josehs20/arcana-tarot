@@ -62,7 +62,7 @@ return [
     'inactivity_timeout_minutes' => max(1, (int) env('CONSULTATION_INACTIVITY_TIMEOUT_MINUTES', 5)),
     'reconnection_tolerance_seconds' => max(0, (int) env('CONSULTATION_RECONNECTION_TOLERANCE_SECONDS', 90)),
     'activity_ping_seconds' => max(5, (int) env('CONSULTATION_ACTIVITY_PING_SECONDS', 20)),
-    'navigation_warning_seconds' => max(5, (int) env('CONSULTATION_NAVIGATION_WARNING_SECONDS', 20)),
+    'navigation_warning_seconds' => max(5, (int) env('CONSULTATION_NAVIGATION_WARNING_SECONDS', 60)),
 
     /*
     |--------------------------------------------------------------------------

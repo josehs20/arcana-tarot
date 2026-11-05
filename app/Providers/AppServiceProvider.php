@@ -8,6 +8,7 @@ use App\Models\AttendantProfile;
 use App\Models\AuditLog;
 use App\Models\CommissionLedgerEntry;
 use App\Models\Consultation;
+use App\Models\ConsultationTestimonial;
 use App\Models\Payment;
 use App\Models\TarotCard;
 use App\Models\TarotDeck;
@@ -18,6 +19,7 @@ use App\Policies\AttendantProfilePolicy;
 use App\Policies\AuditLogPolicy;
 use App\Policies\CommissionLedgerEntryPolicy;
 use App\Policies\ConsultationPolicy;
+use App\Policies\ConsultationTestimonialPolicy;
 use App\Policies\PaymentPolicy;
 use App\Policies\TarotCatalogPolicy;
 use App\Policies\UserPolicy;
@@ -27,7 +29,11 @@ use App\Support\Payments\InfinitePay\InfinitePayGateway;
 use App\Support\Payments\PixSandboxProvider;
 use App\Support\Payments\UnavailablePixProvider;
 use App\Support\SiteContent;
+use App\Support\Sms\Contracts\SmsVerificationProvider;
+use App\Support\Sms\TwilioVerifyProvider;
+use App\Support\Sms\UnavailableSmsVerificationProvider;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Foundation\DevCommands;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Gate;
@@ -57,6 +63,24 @@ class AppServiceProvider extends ServiceProvider
         });
 
         $this->app->singleton(InfinitePayGateway::class, fn (): InfinitePayGateway => new InfinitePayGateway);
+
+        /*
+         * Provedor de SMS do cadastro. Sem credenciais (ou com SMS desligado) o
+         * binding devolve o adaptador neutro, que falha com mensagem amigável em
+         * vez de derrubar o cadastro com erro de configuração.
+         */
+        $this->app->bind(SmsVerificationProvider::class, function (): SmsVerificationProvider {
+            $provider = (string) config('authentication.sms.provider');
+
+            return match ($provider) {
+                TwilioVerifyProvider::NAME => TwilioVerifyProvider::fromConfig() ?? new UnavailableSmsVerificationProvider,
+                default => (bool) config('authentication.sms.enabled')
+                    ? throw new InvalidArgumentException(
+                        'Provedor de SMS não suportado. Implemente o contrato SmsVerificationProvider antes de alterar SMS_VERIFICATION_PROVIDER.',
+                    )
+                    : new UnavailableSmsVerificationProvider,
+            };
+        });
     }
 
     /**
@@ -70,6 +94,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(AuditLog::class, AuditLogPolicy::class);
         Gate::policy(CommissionLedgerEntry::class, CommissionLedgerEntryPolicy::class);
         Gate::policy(Consultation::class, ConsultationPolicy::class);
+        Gate::policy(ConsultationTestimonial::class, ConsultationTestimonialPolicy::class);
         Gate::policy(Payment::class, PaymentPolicy::class);
         Gate::policy(TarotCard::class, TarotCatalogPolicy::class);
         Gate::policy(TarotDeck::class, TarotCatalogPolicy::class);
@@ -100,6 +125,13 @@ class AppServiceProvider extends ServiceProvider
                 ->by('consultation-request:'.($request->user()?->getKey() ?? $request->ip()));
         });
 
+        // Depoimentos: o cliente escreve um por consulta concluída, mas o
+        // limite evita automação e envios repetidos em sequência.
+        RateLimiter::for('consultation-testimonials', function (Request $request): Limit {
+            return Limit::perMinute(5)
+                ->by('consultation-testimonial:'.($request->user()?->getKey() ?? $request->ip()));
+        });
+
         RateLimiter::for('consultation-presence', function (Request $request): Limit {
             return Limit::perMinute(60)
                 ->by($this->consultationRateKey($request));
@@ -117,6 +149,14 @@ class AppServiceProvider extends ServiceProvider
                 ->by('panel-events:'.($request->user()?->getKey() ?? $request->ip()));
         });
 
+        // Atualização automática do histórico administrativo: mesmo intervalo do
+        // feed do painel, isolado por administrador para não consumir a cota do
+        // painel do cliente ou do atendente.
+        RateLimiter::for('admin-consultation-history', function (Request $request): Limit {
+            return Limit::perMinute((int) config('consultation.realtime.panel_feed_rate_per_minute'))
+                ->by('admin-consultation-history:'.($request->user()?->getKey() ?? $request->ip()));
+        });
+
         RateLimiter::for('credit-purchases', function (Request $request): Limit {
             return Limit::perMinute(10)
                 ->by('credit-purchase:'.($request->user()?->getKey() ?? $request->ip()));
@@ -132,6 +172,16 @@ class AppServiceProvider extends ServiceProvider
 
             $view->with('pendingApplicationsCount', $count);
         });
+
+        /*
+         * `composer run dev` (php artisan dev) já sobe servidor, fila, logs,
+         * Vite e Reverb. Sem o agendador junto, cobrança por minuto, expiração
+         * de solicitações e interrupção por inatividade não rodam fora do
+         * Docker — a consulta inativa ficava aberta.
+         */
+        if ($this->app->runningInConsole() && class_exists(DevCommands::class)) {
+            DevCommands::artisan('schedule:work', 'scheduler');
+        }
     }
 
     /**

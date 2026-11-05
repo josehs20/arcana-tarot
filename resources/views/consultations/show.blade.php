@@ -81,11 +81,35 @@
                 </x-ui.card>
             @endunless
 
-            <x-ui.card id="consultation-progress">
+            {{--
+                `data-consultation-watch` diz ao canal privado do usuário qual
+                consulta esta tela está acompanhando. Quando ela deixa de ser
+                aberta no servidor (recusa, cancelamento, encerramento) o modo
+                polling recarrega a página para exibir o estado final.
+            --}}
+            <x-ui.card id="consultation-progress" data-consultation-watch="{{ $consultation->id }}">
                 <x-ui.card-header>
                     <h2 class="h6 mb-0">Andamento</h2>
                 </x-ui.card-header>
                 <x-ui.card-body>
+                    {{--
+                        Fica dentro do cartão de andamento porque `chat.js`
+                        substitui `#consultation-progress` a cada transição de
+                        estado: assim o aviso aparece mesmo sem recarregar a
+                        página. A recusa é definitiva e encerra o chat.
+                    --}}
+                    @if ($status === \App\Enums\ConsultationStatus::Rejected)
+                        <x-ui.alert type="warning" :dismissible="false" class="mb-3">
+                            @if ($isClient)
+                                O atendente recusou esta solicitação: o chat foi encerrado e nenhum crédito foi debitado.
+                                Escolha outro atendente para solicitar uma nova consulta.
+                                <a class="alert-link" href="{{ route('attendants.index') }}">Ver atendentes</a>
+                            @else
+                                Esta solicitação foi recusada e o chat está encerrado. Nenhum crédito foi debitado.
+                            @endif
+                        </x-ui.alert>
+                    @endif
+
                     <dl class="row mb-0">
                         <dt class="col-sm-3 text-ivory-muted fw-normal">Status</dt>
                         <dd class="col-sm-9">
@@ -96,7 +120,9 @@
                         <dd class="col-sm-9">{{ $consultation->created_at?->format('d/m/Y H:i') ?? '—' }}</dd>
 
                         <dt class="col-sm-3 text-ivory-muted fw-normal">Iniciada em</dt>
-                        <dd class="col-sm-9">{{ $consultation->started_at?->format('d/m/Y H:i') ?? 'Aguardando aceite' }}</dd>
+                        <dd class="col-sm-9">
+                            {{ $consultation->started_at?->format('d/m/Y H:i') ?? ($status === \App\Enums\ConsultationStatus::Requested ? 'Aguardando aceite' : '—') }}
+                        </dd>
 
                         @if ($consultation->started_at !== null)
                             <dt class="col-sm-3 text-ivory-muted fw-normal">Tempo de sessão</dt>
@@ -177,6 +203,11 @@
 
 
         <div class="col-lg-4">
+            {{-- O cartão pressupõe "cliente x atendente"; na visão do administrador não há lado próprio. --}}
+            @unless ($isAdmin)
+                @include('consultations.partials.parties')
+            @endunless
+
             <x-ui.card id="consultation-actions">
                 <x-ui.card-header>
                     <h2 class="h6 mb-0">Ações</h2>
@@ -255,6 +286,15 @@
         <x-ui.alert type="info" :dismissible="false" class="mt-4">
             A conversa entre cliente e atendente é privada e não é exibida na visão administrativa.
         </x-ui.alert>
+    @endif
+
+    @if ($canLeaveTestimonial)
+        @include('consultations.partials.testimonial-modal', [
+            'consultation' => $consultation,
+            'attendantName' => $attendantName,
+            'modalId' => 'testimonial-modal-'.$consultation->getKey(),
+            'autoOpen' => true,
+        ])
     @endif
 </x-layouts.panel>
 

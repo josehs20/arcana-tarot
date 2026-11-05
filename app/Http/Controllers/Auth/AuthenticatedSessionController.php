@@ -21,13 +21,36 @@ class AuthenticatedSessionController extends Controller
         return view('auth.login');
     }
 
-    public function store(LoginRequest $request): RedirectResponse
-    {
+    public function store(
+        LoginRequest $request,
+        AttendantAvailabilityManager $availability,
+    ): RedirectResponse {
         $request->authenticate();
 
         $request->session()->regenerate();
 
-        return redirect()->route($this->redirectFor($request->user()));
+        $user = $request->user();
+
+        if ($user !== null && $user->role === UserRole::Attendant) {
+            $this->bringAttendantOnline($user, $availability);
+        }
+
+        return redirect()->route($user->dashboardRouteName());
+    }
+
+    /**
+     * Entrar na conta deixa o atendente online por padrão.
+     *
+     * A disponibilidade é um efeito colateral do login e nunca pode impedir a
+     * autenticação: falhas são reportadas e o usuário segue para o painel.
+     */
+    private function bringAttendantOnline(User $user, AttendantAvailabilityManager $availability): void
+    {
+        try {
+            $availability->signIn($user);
+        } catch (Throwable $exception) {
+            report($exception);
+        }
     }
 
     public function destroy(
@@ -59,14 +82,5 @@ class AuthenticatedSessionController extends Controller
         $request->session()->regenerateToken();
 
         return redirect('/');
-    }
-
-    private function redirectFor(User $user): string
-    {
-        return match ($user->role) {
-            UserRole::Admin => 'admin.dashboard',
-            UserRole::Attendant => 'attendant.dashboard',
-            UserRole::Client => 'client.dashboard',
-        };
     }
 }

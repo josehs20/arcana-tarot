@@ -41,7 +41,21 @@
             autocomplete="tel"
             inputmode="tel"
             maxlength="20"
-            help="Com DDD. Futuramente enviaremos um código por SMS para confirmar seu número."
+            data-phone-mask
+            :help="\App\Support\AuthenticationSettings::smsEnabled()
+                ? 'Com DDD. Enviaremos um código por SMS para confirmar seu número.'
+                : 'Com DDD. Usado para contato das consultas.'"
+            required
+        />
+
+        <x-ui.field
+            name="birth_date"
+            label="Data de nascimento"
+            type="date"
+            :max="now()->subYears(18)->toDateString()"
+            :min="now()->subYears(120)->toDateString()"
+            autocomplete="bday"
+            help="Necessário para o cadastro. Usamos apenas para confirmar sua maioridade e personalizar o atendimento."
             required
         />
 
@@ -64,6 +78,8 @@
 
         <x-ui.button type="submit" variant="primary" size="lg" block>Criar conta</x-ui.button>
     </form>
+
+    <x-ui.google-auth-button />
 
     <div class="auth-card__links">
         <a href="{{ route('login') }}">Já tenho conta</a>

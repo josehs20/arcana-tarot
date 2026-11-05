@@ -28,8 +28,12 @@ para o disco privado as frentes versionadas em `database/seeders/assets/tarot`:
 |---|---|---|---|
 | Tarot de Marseille | `tarot-de-marseille` | 78 (22 arcanos maiores + 56 menores) | Jean Dodal (Lyon, 1701-1715), digitalizações em domínio público |
 | Lenormand | `lenormand` | 36 | Petit Lenormand da BnF/Gallica (`btv1b10529584r`), em domínio público |
+| Rider-Waite-Smith | `rider-waite-smith` | 78 (22 arcanos maiores + 56 menores) | Pamela Colman Smith para a Rider & Son (Londres, 1909), digitalizações em domínio público |
+| Baralho de 52 Cartas | `baralho-de-52-cartas` | 52 (13 posições em 4 naipes) | Frentes originais do Arcana, desenhadas para o projeto |
+| Baralho Espanhol | `baralho-espanhol` | 40 (10 posições em 4 naipes) | Frentes originais do Arcana, desenhadas para o projeto |
 
-- Os arquivos são JPEG normalizados e ficam em `cards/{marseille|lenormand}/{slug da carta}.jpg`
+- Os arquivos são JPEG normalizados em 320 × 586 e ficam em
+  `cards/{marseille|lenormand|rider-waite|baralho-52|baralho-espanhol}/{slug da carta}.jpg`
   no disco privado, servidos apenas pela rota autorizada.
 - Cada carta recebe significado normal e invertido a partir do catálogo.
 - A execução é idempotente: baralho e carta são localizados pelo `slug`, e uma imagem
@@ -40,6 +44,26 @@ para o disco privado as frentes versionadas em `database/seeders/assets/tarot`:
   `php artisan arcana:import-tarot-catalog` (opção `--source=` para um acervo fora do
   projeto). O comando usa a mesma rotina, então também é idempotente e não sobrescreve
   imagem enviada pela administração.
+
+#### Como cada baralho é lido
+
+- **Tarot de Marseille** e **Rider-Waite-Smith** têm 22 arcanos maiores próprios de cada
+  tradição (o Marseille usa Bateleur/Papisa/Papa/Justiça; o Rider-Waite-Smith usa
+  Mago/Sacerdotisa/Hierofante/Força) e compartilham os 56 arcanos menores, com nomes
+  Valete, Cavaleiro, Rainha e Rei por naipe.
+- **Baralho de 52 Cartas** e **Baralho Espanhol** não têm leitura tradicional fechada
+  como o tarot: cada carta combina a leitura da posição (Ás a Rei, e no baralho espanhol
+  também Sota e Cavalo) com o campo de vida do naipe (Copas afetivo, Ouros material,
+  Espadas mental/conflitos, Paus ação/trabalho). O texto gravado no significado já traz
+  essa composição.
+
+#### Licenciamento das frentes
+
+- Marseille, Lenormand e Rider-Waite-Smith são digitalizações de obras em domínio
+  público (a primeira edição do Rider-Waite-Smith é de 1909).
+- As frentes do baralho de 52 cartas e do baralho espanhol são desenhos originais
+  produzidos para o Arcana, sem material de terceiros, e podem ser redistribuídas com o
+  projeto.
 
 ---
 

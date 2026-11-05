@@ -103,10 +103,33 @@ class ConsultationPolicy
             && $consultation->allowsMessaging();
     }
 
+    /**
+     * Histórico completo no painel administrativo.
+     *
+     * Diferente de `viewMessages`, esta habilidade dá ao administrador leitura
+     * da conversa para auditoria e acompanhamento de ocorrências. Cada acesso
+     * é registrado em AuditLog pela controladora.
+     */
+    public function viewAdminHistory(User $user, Consultation $consultation): bool
+    {
+        return $this->isActiveAdmin($user);
+    }
+
     public function sendCard(User $user, Consultation $consultation): bool
     {
         return $this->isActiveAttendantOf($user, $consultation)
             && $consultation->allowsMessaging();
+    }
+
+    /**
+     * Depoimento pós-consulta: só o cliente do atendimento e só depois do
+     * encerramento concluído (`ended`), com no máximo um depoimento por
+     * consulta. Interrupções e cancelamentos nunca são avaliados.
+     */
+    public function writeTestimonial(User $user, Consultation $consultation): bool
+    {
+        return $this->isActiveClientOf($user, $consultation)
+            && $consultation->allowsTestimonial();
     }
 
     /**

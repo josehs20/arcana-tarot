@@ -4,6 +4,9 @@
         subtitle="Gerencie contas de clientes, atendentes e administradores."
     >
         <x-slot name="actions">
+            @can('create', \App\Models\User::class)
+                <a class="btn btn-primary btn-sm" href="{{ route('admin.users.create') }}">Novo atendente</a>
+            @endcan
             <a class="btn btn-ghost btn-sm" href="{{ route('admin.dashboard') }}">Voltar ao painel</a>
         </x-slot>
     </x-layouts.page-header>
@@ -121,6 +124,9 @@
                                     {{ $user->wallet ? \App\Support\Money::format($user->wallet->balance_cents) : '—' }}
                                 </td>
                                 <td class="text-end">
+                                    @can('update', $user)
+                                        <a class="btn btn-ghost btn-sm" href="{{ route('admin.users.edit', $user) }}">Editar</a>
+                                    @endcan
                                     @if ($user->isClient())
                                         <a class="btn btn-ghost btn-sm" href="{{ route('admin.finance.wallets.show', $user) }}">Carteira</a>
                                     @endif

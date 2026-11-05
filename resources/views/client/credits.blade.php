@@ -5,7 +5,7 @@
     >
         <x-slot name="actions">
             @if ($returnUrl)
-                <a class="btn btn-primary btn-sm" href="{{ $returnUrl }}">Voltar ao atendimento</a>
+                <a class="btn btn-primary btn-sm" href="{{ $returnUrl }}" data-credit-return>Voltar ao atendimento</a>
             @endif
             <a class="btn btn-ghost btn-sm" href="{{ route('client.dashboard') }}">Voltar ao painel</a>
         </x-slot>

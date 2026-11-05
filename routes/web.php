@@ -11,11 +11,13 @@ use App\Http\Controllers\Admin\FinanceController as AdminFinanceController;
 use App\Http\Controllers\Admin\ModalityController as AdminModalityController;
 use App\Http\Controllers\Admin\PaymentController as AdminPaymentController;
 use App\Http\Controllers\Admin\PaymentSettingsController as AdminPaymentSettingsController;
+use App\Http\Controllers\Admin\RegistrationBonusController as AdminRegistrationBonusController;
 use App\Http\Controllers\Admin\SiteContentController as AdminSiteContentController;
 use App\Http\Controllers\Admin\SiteFaqController as AdminSiteFaqController;
 use App\Http\Controllers\Admin\SiteNavigationController as AdminSiteNavigationController;
 use App\Http\Controllers\Admin\TarotCardController as AdminTarotCardController;
 use App\Http\Controllers\Admin\TarotDeckController as AdminTarotDeckController;
+use App\Http\Controllers\Admin\TestimonialController as AdminTestimonialController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Attendant\AvailabilityController as AttendantAvailabilityController;
 use App\Http\Controllers\Attendant\ConsultationController as AttendantConsultationController;
@@ -24,8 +26,10 @@ use App\Http\Controllers\Attendant\HistoryController as AttendantHistoryControll
 use App\Http\Controllers\AttendantApplicationController;
 use App\Http\Controllers\AttendantDirectoryController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
+use App\Http\Controllers\Auth\GoogleAuthenticationController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
+use App\Http\Controllers\Auth\PhoneVerificationController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\ChatPreferenceController;
 use App\Http\Controllers\Client\ConsultationController as ClientConsultationController;
@@ -33,6 +37,7 @@ use App\Http\Controllers\Client\CreditCheckoutController;
 use App\Http\Controllers\Client\CreditPurchaseController;
 use App\Http\Controllers\Client\DashboardController as ClientDashboardController;
 use App\Http\Controllers\Client\HistoryController as ClientHistoryController;
+use App\Http\Controllers\Client\TestimonialController as ClientTestimonialController;
 use App\Http\Controllers\ConsultationCallController;
 use App\Http\Controllers\ConsultationController;
 use App\Http\Controllers\ConsultationMessageController;
@@ -87,6 +92,31 @@ Route::middleware('guest')->group(function () {
     Route::get('register', [RegisteredUserController::class, 'create'])->name('register');
     Route::post('register', [RegisteredUserController::class, 'store']);
 
+    /*
+     * Segunda etapa do cadastro: confirmação do celular por SMS. A conta só é
+     * criada no POST de confirmação, depois do código aprovado. O reenvio tem
+     * limite próprio e o cooldown é aplicado pelo PhoneVerificationService.
+     */
+    Route::get('register/confirmar-celular', [PhoneVerificationController::class, 'show'])
+        ->name('register.verify');
+    Route::post('register/confirmar-celular', [PhoneVerificationController::class, 'verify'])
+        ->middleware('throttle:10,10')
+        ->name('register.verify.store');
+    Route::post('register/confirmar-celular/reenviar', [PhoneVerificationController::class, 'resend'])
+        ->middleware('throttle:5,10')
+        ->name('register.verify.resend');
+
+    /*
+     * Login/cadastro com Google. As rotas existem sempre, mas os controllers
+     * recusam o acesso quando as credenciais não estão configuradas.
+     */
+    Route::get('auth/google', [GoogleAuthenticationController::class, 'redirect'])
+        ->middleware('throttle:20,1')
+        ->name('auth.google.redirect');
+    Route::get('auth/google/callback', [GoogleAuthenticationController::class, 'callback'])
+        ->middleware('throttle:20,1')
+        ->name('auth.google.callback');
+
     Route::get('login', [AuthenticatedSessionController::class, 'create'])->name('login');
     Route::post('login', [AuthenticatedSessionController::class, 'store']);
 
@@ -115,6 +145,17 @@ Route::middleware('auth')->group(function () {
     Route::get('client/historico', ClientHistoryController::class)
         ->middleware('role:client')
         ->name('client.history');
+
+    Route::get('client/depoimentos', [ClientTestimonialController::class, 'index'])
+        ->middleware('role:client')
+        ->name('client.testimonials.index');
+
+    // Depoimento pós-consulta: um por atendimento concluído, sem edição depois
+    // do envio. A policy revalida participante, status `ended` e duplicidade.
+    Route::post('consultas/{consultation}/depoimento', [ClientTestimonialController::class, 'store'])
+        ->whereNumber('consultation')
+        ->middleware(['role:client', 'throttle:consultation-testimonials'])
+        ->name('client.testimonials.store');
 
     Route::get('attendant/historico', AttendantHistoryController::class)
         ->middleware('role:attendant')
@@ -266,6 +307,30 @@ Route::middleware('auth')->group(function () {
         ->middleware('role:admin')
         ->group(function () {
             Route::get('/', [AdminUserController::class, 'index'])->name('index');
+
+            /*
+             * Cadastro de atendente pelo painel. A rota fica antes das rotas com
+             * `{user}` apenas por legibilidade: os parâmetros são numéricos e não
+             * colidem com "novo-atendente".
+             */
+            Route::get('novo-atendente', [AdminUserController::class, 'create'])->name('create');
+            Route::post('/', [AdminUserController::class, 'store'])->name('store');
+
+            Route::get('{user}/editar', [AdminUserController::class, 'edit'])
+                ->whereNumber('user')
+                ->name('edit');
+            Route::patch('{user}', [AdminUserController::class, 'update'])
+                ->whereNumber('user')
+                ->name('update');
+
+            /*
+             * Ajuste de créditos pela ficha do cliente: mesma regra da tesouraria
+             * (motivo obrigatório, operação idempotente e auditoria).
+             */
+            Route::post('{user}/creditos', [AdminUserController::class, 'adjustCredit'])
+                ->whereNumber('user')
+                ->name('credit.store');
+
             Route::patch('{user}/status', [AdminUserController::class, 'updateStatus'])
                 ->whereNumber('user')
                 ->name('status');
@@ -287,9 +352,35 @@ Route::middleware('auth')->group(function () {
                 ->name('sound.destroy');
         });
 
-    Route::get('admin/consultas', [AdminConsultationController::class, 'index'])
+    Route::prefix('admin/consultas')
+        ->name('admin.consultations.')
         ->middleware('role:admin')
-        ->name('admin.consultations.index');
+        ->group(function () {
+            Route::get('/', [AdminConsultationController::class, 'index'])->name('index');
+
+            /*
+             * Detalhe administrativo do atendimento. A leitura do histórico é
+             * um acesso a dado sensível: a política exige administrador ativo e
+             * cada abertura é registrada na auditoria.
+             */
+            Route::get('{consultation}', [AdminConsultationController::class, 'show'])
+                ->whereNumber('consultation')
+                ->name('show');
+
+            // Novos itens da linha do tempo, lidos em intervalos curtos pela tela.
+            Route::get('{consultation}/historico', [AdminConsultationController::class, 'entries'])
+                ->whereNumber('consultation')
+                ->middleware('throttle:admin-consultation-history')
+                ->name('entries');
+
+            Route::get('{consultation}/mensagens/{message}/imagem', [AdminConsultationController::class, 'image'])
+                ->whereNumber(['consultation', 'message'])
+                ->name('messages.image');
+
+            Route::patch('{consultation}/ocorrencias/{incident}', [AdminConsultationController::class, 'reviewIncident'])
+                ->whereNumber(['consultation', 'incident'])
+                ->name('incidents.review');
+        });
 
     Route::prefix('admin/modalidades')
         ->name('admin.modalities.')
@@ -397,6 +488,16 @@ Route::middleware('auth')->group(function () {
                 ->name('packages.update');
             Route::patch('pacotes/limites', [AdminPaymentSettingsController::class, 'updateLimits'])
                 ->name('packages.limits.update');
+
+            /*
+             * Bônus de primeiro acesso: créditos dados uma única vez a cada
+             * cliente que conclui o cadastro. O valor é calculado pela tarifa
+             * vigente do crédito, nunca por um campo do formulário.
+             */
+            Route::get('bonus', [AdminRegistrationBonusController::class, 'edit'])
+                ->name('bonus.edit');
+            Route::patch('bonus', [AdminRegistrationBonusController::class, 'update'])
+                ->name('bonus.update');
         });
 
     Route::prefix('admin/atendimento')
@@ -407,6 +508,19 @@ Route::middleware('auth')->group(function () {
                 ->name('safety');
             Route::patch('seguranca', [AdminConsultationSafetyController::class, 'update'])
                 ->name('safety.update');
+        });
+
+    Route::prefix('admin/depoimentos')
+        ->name('admin.testimonials.')
+        ->middleware('role:admin')
+        ->group(function () {
+            Route::get('/', [AdminTestimonialController::class, 'index'])->name('index');
+            Route::patch('{testimonial}/ocultar', [AdminTestimonialController::class, 'hide'])
+                ->whereNumber('testimonial')
+                ->name('hide');
+            Route::patch('{testimonial}/publicar', [AdminTestimonialController::class, 'publish'])
+                ->whereNumber('testimonial')
+                ->name('publish');
         });
 
     Route::prefix('admin/baralhos')

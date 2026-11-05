@@ -28,6 +28,17 @@
      */
     $realtimeMode = \App\Support\Realtime\RealtimeMode::current();
     $realtimePollIntervals = config('consultation.realtime.poll');
+
+    /*
+     * Consulta ativa do usuário: alimenta o aviso "Voltar ao atendimento" em
+     * qualquer tela do painel fora do chat. A escolha é feita no servidor
+     * (`ActiveConsultationResolver`), nunca a partir de um ID da URL.
+     */
+    $realtimeActiveConsultation = $realtimeUser
+        ? app(\App\Support\ActiveConsultationResolver::class)->forUser($realtimeUser)
+        : null;
+
+    $realtimeActiveConsultation?->loadMissing('attendant.attendantProfile');
 @endphp
 
 @if ($realtimeUser && $realtimeUser->is_active)
@@ -40,9 +51,14 @@
         data-poll-hidden-interval-ms="{{ (int) $realtimePollIntervals['panel_hidden_interval_ms'] }}"
         data-poll-max-backoff-ms="{{ (int) $realtimePollIntervals['max_backoff_ms'] }}"
         data-workspace-url="{{ route('consultations.workspace', ['consultation' => '__ID__']) }}"
+        {{--
+            Estados finais recarregam a tela para cliente e atendente: é assim
+            que a recusa, o cancelamento e o encerramento aparecem na hora, sem
+            deixar a conversa em um estado que já não existe no servidor.
+        --}}
+        data-refresh-on-final="1"
         @if ($realtimeIsAttendant)
             data-pending-url="{{ route('attendant.requests.pending') }}"
-            data-refresh-on-final="1"
             data-request-sound="{{ $realtimeRequestSound }}"
             @if ($realtimeRequestSoundUrl)
                 data-request-sound-url="{{ $realtimeRequestSoundUrl }}"
@@ -54,4 +70,6 @@
     @if ($realtimeIsAttendant)
         @include('layouts.partials.request-modal')
     @endif
+
+    @include('layouts.partials.active-consultation-banner', ['consultation' => $realtimeActiveConsultation])
 @endif

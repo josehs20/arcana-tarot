@@ -14,7 +14,7 @@ Manual de preparação do ambiente local e de uso dos dados fictícios do Arcana
 - Arquivo `.env` baseado em `.env.example`, com banco MySQL, Redis e `APP_KEY` configurados.
 - `ARCANA_DEMO_PASSWORD` define a senha inicial das contas fictícias. O valor padrão de `.env.example` é apenas local.
 - As imagens das cartas são gravadas no disco privado `tarot_private` (`storage/app/private/tarot`). Elas não dependem de `storage:link` nem de URLs externas.
-- O seeder copia para o disco privado as frentes de carta versionadas em `database/seeders/assets/tarot`, com imagens JPEG já normalizadas. São digitalizações em domínio público: o Tarot de Marseille de Jean Dodal (Lyon, 1701-1715) e o Petit Lenormand da BnF. Nenhum download acontece em tempo de execução.
+- O seeder copia para o disco privado as frentes de carta versionadas em `database/seeders/assets/tarot`, com imagens JPEG já normalizadas em 320 × 586. O Tarot de Marseille (Jean Dodal, Lyon, 1701-1715), o Petit Lenormand da BnF e o Rider-Waite-Smith de 1909 usam digitalizações em domínio público; os baralhos de 52 cartas e espanhol usam frentes originais desenhadas para o projeto. Nenhum download acontece em tempo de execução.
 
 ## B. Sequência de comandos
 
@@ -143,7 +143,7 @@ Contas, perfis, candidaturas, baralhos, cartas, pagamentos, créditos, consultas
 
 A única atualização automática em registros já existentes é a disponibilidade publicada dos perfis de atendente (`is_published`, `availability`, `last_seen_at`), para restaurar o cenário online/offline. Nome, bio, especialidades, som de chamada, taxa de comissão, senha e papel não são reaplicados.
 
-Se um cenário já foi consumido (por exemplo, a consulta ativa foi encerrada manualmente), a seeder não cria uma segunda consulta para o mesmo par cliente/atendente. Isso evita duplicação, mas também significa que o cenário só volta ao estado inicial em um banco novo.
+Se um cenário já foi consumido (por exemplo, a consulta concluída foi encerrada antes do previsto), a seeder não cria uma segunda consulta para o mesmo par cliente/atendente. Isso evita duplicação, mas também significa que o cenário só volta ao estado inicial em um banco novo.
 
 ### Aplicar apenas migrations pendentes
 
@@ -187,9 +187,9 @@ Essas credenciais são exclusivamente locais, fictícias e não devem ser reutil
 
 | Chave | Nome | E-mail | Comissão | Som de chamada | Estado |
 |---|---|---|---|---|---|
-| `marina` | Marina Luz | `marina.luz@arcana.local` | 30% | Sirene (padrão) | Online, publicada e disponível; possui histórico concluído e uma solicitação pendente |
+| `marina` | Marina Luz | `marina.luz@arcana.local` | 30% | Sirene (padrão) | Online, publicada e disponível; possui histórico concluído de 13 minutos |
 | `rafael` | Rafael Monteiro | `rafael.monteiro@arcana.local` | 25% | Sirene (padrão) | Offline e publicado |
-| `iris` | Íris Campos | `iris.campos@arcana.local` | 20% | Sirene (padrão) | Online, com consulta ativa; o painel a apresenta como “Ocupado” |
+| `iris` | Íris Campos | `iris.campos@arcana.local` | 20% | Sirene (padrão) | Online, publicada e disponível; sem atendimento ativo |
 
 A comissão é congelada no aceite da consulta. Alterar a taxa atual de um atendente não altera comissões históricas.
 
@@ -204,8 +204,10 @@ no disco `public` e exige `php artisan storage:link` no ambiente.
 | `free` | Clara Freitas | `cliente.livre@arcana.local` | 50 créditos (R$ 50,00; 5000 centavos), sem consulta aberta; pode solicitar atendimento |
 | `no_balance` | Caio Nogueira | `cliente.sem-saldo@arcana.local` | Saldo 0 após consulta encerrada por insuficiência de créditos |
 | `history` | Helena Prado | `cliente.historico@arcana.local` | Histórico concluído de 13 minutos, com comissão de R$ 3,90; saldo 27 créditos |
-| `pending` | Paulo Mendes | `cliente.pendente@arcana.local` | Solicitação pendente para Marina; saldo 20 créditos |
-| `active` | Alice Ribeiro | `cliente.ativo@arcana.local` | Consulta ativa com Íris, 6 minutos cobrados; saldo 14 créditos |
+| `pending` | Paulo Mendes | `cliente.pendente@arcana.local` | Saldo 20 créditos e nenhum atendimento aberto; pode iniciar uma consulta pelo site |
+| `active` | Alice Ribeiro | `cliente.ativo@arcana.local` | Saldo 20 créditos e nenhum atendimento aberto; pode iniciar uma consulta pelo site |
+
+As chaves `pending` e `active` são nomes herdados dos antigos cenários de solicitação pendente e consulta ativa. Essas contas hoje não têm solicitação nem consulta aberta: o seeder nunca abre atendimento em nome de uma conta que não está logada, e o primeiro atendimento é sempre iniciado pelo cliente autenticado no site.
 
 Valores em centavos: 1 crédito = R$ 1,00 e saldo mínimo de 1 minuto, conforme `SettingsSeeder`. Os preços de demonstração ficam em `attendant_modality_prices` (R$ 1,00/min no texto, R$ 2,00/min no áudio e R$ 3,00/min no vídeo para cada atendente demo), criados por `AttendantSeeder` via `DemoData::modalityPricePerMinuteCents()`. O saldo mínimo em centavos é o preço do atendente multiplicado pelos minutos mínimos. Se o banco já possuir configurações diferentes, os pagamentos e saldos são calculados com os valores vigentes, sem sobrescrever as configurações.
 
@@ -225,15 +227,18 @@ A aprovação é apenas uma decisão de triagem. A criação do acesso de atende
 - Sete pagamentos fictícios do provedor `pix_sandbox`: cinco confirmados, um pendente e um expirado.
 - Os confirmados são fixtures locais usados apenas como origem rastreável dos créditos. Nenhum webhook é disparado e nenhuma cobrança real é efetuada.
 - Não há estorno de pagamento ou de comissão semeado: essas operações exigem ação administrativa explícita, motivo e auditoria.
-- Dois baralhos ativos, com imagens JPEG em domínio público no disco privado:
+- Cinco baralhos ativos, com imagens JPEG no disco privado:
   - **Tarot de Marseille** (`tarot-de-marseille`): 78 cartas — 22 arcanos maiores e 56 menores (14 por naipe: Paus, Copas, Espadas e Ouros), do Louco ao 14 de Ouros.
   - **Lenormand** (`lenormand`): 36 cartas do Petit Lenormand, do Cavaleiro à Cruz.
+  - **Rider-Waite-Smith** (`rider-waite-smith`): 78 cartas — 22 arcanos maiores próprios desta tradição (Mago, Sacerdotisa, Hierofante, Força) e os mesmos 56 menores do Marseille.
+  - **Baralho de 52 Cartas** (`baralho-de-52-cartas`): 52 cartas — do Ás ao Rei em Copas, Ouros, Espadas e Paus, com leitura composta por posição e naipe.
+  - **Baralho Espanhol** (`baralho-espanhol`): 40 cartas — do Ás ao Sete e as figuras Sota, Cavalo e Rei em Ouros, Copas, Espadas e Paus.
 - Cada carta tem significado normal e invertido preenchidos, e o seeder é idempotente: uma imagem substituída pela administração não é sobrescrita.
-- Nove mensagens de chat: cinco no histórico concluído, uma na consulta encerrada por saldo e três na consulta ativa. Duas mensagens são cartas do catálogo com snapshot privado.
+- Seis mensagens de chat: cinco no histórico concluído e uma na consulta encerrada por saldo. Uma mensagem é carta do catálogo com snapshot privado.
 
 ## F. Cenários de teste manual
 
-Todos os cenários abaixo usam funcionalidades já implementadas no MVP. Não há criação de módulos simulados.
+Todos os cenários abaixo usam funcionalidades já implementadas no MVP. Não há criação de módulos simulados. Nenhum atendimento em aberto é semeado: a sirene, o modal de aceite e a chamada no painel só aparecem para atendimentos iniciados por clientes autenticados.
 
 1. **Login administrativo**
    - Acesse `http://localhost:8000/login`.
@@ -242,8 +247,8 @@ Todos os cenários abaixo usam funcionalidades já implementadas no MVP. Não h�
 
 2. **Visualização de clientes e atendentes**
    - Em `/admin/usuarios`, confira as 9 contas e os papéis.
-   - Em `/admin/consultas`, confira os estados solicitada, ativa e concluída.
-   - Em `/atendentes`, confirme Marina online, Rafael offline e Íris ocupada.
+   - Em `/admin/consultas`, confira as duas consultas concluídas (histórico de 13 minutos e encerrada por saldo).
+   - Em `/atendentes`, confirme Marina online, Rafael offline e Íris online, sem atendimento ativo.
 
 3. **Análise de candidaturas**
    - Abra `/admin/candidaturas`.
@@ -253,7 +258,7 @@ Todos os cenários abaixo usam funcionalidades já implementadas no MVP. Não h�
 
 4. **Cadastro e visualização de baralhos**
    - Abra `/admin/baralhos`.
-   - Confira os dois baralhos, descrições e status ativo.
+   - Confira os cinco baralhos, descrições e status ativo.
    - Edite um baralho e altere o status; o catálogo e a disponibilidade das cartas devem refletir a regra.
 
 5. **Visualização das cartas e imagens**
@@ -272,10 +277,11 @@ Todos os cenários abaixo usam funcionalidades já implementadas no MVP. Não h�
 
 8. **Seleção de atendente disponível**
    - Em `/atendentes`, escolha Marina Luz.
-   - Rafael deve aparecer offline; Íris deve aparecer ocupada enquanto a consulta ativa existir.
+   - Rafael deve aparecer offline; Íris deve aparecer disponível, pois nenhum atendimento em aberto é semeado.
 
 9. **Solicitação e aceitação de consulta**
-   - Como cliente livre, solicite uma consulta para Marina.
+   - Não existe solicitação semeada: o chamado nasce quando um cliente autenticado pede o atendimento.
+   - Como cliente livre, solicite uma consulta para Marina pelo site.
    - Saia e entre como `marina.luz@arcana.local`.
    - Em `/attendant`, aceite a solicitação.
    - O primeiro minuto é cobrado no aceite. O cliente precisa ter saldo mínimo.
@@ -300,7 +306,6 @@ Todos os cenários abaixo usam funcionalidades já implementadas no MVP. Não h�
 
 14. **Verificação das comissões**
     - Em `/admin/comissoes`, confira as comissões de Marina no histórico e na consulta encerrada por saldo.
-    - A consulta ativa de Íris ainda não possui comissão; ela é gerada no encerramento.
     - Confirme que a taxa histórica continua 30%, mesmo após alterar a taxa atual no painel.
 
 15. **Consulta ao histórico financeiro**
@@ -396,7 +401,7 @@ O seeder não altera a senha de uma conta já existente. Se o e-mail de demonstr
 - Execute `db:seed` quantas vezes precisar; as chaves estáveis impedem duplicação.
 - Não edite saldos diretamente: use os lançamentos e os serviços de carteira.
 - Se um cenário já foi consumido, ele não é recriado. Para voltar ao estado inicial, use um banco local descartável e siga a seção D.
-- Consultas ativas de demonstração podem ser encerradas pelo fluxo normal; depois disso, não há criação automática de uma segunda consulta ativa para o mesmo par cliente/atendente.
+- Consultas concluídas de demonstração não são recriadas: se uma delas for apagada manualmente, use um banco local descartável e siga a seção D para voltar ao estado inicial.
 
 ### Seeder bloqueado
 
@@ -439,25 +444,26 @@ As factories existentes foram preservadas. Não foi necessário criar novas enti
 | Usuários | 9 (1 admin, 3 atendentes, 5 clientes) |
 | Perfis de atendente | 3 |
 | Candidaturas | 4 |
-| Baralhos | 2 |
-| Cartas | 114 (78 do Tarot de Marseille + 36 do Lenormand) |
+| Baralhos | 5 |
+| Cartas | 284 (78 do Tarot de Marseille + 36 do Lenormand + 78 do Rider-Waite-Smith + 52 do baralho comum + 40 do baralho espanhol) |
 | Carteiras | 5 |
 | Pagamentos | 7 (5 confirmados, 1 pendente, 1 expirado) |
-| Lançamentos de crédito | 25 (5 créditos + 20 débitos) |
-| Consultas | 4 (1 solicitada, 1 ativa, 2 concluídas) |
-| Mensagens | 9 (2 com carta) |
+| Lançamentos de crédito | 19 (5 créditos + 14 débitos) |
+| Consultas | 2 (ambas concluídas) |
+| Mensagens | 6 (1 com carta) |
 | Comissões | 2 |
 
-Saldo final padrão: livre R$ 50,00; sem saldo R$ 0,00; histórico R$ 27,00; pendente R$ 20,00; ativo R$ 14,00. Todos os saldos coincidem com a soma do livro-razão.
+Saldo final padrão: livre R$ 50,00; sem saldo R$ 0,00; histórico R$ 27,00; pendente R$ 20,00; ativo R$ 20,00. Todos os saldos coincidem com a soma do livro-razão.
 
 ### Testes executados
 
-- `php artisan test --compact tests/Feature/DemoSeedersTest.php`: **13 testes, 1282 assertions, todos aprovados**.
-- `php artisan test --compact` (suíte completa): **324 testes, 3620 assertions, todos aprovados**.
+- `php artisan test --compact tests/Feature/DemoSeedersTest.php`: **14 testes, 2808 assertions, todos aprovados**.
+- `php artisan test --compact tests/Feature/TarotCatalogImportCommandTest.php`: **5 testes, 322 assertions, todos aprovados**.
+- `php artisan test --compact` (suíte completa): **518 testes, 6836 assertions, todos aprovados**.
 - `migrate:fresh --seed` em SQLite temporário (`/tmp/arcana-demo-seed.sqlite`) dentro do container: aprovado.
-- `db:seed` repetido no mesmo SQLite temporário: aprovado, sem duplicação (78 cartas no Marseille e 36 no Lenormand).
-- Validação das imagens com GD: JPEG decodificado com sucesso — 320 px de largura no Marseille e 400 px no Lenormand.
-- Pint nos arquivos novos: aprovado.
+- `db:seed` repetido no mesmo SQLite temporário: aprovado, sem duplicação (5 baralhos e 284 cartas, com 78 no Marseille e 78 no Rider-Waite-Smith).
+- Validação das imagens com GD: JPEG decodificado com sucesso — 320 px de largura nos baralhos normalizados (Marseille, Rider-Waite-Smith, baralho de 52 cartas e espanhol) e 400 px no Lenormand.
+- Pint nos arquivos alterados: aprovado.
 
 ### Comandos validados
 
@@ -473,8 +479,8 @@ O `migrate:fresh` acima foi executado somente no arquivo SQLite temporário, nã
 
 - A confirmação de pagamento real não é semeada. Os pagamentos confirmados são fixtures locais `pix_sandbox`, sem webhook e sem movimentação financeira externa.
 - O teste WebSocket com navegador real continua manual.
-- A conta ativa de demonstração consome minutos conforme o relógio real; após o encerramento, ela não é recriada automaticamente.
-- A solicitação pendente pode expirar após o TTL configurado (`CONSULTATION_REQUEST_TTL_MINUTES`) se a rotina agendada for executada.
+- O seeder não cria atendimento em aberto: nenhuma conta fictícia é chamada no login, sem sirene, modal de aceite ou pop-up de consulta. O primeiro atendimento do demo é iniciado pelo cliente autenticado.
+- Por isso, não há solicitação sujeita ao TTL (`CONSULTATION_REQUEST_TTL_MINUTES`): o chamado só existe a partir da ação do cliente.
 - Não existem MFA, conciliação PIX de produção, backup testado ou monitoramento neste escopo.
 - Novas alterações na estrutura de seeders devem atualizar este documento e os testes `DemoSeedersTest`.
 

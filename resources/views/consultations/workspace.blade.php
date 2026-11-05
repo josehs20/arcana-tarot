@@ -3,7 +3,6 @@
     $modality = $consultation->modality;
     $attendantName = $consultation->attendant->attendantProfile?->display_name ?? $consultation->attendant->name;
     $counterparty = $isClient ? $attendantName : $consultation->client->name;
-    $startedAt = $consultation->started_at;
 @endphp
 
 {{--
@@ -13,7 +12,9 @@
     partes, números oficiais calculados no servidor e a conversa em tempo real.
     Os valores exibidos nos cartões usam `data-metric`, preenchidos pelo módulo
     `resources/js/consultation-workspace.js` a cada limite de minuto e a cada
-    transição de estado — sempre a partir de `consultations.metrics`.
+    transição de estado — sempre a partir de `consultations.metrics`. O tempo
+    restante (`data-consultation-countdown`) também nasce no servidor e é apenas
+    decrementado no navegador entre uma atualização e outra.
 --}}
 <x-layouts.panel variant="panel" :title="'Atendimento #' . $consultation->id . ' | Arcana Tarot'">
     <div
@@ -23,6 +24,7 @@
         data-metrics-url="{{ route('consultations.metrics', $consultation) }}"
         data-presence-url="{{ route('consultations.presence.heartbeat', $consultation) }}"
         data-leave-url="{{ route('consultations.presence.leave', $consultation) }}"
+        @can('end', $consultation) data-end-url="{{ route('consultations.end', $consultation) }}" @endcan
         data-show-url="{{ route('consultations.show', $consultation) }}"
         data-status="{{ $status->value }}"
         data-navigation-warning-seconds="{{ $safety['navigation_warning_seconds'] }}"
@@ -52,18 +54,15 @@
 
         <div class="row g-3 g-xl-4 mb-4">
             <div class="col-sm-6 col-xl-3">
+                {{-- O dinheiro substituiu o relógio: o saldo cai a cada minuto
+                     iniciado, inclusive o que ainda está sendo cobrado. --}}
                 <x-ui.stat-card
-                    label="Tempo em andamento"
-                    icon="clock"
-                    tone="gold"
-                    hint="Contador informativo; a cobrança usa o horário do servidor."
+                    :label="$isClient ? 'Saldo restante' : 'Saldo do cliente'"
+                    icon="credit-card"
+                    tone="info"
                 >
-                    <span class="stat-card__value">
-                        <span
-                            data-consultation-timer
-                            data-started-at="{{ $startedAt?->toIso8601String() }}"
-                        >{{ $metrics['elapsed_label'] ?? '—' }}</span>
-                    </span>
+                    <span class="stat-card__value" data-metric="balance_label">{{ $metrics['balance_label'] ?? '—' }}</span>
+                    <span class="stat-card__hint" data-metric="balance_explanation">{{ $metrics['balance_explanation'] ?? 'Saldo da carteira.' }}</span>
                 </x-ui.stat-card>
             </div>
 
@@ -75,23 +74,25 @@
             </div>
 
             <div class="col-sm-6 col-xl-3">
-                <x-ui.stat-card
-                    label="Preço por minuto"
-                    :value="$metrics['price_per_minute_label'] ?? '—'"
-                    :hint="$modality->description()"
-                    icon="credit-card"
-                />
+                <x-ui.stat-card label="Tempo restante" icon="activity" tone="warning">
+                    {{-- O servidor manda os segundos; o navegador só decrementa. --}}
+                    <span class="stat-card__value">
+                        <span
+                            data-consultation-countdown
+                            data-remaining-seconds="{{ $metrics['remaining_seconds'] ?? '' }}"
+                        >{{ $metrics['remaining_label'] ?? '—' }}</span>
+                    </span>
+                    <span class="stat-card__hint" data-metric="remaining_explanation">
+                        {{ $metrics['remaining_explanation'] ?? 'Saldo insuficiente para o próximo minuto.' }}
+                    </span>
+                </x-ui.stat-card>
             </div>
 
             <div class="col-sm-6 col-xl-3">
                 @if ($isAttendant)
-                    <x-ui.stat-card
-                        label="Sua comissão"
-                        icon="percent"
-                        tone="gold"
-                        :hint="($metrics['commission_rate_label'] ?? '—') . ' sobre o valor cobrado.'"
-                    >
+                    <x-ui.stat-card label="Sua comissão" icon="percent" tone="gold">
                         <span class="stat-card__value" data-metric="commission_label">{{ $metrics['commission_label'] ?? '—' }}</span>
+                        <span class="stat-card__hint" data-metric="commission_explanation">{{ $metrics['commission_explanation'] ?? 'Calculada no servidor ao longo do atendimento.' }}</span>
                     </x-ui.stat-card>
                 @else
                     <x-ui.stat-card
@@ -114,45 +115,7 @@
             </div>
 
             <div class="col-lg-4">
-                <x-ui.card class="mb-4">
-                    <x-ui.card-header>
-                        <h2 class="h6 mb-0">Detalhes</h2>
-                    </x-ui.card-header>
-                    <x-ui.card-body>
-                        <dl class="panel-details">
-                            <div class="panel-details__row">
-                                <dt>Cliente</dt>
-                                <dd>
-                                    {{ $consultation->client->name }}
-                                    <span class="badge bg-secondary ms-1" data-presence-role="client" role="status">—</span>
-                                </dd>
-                            </div>
-                            <div class="panel-details__row">
-                                <dt>Atendente</dt>
-                                <dd>
-                                    {{ $attendantName }}
-                                    <span class="badge bg-secondary ms-1" data-presence-role="attendant" role="status">—</span>
-                                </dd>
-                            </div>
-                            <div class="panel-details__row">
-                                <dt>Modalidade</dt>
-                                <dd>{{ $modality->label() }}</dd>
-                            </div>
-                            <div class="panel-details__row">
-                                <dt>Solicitada em</dt>
-                                <dd>{{ $metrics['requested_at_label'] }}</dd>
-                            </div>
-                            <div class="panel-details__row">
-                                <dt>Iniciada em</dt>
-                                <dd>{{ $startedAt?->format('d/m/Y H:i') ?? '—' }}</dd>
-                            </div>
-                            <div class="panel-details__row">
-                                <dt>Status</dt>
-                                <dd><x-ui.status-badge :status="$status->value" :label="$status->label()" /></dd>
-                            </div>
-                        </dl>
-                    </x-ui.card-body>
-                </x-ui.card>
+                @include('consultations.partials.parties')
 
                 <x-ui.card>
                     <x-ui.card-header>
@@ -222,7 +185,8 @@
                         </p>
                         <p class="form-text mb-0">
                             Sem interação de nenhum participante por {{ $safety['inactivity_timeout_minutes'] }} minutos,
-                            a consulta é encerrada automaticamente pelo servidor.
+                            a consulta é encerrada automaticamente pelo servidor. <strong>Sair do chat</strong>
+                            encerra o atendimento agora e interrompe a cobrança.
                         </p>
                     </div>
                     <div class="modal-footer">

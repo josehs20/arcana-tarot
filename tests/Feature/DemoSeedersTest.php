@@ -64,17 +64,17 @@ class DemoSeedersTest extends TestCase
         $this->assertSame('1', Setting::query()->where('key', 'minimum_balance_minutes')->value('value'));
         $this->assertSame('5', Setting::query()->where('key', 'consultation_inactivity_timeout_minutes')->value('value'));
         $this->assertSame('90', Setting::query()->where('key', 'consultation_reconnection_tolerance_seconds')->value('value'));
-        $this->assertSame(2, TarotDeck::query()->count());
-        $this->assertSame(114, TarotCard::query()->count());
+        $this->assertSame(5, TarotDeck::query()->count());
+        $this->assertSame(284, TarotCard::query()->count());
         $this->assertSame(5, Wallet::query()->count());
         $this->assertSame(7, Payment::query()->count());
         $this->assertSame(5, Payment::query()->where('status', PaymentStatus::Confirmed->value)->count());
         $this->assertSame(1, Payment::query()->where('status', PaymentStatus::Pending->value)->count());
         $this->assertSame(1, Payment::query()->where('status', PaymentStatus::Expired->value)->count());
-        $this->assertSame(4, Consultation::query()->count());
-        $this->assertSame(9, ConsultationMessage::query()->count());
+        $this->assertSame(2, Consultation::query()->count());
+        $this->assertSame(6, ConsultationMessage::query()->count());
         $this->assertSame(2, CommissionLedgerEntry::query()->count());
-        $this->assertSame(25, CreditLedgerEntry::query()->count());
+        $this->assertSame(19, CreditLedgerEntry::query()->count());
     }
 
     public function test_demo_accounts_can_authenticate_with_the_documented_local_password(): void
@@ -144,10 +144,12 @@ class DemoSeedersTest extends TestCase
             $marina->attendantProfile->priceForModality('text'),
         );
 
+        // Íris fica online, mas sem atendimento ativo: o seeder não abre
+        // consulta em nome de uma conta que não está logada no site.
         $irisProfile = $iris->attendantProfile->load('activeConsultation');
         $this->assertSame(AttendantAvailability::Online, $irisProfile->availability);
-        $this->assertNotNull($irisProfile->activeConsultation);
-        $this->assertSame('busy', $irisProfile->publicStatus());
+        $this->assertNull($irisProfile->activeConsultation);
+        $this->assertSame('online', $irisProfile->publicStatus());
 
         // O saldo mínimo agora depende do preço do atendente: usamos o preço
         // demonstrativo da modalidade mais barata como referência.
@@ -157,15 +159,43 @@ class DemoSeedersTest extends TestCase
         $free = DemoData::user(DemoData::CLIENTS['free']['email']);
         $withoutBalance = DemoData::user(DemoData::CLIENTS['no_balance']['email']);
         $withHistory = DemoData::user(DemoData::CLIENTS['history']['email']);
-        $withPending = DemoData::user(DemoData::CLIENTS['pending']['email']);
-        $withActive = DemoData::user(DemoData::CLIENTS['active']['email']);
 
         $this->assertGreaterThanOrEqual($minimum, $free->wallet->balance_cents);
         $this->assertSame(0, $withoutBalance->wallet->balance_cents);
         $this->assertLessThan($minimum, $withoutBalance->wallet->balance_cents);
         $this->assertTrue($withHistory->clientConsultations()->where('status', ConsultationStatus::Ended->value)->exists());
-        $this->assertTrue($withPending->clientConsultations()->where('status', ConsultationStatus::Requested->value)->exists());
-        $this->assertTrue($withActive->clientConsultations()->where('status', ConsultationStatus::Active->value)->exists());
+
+        $this->assertSame(0, Consultation::query()->whereIn('status', ConsultationStatus::openValues())->count());
+    }
+
+    /**
+     * Regressão: nenhuma conta semeada é chamada ao logar.
+     *
+     * O seeder não abre solicitação nem consulta ativa, então o feed do painel
+     * (polling do modal, da sirene e da chamada) volta vazio para todos.
+     */
+    public function test_seeded_demo_accounts_are_not_called_by_open_consultations(): void
+    {
+        $this->seed();
+
+        $emails = [
+            DemoData::ATTENDANTS['marina']['email'],
+            DemoData::ATTENDANTS['iris']['email'],
+            DemoData::CLIENTS['free']['email'],
+            DemoData::CLIENTS['history']['email'],
+            DemoData::CLIENTS['no_balance']['email'],
+            DemoData::CLIENTS['pending']['email'],
+            DemoData::CLIENTS['active']['email'],
+        ];
+
+        foreach ($emails as $email) {
+            $response = $this->actingAs(DemoData::user($email))
+                ->getJson(route('panel.events'))
+                ->assertOk();
+
+            $response->assertJsonPath('requests', []);
+            $response->assertJsonPath('consultation', null);
+        }
     }
 
     public function test_attendant_applications_cover_all_review_states_without_creating_accounts(): void
@@ -237,11 +267,32 @@ class DemoSeedersTest extends TestCase
     {
         $this->seed();
 
-        $this->assertSame(2, TarotDeck::query()->count());
-        $this->assertSame(78, TarotCard::query()->whereHas('deck', fn ($query) => $query->where('slug', 'tarot-de-marseille'))->count());
-        $this->assertSame(36, TarotCard::query()->whereHas('deck', fn ($query) => $query->where('slug', 'lenormand'))->count());
+        $expectedCardsPerDeck = [
+            'tarot-de-marseille' => 78,
+            'lenormand' => 36,
+            'rider-waite-smith' => 78,
+            'baralho-de-52-cartas' => 52,
+            'baralho-espanhol' => 40,
+        ];
 
-        $assetDirectories = ['tarot-de-marseille' => 'marseille', 'lenormand' => 'lenormand'];
+        $assetDirectories = [
+            'tarot-de-marseille' => 'marseille',
+            'lenormand' => 'lenormand',
+            'rider-waite-smith' => 'rider-waite',
+            'baralho-de-52-cartas' => 'baralho-52',
+            'baralho-espanhol' => 'baralho-espanhol',
+        ];
+
+        $this->assertSame(count($expectedCardsPerDeck), TarotDeck::query()->count());
+        $this->assertSame(array_sum($expectedCardsPerDeck), TarotCard::query()->count());
+
+        foreach ($expectedCardsPerDeck as $deckSlug => $expectedCards) {
+            $this->assertSame(
+                $expectedCards,
+                TarotCard::query()->whereHas('deck', fn ($query) => $query->where('slug', $deckSlug))->count(),
+                'Contagem de cartas divergente no baralho '.$deckSlug,
+            );
+        }
 
         foreach (TarotDeck::query()->with('cards')->get() as $deck) {
             foreach ($deck->cards as $card) {
@@ -338,37 +389,19 @@ class DemoSeedersTest extends TestCase
         $this->assertSame(ConsultationEndReason::OutOfCredits, $outOfCredits->ended_reason);
         $this->assertSame(1, $outOfCredits->billed_minutes);
 
-        $active = DemoData::user(DemoData::CLIENTS['active']['email'])
-            ->clientConsultations()
-            ->where('status', ConsultationStatus::Active->value)
-            ->sole();
-
-        $this->assertNotNull($active->started_at);
-        $this->assertNull($active->ended_at);
-        $this->assertSame(6, $active->billed_minutes);
-        $this->assertSame(DemoData::user(DemoData::ATTENDANTS['iris']['email'])->id, $active->attendant_id);
-
-        $requested = DemoData::user(DemoData::CLIENTS['pending']['email'])
-            ->clientConsultations()
-            ->where('status', ConsultationStatus::Requested->value)
-            ->sole();
-
-        $this->assertNull($requested->started_at);
-        $this->assertNull($requested->ended_at);
-        $this->assertSame(0, $requested->messages()->count());
+        /*
+         * O seeder não cria solicitações pendentes nem consultas ativas: o
+         * atendimento é sempre iniciado pelo cliente autenticado no site.
+         */
+        $this->assertSame(0, Consultation::query()->whereIn('status', ConsultationStatus::openValues())->count());
 
         foreach (User::query()->where('role', UserRole::Client->value)->get() as $client) {
-            $this->assertLessThanOrEqual(1, $client->clientConsultations()->whereIn('status', ConsultationStatus::openValues())->count());
+            $this->assertSame(0, $client->clientConsultations()->whereIn('status', ConsultationStatus::openValues())->count());
         }
 
-        $this->assertSame(1, Consultation::query()
-            ->where('attendant_id', DemoData::user(DemoData::ATTENDANTS['iris']['email'])->id)
-            ->where('status', ConsultationStatus::Active->value)
-            ->count());
-
-        $this->assertSame(9, ConsultationMessage::query()->count());
-        $this->assertSame(0, ConsultationMessage::query()->where('consultation_id', $requested->id)->count());
-        $this->assertSame(2, ConsultationMessage::query()->where('type', MessageType::TarotCard->value)->count());
+        $this->assertSame(2, Consultation::query()->where('status', ConsultationStatus::Ended->value)->count());
+        $this->assertSame(6, ConsultationMessage::query()->count());
+        $this->assertSame(1, ConsultationMessage::query()->where('type', MessageType::TarotCard->value)->count());
 
         foreach (ConsultationMessage::query()->with('consultation', 'tarotCard')->get() as $message) {
             $consultation = $message->consultation;

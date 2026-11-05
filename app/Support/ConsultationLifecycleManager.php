@@ -42,6 +42,14 @@ final class ConsultationLifecycleManager
         private readonly ConsultationSafety $safety,
     ) {}
 
+    /**
+     * Cria a solicitação do cliente para o atendente escolhido.
+     *
+     * O saldo mínimo (`preço do atendente × minimum_balance_minutes`) é exigido
+     * já aqui: sem essa checagem o pedido de um cliente sem créditos chegava ao
+     * painel do atendente e só falhava quando ele tentava aceitar. O aceite
+     * repete a validação, porque o saldo pode ser gasto nesse intervalo.
+     */
     public function request(
         User $client,
         User $attendant,
@@ -103,6 +111,40 @@ final class ConsultationLifecycleManager
                 ]);
             }
 
+            /*
+             * Preço sempre vem do perfil do atendente, nunca do navegador. Sem
+             * preço configurado a modalidade já foi barrada acima; a checagem
+             * aqui evita que um valor nulo zere o saldo mínimo exigido.
+             */
+            $pricePerMinuteCents = $profile->priceForModality($modality);
+
+            if ($pricePerMinuteCents === null) {
+                throw ValidationException::withMessages([
+                    'modality' => 'O preço desta modalidade ainda não foi configurado para este atendente.',
+                ]);
+            }
+
+            $minimumCents = $this->pricing->minimumBalanceCentsFor($pricePerMinuteCents);
+            $wallet = Wallet::query()
+                ->where('user_id', $lockedClient->getKey())
+                ->lockForUpdate()
+                ->first();
+            $balanceCents = (int) ($wallet?->balance_cents ?? 0);
+
+            /*
+             * A solicitação só existe se o primeiro bloco de minutos já pode ser
+             * pago. Assim o pedido nunca chega ao atendente sem crédito — nem
+             * fica preso na fila até expirar.
+             */
+            if ($balanceCents < $minimumCents) {
+                throw ValidationException::withMessages([
+                    'consultation' => 'Saldo insuficiente para solicitar este atendimento: você tem '
+                        .$this->formatCents($balanceCents).' e o mínimo é de '.$this->formatCents($minimumCents)
+                        .' ('.$this->pricing->minimumBalanceMinutes().' minuto(s) a '
+                        .$this->formatCents($pricePerMinuteCents).' por minuto). Compre créditos para continuar.',
+                ]);
+            }
+
             $consultation = new Consultation([
                 'client_id' => $lockedClient->getKey(),
                 'attendant_id' => $lockedAttendant->getKey(),
@@ -121,6 +163,9 @@ final class ConsultationLifecycleManager
                 'status' => ConsultationStatus::Requested->value,
                 'attendant_id' => $lockedAttendant->getKey(),
                 'modality' => $modality->value,
+                'price_per_minute_cents' => $pricePerMinuteCents,
+                'minimum_balance_cents' => $minimumCents,
+                'client_balance_cents' => $balanceCents,
             ]);
 
             return $consultation;
@@ -647,7 +692,7 @@ final class ConsultationLifecycleManager
                 continue;
             }
 
-            $result = $this->interrupt($consultation, ConsultationEndReason::Inactivity);
+            $result = $this->interruptIfInactive($consultation);
 
             if ($result->status === ConsultationStatus::Interrupted) {
                 $interrupted++;
@@ -655,6 +700,31 @@ final class ConsultationLifecycleManager
         }
 
         return $interrupted;
+    }
+
+    /**
+     * Rede de segurança do agendador.
+     *
+     * O comando `consultations:interrupt-disconnected` é a rotina oficial, mas
+     * depende de um scheduler vivo. Quando o prazo de inatividade vence e o
+     * usuário ainda tem a tela aberta (batimento) ou a abre de novo, a própria
+     * requisição finaliza a consulta — assim ninguém continua "em atendimento"
+     * no banco só porque o cron atrasou ou não está rodando.
+     */
+    public function interruptIfInactive(Consultation $consultation): Consultation
+    {
+        if (! $consultation->isActive()) {
+            return $consultation;
+        }
+
+        $reference = $consultation->last_activity_at ?? $consultation->started_at;
+        $cutoff = now()->subSeconds($this->safety->interruptionThresholdSeconds());
+
+        if ($reference !== null && $reference->greaterThan($cutoff)) {
+            return $consultation;
+        }
+
+        return $this->interrupt($consultation, ConsultationEndReason::Inactivity);
     }
 
     /**

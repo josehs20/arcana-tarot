@@ -20,7 +20,7 @@ compartilhada, quatro deles não têm equivalente:
 | Servidor WebSocket (`laravel/reverb`) | serviço `reverb` + `php artisan reverb:start` | **não existe** processo persistente | sem canal `user.{id}` e `consultation.{id}` |
 | Worker de fila | serviço `queue` (`queue:work redis`) | **não existe** | jobs só rodam quando o cron chama `queue:work` |
 | Redis (fila/cache) | serviço `redis:7` | **não existe** | fila, cache e sessão precisam do MySQL |
-| Scheduler | cron na máquina de operação | existe, via painel | precisa de duas entradas de cron |
+| Scheduler | cron na máquina de operação | existe, via painel | precisa de duas entradas de cron; o encerramento por inatividade também roda na requisição (§6.1) |
 | Nginx/PHP-FPM próprios | serviços `nginx` + `app` | gerenciados pelo provedor | document root aponta para `public/` |
 | TLS | proxy do desenvolvedor | termina no proxy do provedor | `X-Forwarded-*` e cookies `secure` |
 | Versão do PHP | fixada pela imagem `php:8.4-fpm-alpine` | **escolhida no painel** (MultiPHP) | precisa ser **8.4** — mínimo 8.4.1 (§1.1) |
@@ -130,6 +130,11 @@ Atividade, presença e cobrança continuam com seus caminhos explícitos:
 Essa separação é o que impede que "manter a aba aberta" vire atividade (e
 impeça o encerramento por inatividade) ou que uma leitura de 2 s gere lançamento
 financeiro. O teste `tests/Feature/RealtimePollingTest.php` fixa esse contrato.
+
+O batimento de presença não conta como atividade, mas passou a ser também o
+ponto onde o prazo de inatividade é conferido (§6.1): quando ele vence, a
+requisição de presença encerra a consulta e liquida os minutos uma única vez —
+continua não sendo polling de leitura.
 
 ---
 
@@ -329,7 +334,12 @@ Por que cada uma existe:
   `consultations:charge-minutes` e `consultations:close-stale-calls`;
 - `queue:work --stop-when-empty` drena a fila `database` e encerra sozinho —
   `--max-time=50` impede que um job trave e seja morto no meio do minuto
-  seguinte, `--tries=3` evita job envenenado em loop.
+  seguinte, `--tries=3` evita job envenenado em loop;
+- o mutex do `withoutOverlapping` vale **10 minutos** (`routes/console.php`), não
+  as 24 h do padrão: se o provedor matar o processo por `max_execution_time`, a
+  rotina volta no minuto seguinte em vez de ficar bloqueada pelo dia inteiro. A
+  não duplicação de dinheiro não depende do mutex e sim da chave idempotente por
+  minuto em `ConsultationBillingManager`.
 
 Sem a segunda linha, as notificações e demais jobs enfileirados **não executam**:
 o agendador enfileira e nada consome. É a falha silenciosa mais provável nesta
@@ -343,16 +353,60 @@ php artisan schedule:list       # confirma as tarefas registradas
 Para checar se o cron está vivo, compare `storage/logs/queue.log` com o relógio
 ou rode `SELECT COUNT(*) FROM jobs;` — fila que só cresce significa cron parado.
 
+### 6.1 Rede de segurança: o encerramento por inatividade não depende do cron
+
+`schedule:run` continua sendo a rotina oficial, mas a interrupção por inatividade
+passou a valer também dentro da requisição
+(`ConsultationLifecycleManager::interruptIfInactive`):
+
+- **onde roda**: no batimento de presença (`consultations.presence.heartbeat`, a
+  cada `CONSULTATION_ACTIVITY_PING_SECONDS`, 20 s no perfil do Hostoo) e na
+  abertura da tela de atendimento (`GET` do workspace);
+- **quando dispara**: vencido `CONSULTATION_INACTIVITY_TIMEOUT_MINUTES` +
+  `CONSULTATION_RECONNECTION_TOLERANCE_SECONDS` sem interação real
+  (`consultations.last_activity_at`). Leitura de polling não renova o relógio;
+- **o que muda no banco**: status `interrupted`, motivo `inactivity`, sessões de
+  presença fechadas, comissão provisionada e **minutos vencidos liquidados** na
+  mesma transação (`settleBilling` → `billDue`, idempotente por minuto) — o valor
+  final não fica pendente esperando cron;
+- **o que a tela faz**: o `POST` volta `200` com `status`/`ended_reason` finais e
+  `session_token: null`; o JS encerra os temporizadores e navega para o
+  histórico. Não existe mais o `422` de "consulta não está ativa";
+- **infraestrutura**: só MySQL. Os limites vêm de `settings` (a mesma tela
+  `/admin/atendimento/seguranca`), lidos a cada requisição — nada de Redis, de
+  Reverb ou de worker. O evento `ConsultationStateChanged` gerado ali fica na
+  tabela `jobs` até o `queue:work` do cron drenar; o encerramento já está gravado
+  e o outro lado o vê pelo polling.
+
+O que **continua** exclusivo do cron (e por isso as duas linhas do §6 seguem
+obrigatórias): cobrar o minuto *durante* a consulta
+(`consultations:charge-minutes` — o polling não escreve em dinheiro, invariante
+do §7), expirar solicitações e fechar chamadas sem resposta. Sem
+`charge-minutes`, o cliente não é interrompido por saldo insuficiente no meio da
+conversa; o encerramento cobra os minutos que o saldo cobre e os restantes ficam
+registrados como não pagos na auditoria (`consultation.interrupted`), sem saldo
+negativo.
+
+A rede de segurança precisa de **um participante** voltando à tela: quem está
+com o chat aberto derruba a consulta vencida do outro lado, e quem reabre a tela
+derruba a própria. Se as duas partes fecharem o navegador e o cron estiver
+parado, ninguém dispara a verificação e a consulta fica `active` no banco —
+motivo pelo qual o `schedule:run` continua sendo o mecanismo oficial, monitorado
+(§12, checklist de lançamento).
+
 ---
 
 ## 7. Integridade financeira no polling
 
 Três garantias sustentam a cobrança neste modo:
 
-1. **Leitura não cobra.** Nenhum endpoint de polling escreve em
-   `credit_ledger_entries`, `consultations.billed_minutes` ou
-   `consultation_presence_sessions`. Só `consultations:charge-minutes` (cron) e
-   as ações explícitas do usuário alteram dinheiro.
+1. **Leitura não cobra.** Enquanto a consulta está ativa, nenhum endpoint de
+   polling escreve em `credit_ledger_entries`, `consultations.billed_minutes` ou
+   `consultation_presence_sessions`. Só `consultations:charge-minutes` (cron), as
+   ações explícitas do usuário e o **encerramento** alteram dinheiro — e o
+   encerramento por inatividade é uma transição de estado única, decidida pelo
+   servidor no batimento ou na abertura da tela (`interruptIfInactive`), que
+   liquida os minutos vencidos uma vez (`billDue` é idempotente por minuto).
 2. **Cobrança é idempotente por janela.** `ConsultationBillingManager` roda em
    `DB::transaction`, trava a consulta com `lockForUpdate`, avança o cursor
    `billed_minutes` e grava cada débito com a chave
@@ -360,12 +414,18 @@ Três garantias sustentam a cobrança neste modo:
    duplicam lançamento.
 3. **Inatividade não é renovada pelo polling.** O encerramento automático olha
    `last_activity_at`, atualizado só por interação real. Uma aba aberta no
-   Hostoo não segura a consulta indefinidamente.
+   Hostoo não segura a consulta indefinidamente — e, por causa do §6.1, quem a
+   encerra pode ser o próprio batimento, sem depender do cron.
 
 O teste `tests/Feature/RealtimePollingTest.php` cobre os três pontos: após uma
 sequência de leituras, `last_activity_at`, `client_last_activity_at`,
 `attendant_last_activity_at`, `billed_minutes`, as sessões de presença e o
-extrato de créditos permanecem exatamente iguais.
+extrato de créditos permanecem exatamente iguais. Já
+`tests/Feature/ConsultationSafetyTest.php`
+(`test_inactivity_interrupt_works_on_the_hostoo_profile_without_a_scheduler`)
+exercita o §6.1 com os drivers do Hostoo — `cache`/`queue` no banco,
+`broadcasting=log` e nenhum scheduler — e confirma consulta interrompida,
+minutos liquidados e evento parado em `jobs`.
 
 ---
 
@@ -378,6 +438,7 @@ extrato de créditos permanecem exatamente iguais.
 | Sem TURN próprio | chamada de áudio/vídeo pode falhar em 4G/NAT simétrico | configurar TURN em `CONSULTATION_ICE_SERVERS` |
 | Fila depende do cron | atraso de até 60 s em jobs | `--max-time=50` mantém o ciclo curto |
 | Cron compartilhado pode ser limitado | job interrompido no meio | jobs idempotentes + `--tries=3` + `queue:failed` monitorado |
+| Cron parado ou não cadastrado | sem cobrança por minuto, sem expiração de pedidos, sem fim por saldo insuficiente | o encerramento por inatividade continua valendo na requisição (§6.1) e liquida os minutos vencidos; cadastrar as duas linhas do §6 e monitorar `jobs` |
 | Sem Redis | cache/sessão no MySQL | volume baixo no MVP; índices já criados pelas migrations |
 | `storage:link` manual | imagens de tarô não aparecem | rodar `php artisan storage:link` no deploy |
 | Log em arquivo limitado | rotação pelo provedor | `LOG_LEVEL=warning`, revisar `storage/logs` |
@@ -434,8 +495,8 @@ continuam existindo.
    php artisan arcana:import-tarot-catalog
    ```
 
-   O comando lê `database/seeders/assets/tarot` (114 JPEGs, ~6 MB), cria os
-   dois baralhos e suas cartas pelo `slug` e copia as frentes para
+   O comando lê `database/seeders/assets/tarot` (284 JPEGs, ~13 MB), cria os
+   cinco baralhos e suas cartas pelo `slug` e copia as frentes para
    `storage/app/private/tarot/cards/`. É idempotente: pode ser reexecutado para
    reparar arquivos ausentes, nunca sobrescreve imagem enviada pela
    administração e não depende de `db:seed` — que permanece bloqueado em
@@ -560,6 +621,15 @@ O comportamento deste modo é coberto por
 | convidado | redirecionado ao login |
 | leitura repetida | `last_activity_at`, `client_last_activity_at`, `attendant_last_activity_at`, `billed_minutes`, presença e créditos inalterados |
 | abuso | 429 ao exceder o limite configurado |
+
+O encerramento por inatividade sem cron tem testes próprios em
+`tests/Feature/ConsultationSafetyTest.php`:
+
+| Cenário | Garantia |
+|---|---|
+| batimento depois do prazo (5 min + 90 s) | consulta `interrupted`/`inactivity`, sessão fechada, auditoria única |
+| reabrir a tela depois do prazo | redireciona ao histórico com aviso, sem abrir o chat |
+| perfil do Hostoo (`cache`/`queue` no banco, `broadcasting=log`, sem scheduler) | interrupção e liquidação dos minutos na própria requisição; evento apenas enfileirado em `jobs` |
 
 Execução (o host de desenvolvimento não tem `pdo_sqlite`, então use o container):
 

@@ -98,6 +98,35 @@ class RealtimePollingTest extends TestCase
         $response->assertJsonPath('consultation.status', ConsultationStatus::Active->value);
     }
 
+    public function test_panel_feed_stops_returning_a_request_after_it_is_rejected(): void
+    {
+        $client = User::factory()->create();
+        $attendant = User::factory()->attendant()->create();
+
+        $consultation = Consultation::factory()->create([
+            'client_id' => $client->id,
+            'attendant_id' => $attendant->id,
+            'status' => ConsultationStatus::Requested->value,
+        ]);
+
+        $this->actingAs($client)->getJson(route('panel.events'))
+            ->assertOk()
+            ->assertJsonPath('consultation.id', $consultation->id);
+
+        $this->actingAs($attendant)
+            ->patchJson(route('attendant.consultations.reject', $consultation))
+            ->assertOk();
+
+        /*
+         * Sem consulta aberta o feed devolve `consultation: null`; é esse sinal
+         * que faz a tela do cliente recarregar e mostrar a solicitação
+         * recusada em vez de continuar esperando o aceite.
+         */
+        $this->actingAs($client)->getJson(route('panel.events'))
+            ->assertOk()
+            ->assertJsonPath('consultation', null);
+    }
+
     public function test_message_feed_returns_only_messages_after_the_cursor(): void
     {
         [$client, $attendant, $consultation] = $this->conversation();

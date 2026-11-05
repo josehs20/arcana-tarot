@@ -16,6 +16,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -95,9 +96,13 @@ class ConsultationMessageController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        $message = $messages->sendCard($consultation, $user, $request->integer('tarot_card_id'));
+        $sent = $messages->sendCards($consultation, $user, $request->cardIds());
 
-        return $this->respondWithMessage($consultation, $message, 'Carta enviada.');
+        $notice = $sent->count() === 1
+            ? 'Carta enviada.'
+            : $sent->count().' cartas enviadas.';
+
+        return $this->respondWithMessages($consultation, $sent, $notice);
     }
 
     public function image(
@@ -142,5 +147,33 @@ class ConsultationMessageController extends Controller
         return redirect()
             ->to(route('consultations.show', $consultation).'#chat')
             ->with('success', $message);
+    }
+
+    /**
+     * Resposta do envio de cartas: o JSON traz a lista completa de mensagens
+     * criadas (o chat insere todas de uma vez) e mantém a chave `message` com a
+     * primeira delas para clientes antigos.
+     *
+     * @param  Collection<int, ConsultationMessage>  $sent
+     */
+    private function respondWithMessages(
+        Consultation $consultation,
+        Collection $sent,
+        string $notice,
+    ): RedirectResponse|JsonResponse {
+        if (request()->wantsJson()) {
+            $messages = $sent
+                ->map(fn (ConsultationMessage $message): array => ConsultationMessagePresenter::toArray($message))
+                ->values();
+
+            return response()->json([
+                'messages' => $messages,
+                'message' => $messages->first(),
+                'consultation' => ConsultationStatePresenter::toArray($consultation->refresh()),
+                'notice' => $notice,
+            ], 201);
+        }
+
+        return $this->backToChat($consultation, $notice);
     }
 }

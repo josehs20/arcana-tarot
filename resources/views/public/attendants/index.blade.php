@@ -21,6 +21,16 @@
         <div class="container-wide">
             <h2 class="visually-hidden">Lista de atendentes</h2>
 
+            {{--
+                O botão "Solicitar" do cartão envia a solicitação sem formulário.
+                Quando o servidor recusa (saldo insuficiente, atendente ocupado,
+                consulta já aberta) o erro volta para cá — e o layout público não
+                exibe a pilha de validação por padrão (`showErrors = false`).
+            --}}
+            @if ($errors->any())
+                @include('layouts.partials.flash-messages', ['container' => 'mb-4'])
+            @endif
+
             @if ($attendants->isEmpty())
                 <x-ui.empty-state
                     icon="☾"

@@ -13,6 +13,10 @@ use App\Models\ConsultationMessage;
 use App\Models\Setting;
 use App\Models\User;
 use App\Models\Wallet;
+use App\Support\ActiveConsultationResolver;
+use App\Support\CommissionManager;
+use App\Support\ConsultationBillingManager;
+use App\Support\ConsultationLifecycleManager;
 use App\Support\CreditWalletManager;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -126,34 +130,72 @@ class ConsultationWorkspaceTest extends TestCase
             && $metrics['charged_cents'] === 600
             && $metrics['charged_label'] === 'R$ 6,00'
             && $metrics['charged_explanation'] === '2 minutos iniciados'
-            && $metrics['next_refresh_in_seconds'] === 30;
+            && $metrics['next_refresh_in_seconds'] === 30
+            // Saldo de R$ 10,00 ÷ R$ 3,00 por minuto = 3 minutos completos e
+            // nenhum minuto em cobrança pendente; faltam 30 s para o minuto
+            // corrente terminar, então o contador soma 3 min + 30 s.
+            && $metrics['available_minutes'] === 3
+            && $metrics['balance_cents'] === 1000
+            && $metrics['balance_label'] === 'R$ 10,00'
+            && $metrics['balance_explanation'] === 'Saldo da carteira · R$ 3,00 por minuto.'
+            && $metrics['remaining_seconds'] === 210
+            && $metrics['remaining_label'] === '03:30'
+            && $metrics['remaining_explanation'] === 'Saldo de R$ 10,00 ÷ R$ 3,00 por minuto.';
 
         $this->actingAs($attendant)
             ->get(route('consultations.workspace', $consultation))
             ->assertOk()
             ->assertSee('data-consultation-workspace', false)
             ->assertSee('data-metrics-url="'.route('consultations.metrics', $consultation).'"', false)
-            ->assertSee('data-consultation-timer', false)
+            // O relógio saiu do topo: o cartão mostra o dinheiro que ainda
+            // resta, já abatido o minuto em andamento.
+            ->assertDontSee('Tempo em andamento')
+            ->assertDontSee('data-consultation-timer', false)
+            ->assertSee('Saldo do cliente')
+            ->assertSee('data-metric="balance_label"', false)
+            ->assertSee('R$ 10,00')
+            ->assertSee('data-metric="balance_explanation"', false)
+            // O aviso de inatividade encerra a consulta pelo próprio servidor.
+            ->assertSee('data-end-url="'.route('consultations.end', $consultation).'"', false)
             ->assertSee('data-metric="charged_label"', false)
             ->assertSee('R$ 6,00')
+            // O indicador de saldo virou contagem regressiva: o servidor manda
+            // os segundos e o navegador apenas decrementa entre as buscas.
+            ->assertSee('Tempo restante')
+            ->assertSee('data-consultation-countdown', false)
+            ->assertSee('data-remaining-seconds="210"', false)
+            ->assertSee('data-metric="remaining_explanation"', false)
+            ->assertSee('03:30')
+            // Preço por minuto e o cartão de detalhes saíram da tela: os
+            // números oficiais ficam nos indicadores do topo.
+            ->assertDontSee('Preço por minuto')
+            ->assertDontSee('data-metric="available_label"', false)
             ->assertSee('data-metric="commission_label"', false)
+            ->assertSee('data-metric="commission_explanation"', false)
+            ->assertSee('R$ 1,80')
+            ->assertSee('estimativa até o encerramento.')
             ->assertSee('30%')
             ->assertViewHas(
                 'metrics',
                 fn (array $metrics): bool => $expectedMetrics($metrics)
-                    && $metrics['commission_cents'] === 0
-                    && $metrics['commission_label'] === 'R$ 0,00'
+                    && $metrics['commission_cents'] === 180
+                    && $metrics['commission_label'] === 'R$ 1,80'
+                    && $metrics['commission_is_estimate'] === true
+                    && $metrics['commission_explanation'] === '30% de R$ 6,00 — estimativa até o encerramento.'
                     && $metrics['commission_rate_label'] === '30%',
             );
 
         $this->actingAs($client)
             ->get(route('consultations.workspace', $consultation))
             ->assertOk()
+            ->assertSee('Saldo restante')
             ->assertViewHas(
                 'metrics',
                 fn (array $metrics): bool => $expectedMetrics($metrics)
                     && $metrics['commission_cents'] === null
-                    && $metrics['commission_label'] === null,
+                    && $metrics['commission_label'] === null
+                    && $metrics['commission_is_estimate'] === false
+                    && $metrics['commission_explanation'] === null,
             );
     }
 
@@ -221,22 +263,222 @@ class ConsultationWorkspaceTest extends TestCase
             ->assertJsonPath('price_per_minute_cents', 300)
             ->assertJsonPath('charged_cents', 600)
             ->assertJsonPath('charged_label', 'R$ 6,00')
-            ->assertJsonPath('commission_cents', 0)
-            ->assertJsonPath('commission_label', 'R$ 0,00')
+            ->assertJsonPath('commission_cents', 180)
+            ->assertJsonPath('commission_label', 'R$ 1,80')
+            ->assertJsonPath('commission_is_estimate', true)
             ->assertJsonPath('commission_rate_label', '30%')
             ->assertJsonPath('elapsed_seconds', 45)
-            ->assertJsonPath('next_refresh_in_seconds', 15);
+            ->assertJsonPath('next_refresh_in_seconds', 15)
+            ->assertJsonPath('available_minutes', 3)
+            ->assertJsonPath('balance_cents', 1000)
+            ->assertJsonPath('balance_label', 'R$ 10,00')
+            ->assertJsonPath('remaining_seconds', 195)
+            ->assertJsonPath('remaining_label', '03:15')
+            ->assertJsonPath('remaining_explanation', 'Saldo de R$ 10,00 ÷ R$ 3,00 por minuto.');
 
         $this->actingAs($client)
             ->getJson(route('consultations.metrics', $consultation))
             ->assertOk()
             ->assertJsonPath('charged_cents', 600)
             ->assertJsonPath('commission_cents', null)
+            ->assertJsonPath('commission_is_estimate', false)
             ->assertJsonPath('commission_rate_label', null);
 
         $this->actingAs(User::factory()->create())
             ->getJson(route('consultations.metrics', $consultation))
             ->assertForbidden();
+    }
+
+    /**
+     * Entre o limite do minuto e a execução de `consultations:charge-minutes`
+     * o cartão não pode ficar parado: o minuto já iniciado é projetado pelo
+     * servidor e marcado como cobrança em processamento.
+     */
+    public function test_workspace_projects_the_minute_in_progress_until_the_charge_command_runs(): void
+    {
+        Carbon::setTestNow('2026-02-11 12:00:00');
+
+        $client = $this->clientWithBalance(1000);
+        $attendant = $this->onlineAttendant();
+        $consultation = $this->activeConsultation($client, $attendant);
+
+        // Primeiro minuto cobrado no aceite; 90 s andados já iniciam o segundo
+        // e o comando agendado ainda não registrou o débito.
+        $consultation->forceFill([
+            'billed_minutes' => 1,
+            'started_at' => now()->subSeconds(90),
+        ])->save();
+
+        $this->actingAs($attendant)
+            ->getJson(route('consultations.metrics', $consultation))
+            ->assertOk()
+            ->assertJsonPath('elapsed_minutes', 2)
+            ->assertJsonPath('billed_minutes', 1)
+            ->assertJsonPath('pending_minutes', 1)
+            ->assertJsonPath('charge_pending', true)
+            ->assertJsonPath('charged_cents', 600)
+            ->assertJsonPath('charged_explanation', '2 minutos iniciados · cobrança em processamento')
+            ->assertJsonPath('remaining_seconds', 150)
+            ->assertJsonPath('remaining_label', '02:30')
+            // O saldo exibido já desconta o minuto que está sendo cobrado:
+            // R$ 10,00 na carteira − R$ 3,00 do minuto em andamento.
+            ->assertJsonPath('balance_cents', 700)
+            ->assertJsonPath('balance_label', 'R$ 7,00')
+            ->assertJsonPath('balance_explanation', 'Já descontado o minuto em andamento · R$ 3,00 por minuto.');
+
+        $this->actingAs($attendant)
+            ->get(route('consultations.workspace', $consultation))
+            ->assertOk()
+            ->assertSee('data-metric="charged_explanation"', false)
+            ->assertSee('2 minutos iniciados · cobrança em processamento')
+            ->assertSee('data-metric="balance_label"', false)
+            ->assertSee('R$ 7,00')
+            ->assertSee('Já descontado o minuto em andamento · R$ 3,00 por minuto.');
+    }
+
+    /**
+     * Sem saldo para o próximo minuto o servidor não vai debitar: a projeção
+     * para no que já foi cobrado e o contador chega a zero.
+     */
+    public function test_remaining_time_never_promises_a_minute_the_wallet_cannot_pay(): void
+    {
+        Carbon::setTestNow('2026-02-11 12:00:00');
+
+        $client = User::factory()->create();
+        Wallet::factory()->create(['user_id' => $client->id, 'balance_cents' => 0]);
+        $attendant = $this->onlineAttendant();
+        $consultation = $this->activeConsultation($client, $attendant);
+
+        $consultation->forceFill(['started_at' => now()->subSeconds(150)])->save();
+
+        $this->actingAs($attendant)
+            ->getJson(route('consultations.metrics', $consultation))
+            ->assertOk()
+            ->assertJsonPath('available_minutes', 0)
+            ->assertJsonPath('remaining_seconds', 0)
+            ->assertJsonPath('remaining_label', '00:00')
+            ->assertJsonPath('pending_minutes', 0)
+            ->assertJsonPath('charge_pending', false)
+            ->assertJsonPath('charged_cents', 600)
+            ->assertJsonPath('charged_explanation', '2 minutos iniciados');
+
+        $this->actingAs($attendant)
+            ->get(route('consultations.workspace', $consultation))
+            ->assertOk()
+            ->assertSee('data-remaining-seconds="0"', false)
+            ->assertSee('00:00');
+    }
+
+    /**
+     * O contador não pode voltar para o começo do minuto quando a cobrança
+     * ainda não foi registrada: entre uma busca e outra ele precisa continuar
+     * descendo. Era esse salto que prendia o cartão em torno de dois minutos e
+     * impedia a contagem de chegar a zero.
+     */
+    public function test_remaining_time_keeps_counting_down_across_the_minute_boundary(): void
+    {
+        Carbon::setTestNow('2026-02-11 12:00:00');
+
+        // R$ 7,00 na carteira: sobra do saldo depois do primeiro débito.
+        $client = $this->clientWithBalance(700);
+        $attendant = $this->onlineAttendant();
+        $consultation = $this->activeConsultation($client, $attendant);
+
+        $consultation->forceFill([
+            'billed_minutes' => 1,
+            'started_at' => now()->subSeconds(58),
+        ])->save();
+
+        $before = $this->actingAs($attendant)
+            ->getJson(route('consultations.metrics', $consultation))
+            ->assertOk()
+            ->assertJsonPath('pending_minutes', 0)
+            ->json();
+
+        // 62 s: o segundo minuto começou e o comando de cobrança ainda não
+        // registrou o débito, então o minuto segue projetado.
+        Carbon::setTestNow(now()->addSeconds(4));
+
+        $after = $this->actingAs($attendant)
+            ->getJson(route('consultations.metrics', $consultation))
+            ->assertOk()
+            ->assertJsonPath('pending_minutes', 1)
+            ->json();
+
+        $this->assertSame(122, $before['remaining_seconds']);
+        $this->assertSame(118, $after['remaining_seconds']);
+        $this->assertLessThan($before['remaining_seconds'], $after['remaining_seconds']);
+
+        // O saldo do cartão também desconta o minuto em andamento: R$ 7,00 −
+        // R$ 3,00 = R$ 4,00, o mesmo valor que a cobrança vai registrar.
+        $this->assertSame(400, $after['balance_cents']);
+    }
+
+    public function test_attendant_commission_accumulates_during_the_consultation_and_yields_to_the_ledger(): void
+    {
+        Carbon::setTestNow('2026-02-11 12:00:00');
+
+        $client = $this->clientWithBalance(1000);
+        $attendant = $this->onlineAttendant();
+
+        $consultation = Consultation::factory()->active()->create([
+            'client_id' => $client->id,
+            'attendant_id' => $attendant->id,
+            'price_per_minute_cents' => 300,
+            'credit_unit_price_cents' => 150,
+            'billed_minutes' => 0,
+            'commission_rate_bps' => 3000,
+            'started_at' => now()->subSeconds(90),
+        ]);
+
+        // Antes do primeiro débito não há base no razão, mas o valor já é uma
+        // estimativa — e ela acompanha a projeção do minuto em andamento.
+        $this->actingAs($attendant)
+            ->getJson(route('consultations.metrics', $consultation))
+            ->assertOk()
+            ->assertJsonPath('billed_minutes', 0)
+            ->assertJsonPath('pending_minutes', 2)
+            ->assertJsonPath('charged_cents', 600)
+            ->assertJsonPath('commission_cents', 180)
+            ->assertJsonPath('commission_is_estimate', true);
+
+        // Minutos cobrados viram comissão na hora: o razão só recebe o
+        // lançamento no encerramento, o cartão não pode ficar zerado até lá.
+        app(ConsultationBillingManager::class)->billDue($consultation, now());
+
+        $this->actingAs($attendant)
+            ->getJson(route('consultations.metrics', $consultation))
+            ->assertOk()
+            ->assertJsonPath('billed_minutes', 2)
+            ->assertJsonPath('charged_cents', 600)
+            ->assertJsonPath('commission_cents', 180)
+            ->assertJsonPath('commission_label', 'R$ 1,80')
+            ->assertJsonPath('commission_is_estimate', true);
+
+        // No encerramento o valor do razão assume e passa a ser oficial.
+        app(ConsultationLifecycleManager::class)->end($attendant, $consultation->fresh());
+
+        $this->actingAs($attendant)
+            ->getJson(route('consultations.metrics', $consultation->fresh()))
+            ->assertOk()
+            ->assertJsonPath('commission_cents', 180)
+            ->assertJsonPath('commission_is_estimate', false)
+            ->assertJsonPath('commission_explanation', '30% — valor consolidado no encerramento.');
+
+        // Estorno total continua prevalecendo sobre qualquer estimativa.
+        $commissions = app(CommissionManager::class);
+        $accrual = $commissions->accrualFor($consultation->fresh());
+
+        $this->assertNotNull($accrual);
+
+        $commissions->reverse($accrual, User::factory()->admin()->create(), 'Estorno solicitado no teste.');
+
+        $this->actingAs($attendant)
+            ->getJson(route('consultations.metrics', $consultation->fresh()))
+            ->assertOk()
+            ->assertJsonPath('commission_cents', 0)
+            ->assertJsonPath('commission_label', 'R$ 0,00')
+            ->assertJsonPath('commission_is_estimate', false);
     }
 
     public function test_pending_requests_endpoint_lists_the_queue_in_arrival_order_with_decision_urls(): void
@@ -613,5 +855,131 @@ class ConsultationWorkspaceTest extends TestCase
             ->assertOk()
             ->assertDontSee('data-user-channel', false)
             ->assertDontSee('data-request-modal', false);
+    }
+
+    /**
+     * Aviso "Voltar ao atendimento": quem está com uma consulta ativa e navega
+     * para fora do workspace continua vendo o caminho de volta (e o lembrete de
+     * que os créditos seguem sendo descontados).
+     */
+    public function test_active_consultation_banner_follows_the_user_outside_the_workspace(): void
+    {
+        $client = $this->clientWithBalance(1000);
+        $attendant = $this->onlineAttendant();
+        $consultation = $this->activeConsultation($client, $attendant);
+        $attendantName = $attendant->attendantProfile->display_name;
+
+        /**
+         * O aviso é montado com trechos de texto separados por quebras de linha
+         * no template, então cada parte é verificada isoladamente.
+         *
+         * @param  list<string>  $expectedLines
+         */
+        $assertBanner = function (TestResponse $response, array $expectedLines) use ($consultation): void {
+            $response
+                ->assertOk()
+                ->assertSee('data-consultation-return', false)
+                ->assertSee('data-consultation-return-link', false)
+                ->assertSee('href="'.route('consultations.workspace', $consultation).'"', false)
+                ->assertSee('Atendimento #'.$consultation->id.' em andamento')
+                ->assertSee('Voltar ao atendimento');
+
+            foreach ($expectedLines as $expectedLine) {
+                $response->assertSee($expectedLine);
+            }
+        };
+
+        $assertBanner($this->actingAs($client)->get(route('client.dashboard')), [
+            'Você está em atendimento com',
+            $attendantName,
+            'Os créditos continuam sendo descontados até o encerramento.',
+        ]);
+
+        $assertBanner($this->actingAs($client)->get(route('client.history')), [
+            'Você está em atendimento com',
+            $attendantName,
+        ]);
+
+        $assertBanner($this->actingAs($client)->get(route('consultations.show', $consultation)), [
+            'Você está em atendimento com',
+            $attendantName,
+        ]);
+
+        $assertBanner($this->actingAs($attendant)->get(route('attendant.history')), [
+            'Você está atendendo',
+            $client->name,
+        ]);
+
+        // Dentro do workspace o aviso é redundante: a própria tela já avisa.
+        $this->actingAs($client)
+            ->get(route('consultations.workspace', $consultation))
+            ->assertOk()
+            ->assertDontSee('data-consultation-return', false);
+
+        $this->actingAs($attendant)
+            ->get(route('consultations.workspace', $consultation))
+            ->assertOk()
+            ->assertDontSee('data-consultation-return', false);
+
+        // Administração e terceiros nunca veem o aviso de uma consulta alheia.
+        $this->actingAs(User::factory()->admin()->create())
+            ->get(route('consultations.show', $consultation))
+            ->assertOk()
+            ->assertDontSee('data-consultation-return', false);
+
+        $this->actingAs(User::factory()->create())
+            ->get(route('client.dashboard'))
+            ->assertOk()
+            ->assertDontSee('data-consultation-return', false);
+
+        // Encerrada a consulta, o aviso desaparece de todas as telas.
+        $consultation->forceFill([
+            'status' => ConsultationStatus::Ended->value,
+            'ended_at' => now(),
+        ])->save();
+
+        $this->actingAs($client)
+            ->get(route('client.dashboard'))
+            ->assertOk()
+            ->assertDontSee('data-consultation-return', false);
+
+        $this->actingAs($attendant)
+            ->get(route('attendant.history'))
+            ->assertOk()
+            ->assertDontSee('data-consultation-return', false);
+    }
+
+    /**
+     * O resolvedor é a única fonte do aviso: consulta do próprio usuário, ativa,
+     * nunca para administração, contas desativadas ou terceiros.
+     */
+    public function test_active_consultation_resolver_only_returns_the_users_own_active_consultation(): void
+    {
+        $resolver = app(ActiveConsultationResolver::class);
+        $client = $this->clientWithBalance(1000);
+        $attendant = $this->onlineAttendant();
+
+        $this->assertNull($resolver->forUser(null));
+        $this->assertNull($resolver->forUser($client));
+
+        $consultation = $this->activeConsultation($client, $attendant);
+
+        $this->assertSame($consultation->id, $resolver->forUser($client)?->getKey());
+        $this->assertSame($consultation->id, $resolver->forUser($attendant)?->getKey());
+
+        $this->assertNull($resolver->forUser(User::factory()->create()));
+        $this->assertNull($resolver->forUser(User::factory()->admin()->create()));
+
+        $client->forceFill(['is_active' => false])->save();
+        $this->assertNull($resolver->forUser($client->fresh()));
+
+        $client->forceFill(['is_active' => true])->save();
+        $consultation->forceFill([
+            'status' => ConsultationStatus::Ended->value,
+            'ended_at' => now(),
+        ])->save();
+
+        $this->assertNull($resolver->forUser($client->fresh()));
+        $this->assertNull($resolver->forUser($attendant->fresh()));
     }
 }

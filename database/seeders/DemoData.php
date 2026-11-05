@@ -53,27 +53,39 @@ final class DemoData
     ];
 
     /**
+     * Contas de cliente da demonstração.
+     *
+     * As chaves `pending` e `active` são nomes herdados dos cenários antigos de
+     * solicitação pendente e consulta ativa. O seeder não abre atendimentos em
+     * nome de contas que não estão logadas, então essas duas contas hoje têm
+     * apenas créditos: elas servem para o cliente iniciar a consulta pelo site.
+     *
      * @var array<string, array{email: string, name: string}>
      */
     public const CLIENTS = [
         'free' => [
             'email' => 'cliente.livre@arcana.local',
+            'birth_date' => '1995-04-18',
             'name' => 'Clara Freitas',
         ],
         'no_balance' => [
             'email' => 'cliente.sem-saldo@arcana.local',
+            'birth_date' => '1988-11-02',
             'name' => 'Caio Nogueira',
         ],
         'history' => [
             'email' => 'cliente.historico@arcana.local',
+            'birth_date' => '1991-07-25',
             'name' => 'Helena Prado',
         ],
         'pending' => [
             'email' => 'cliente.pendente@arcana.local',
+            'birth_date' => '1979-01-30',
             'name' => 'Paulo Mendes',
         ],
         'active' => [
             'email' => 'cliente.ativo@arcana.local',
+            'birth_date' => '2000-09-14',
             'name' => 'Alice Ribeiro',
         ],
     ];

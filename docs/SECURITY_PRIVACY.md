@@ -134,25 +134,32 @@ duplicidade por e-mail/status.
   precisa de validação de compatibilidade antes de produção.
 
 
-## 3. Acesso excepcional a mensagens
+## 3. Acesso administrativo ao histórico de mensagens
 
-O MVP **não** oferece ao administrador uma tela para ler conversas. A visão
-administrativa de consulta exibe somente participantes, status, horários, taxa
-e valores; o chat retorna 403 para admin.
+O ambiente de atendimento continua fechado aos participantes: `viewMessages` e
+`workspace` negam o acesso do administrador ao chat ao vivo. O painel ganhou uma
+leitura administrativa separada, a habilidade `viewAdminHistory`, com estas
+salvaguardas:
 
-Se uma necessidade legítima futura exigir acesso excepcional (por exemplo,
-investigação de fraude ou ordem legal), o processo deve ser aprovado antes da
-implementação e incluir, no mínimo:
+1. exclusiva de administrador ativo, em rota própria (`/admin/consultas/{id}`),
+   sem reutilizar a rota dos participantes;
+2. dado pessoal mascarado na exibição (CPF, CNPJ, e-mail, telefone, link e
+   contato disfarçado), inclusive em mensagens gravadas antes do bloqueio;
+3. auditoria de cada abertura (`consultation_history.viewed`), de cada imagem de
+   carta lida (`consultation_history.card_image_viewed`) e de cada revisão de
+   ocorrência (`consultation_privacy_incident.reviewed`), com IP;
+4. somente leitura: não existe exportação em massa nem download do histórico;
+5. o texto original de uma tentativa bloqueada fica cifrado no banco e não é
+   exibido em nenhuma tela.
 
-1. base legal e finalidade documentadas;
-2. autorização de dois responsáveis ou do encarregado de dados;
-3. escopo limitado a uma consulta e janela de tempo;
-4. justificativa registrada;
-5. acesso somente leitura, sem exportação em massa;
-6. auditoria imutável com quem acessou, quando, por quê e o que foi exibido;
-7. revisão e revogação do acesso depois do uso.
+O bloqueio de contato externo no envio, o registro das tentativas e a tela de
+monitoramento estão em
+[MONITORAMENTO_E_PROTECAO_CHAT.md](MONITORAMENTO_E_PROTECAO_CHAT.md).
 
-Não implementar esse fluxo como um simples `if admin` em rota existente.
+Ainda pendente de decisão do responsável de dados: base legal e finalidade
+documentadas, justificativa por acesso e dupla autorização para casos
+excepcionais. Não implementar esse fluxo como um simples `if admin` em rota
+existente.
 
 ## 4. Proposta de retenção e minimização
 

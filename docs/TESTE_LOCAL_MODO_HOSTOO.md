@@ -157,7 +157,7 @@ docker compose run --rm --no-deps app php artisan arcana:create-attendant \
   --publish --env=hostoo-local
 ```
 
-Saída conferida do catálogo: `2 baralho(s)` e `114 carta(s)`.
+Saída conferida do catálogo: `5 baralho(s)` e `284 carta(s)`.
 
 > As imagens do catálogo vivem em `storage/app/private` e são compartilhadas entre
 > os perfis (no Hostoo elas fazem parte do pacote enviado à conta). O importador
@@ -238,7 +238,7 @@ Lembre que `public/build` está no `.gitignore`: no Hostoo ele precisa ser gerad
 | 4 | Teto de leituras | contar requisições em 1 min | ≤ 90/min no chat, ≤ 60/min no painel |
 | 5 | Sessão no MySQL | duas abas logadas; `SELECT COUNT(*) FROM sessions` | cresce; sobrevive a recarregar e a reiniciar o servidor |
 | 6 | Fila | criar uma solicitação e ver `SELECT COUNT(*) FROM jobs` | > 0 logo após o evento e 0 depois do `queue:work` |
-| 7 | Dependência do cron | parar o laço do §6.1 e criar outra solicitação | avisos **param** de chegar (prova de que nada anda sem cron) |
+| 7 | Dependência do cron | parar o laço do §6.1 e criar outra solicitação | avisos **param** de chegar (prova de que nada anda sem cron); o chat continua lendo estado por polling e, vencido o prazo de inatividade, a consulta é interrompida pelo próprio batimento |
 | 8 | Agendador | `php artisan schedule:list --env=hostoo-local` | quatro comandos `everyMinute` |
 | 9 | Cobrança por minuto | consulta ativa + `consultations:charge-minutes` | saldo/créditos caem 1 minuto por execução; sem saldo, a consulta encerra |
 | 10 | Expiração de pedido | abrir pedido e rodar `consultations:expire-requests` após o TTL | pedido sai da fila do atendente (TTL 10 min) |
@@ -248,6 +248,8 @@ Lembre que `public/build` está no `.gitignore`: no Hostoo ele precisa ser gerad
 | 14 | Healthcheck | `curl -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/up` | `200` |
 | 15 | Assets compilados | view-source da home | `/build/assets/...`, nada de `localhost:5173` |
 | 16 | Versão do PHP | `docker compose ... app php -v` (no Hostoo, `php -v` no cron do painel) | `8.4.x`; abaixo de `8.4.1` o app responde 500 com `Composer detected issues` |
+| 17 | Encerramento por inatividade **sem cron** | parar o laço do §6.1, abrir o chat, deixar sem interação por `CONSULTATION_INACTIVITY_TIMEOUT_MINUTES` + `CONSULTATION_RECONNECTION_TOLERANCE_SECONDS` (5 min + 90 s no `.env` de exemplo) | o batimento seguinte devolve `status: interrupted` / `ended_reason: inactivity`; a tela volta ao histórico, `billed_minutes` é liquidado e a sessão fica com `disconnect_reason=inactivity` |
+| 18 | Mesmo encerramento reabrindo a tela | com a consulta vencida, recarregar `/consultations/{id}/atendimento` | redireciona para a tela da consulta com o aviso de atendimento encerrado, em vez de abrir o chat |
 
 Os quatro comandos do cron podem ser disparados na mão, sem esperar o minuto:
 

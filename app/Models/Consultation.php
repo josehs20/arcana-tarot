@@ -134,9 +134,42 @@ class Consultation extends Model
         return $this->hasMany(CommissionLedgerEntry::class);
     }
 
+    /**
+     * Tentativas de envio de dado pessoal/contato externo bloqueadas no chat.
+     */
+    public function privacyIncidents(): HasMany
+    {
+        return $this->hasMany(ConsultationPrivacyIncident::class);
+    }
+
     public function call(): HasOne
     {
         return $this->hasOne(ConsultationCall::class);
+    }
+
+    /**
+     * Depoimento do cliente sobre este atendimento (no máximo um).
+     */
+    public function testimonial(): HasOne
+    {
+        return $this->hasOne(ConsultationTestimonial::class);
+    }
+
+    /**
+     * Indica se o cliente ainda pode registrar um depoimento.
+     *
+     * Só atendimentos concluídos dão esse direito: consultas interrompidas,
+     * canceladas, recusadas ou expiradas nunca são avaliadas.
+     */
+    public function allowsTestimonial(): bool
+    {
+        if ($this->status !== ConsultationStatus::Ended) {
+            return false;
+        }
+
+        return $this->relationLoaded('testimonial')
+            ? $this->testimonial === null
+            : ! $this->testimonial()->exists();
     }
 
     public function isActive(): bool

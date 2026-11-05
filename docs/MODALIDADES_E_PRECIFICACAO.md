@@ -90,7 +90,9 @@ infraestrutura. O servidor revalida no pedido e no aceite:
 2. o atendente oferece a modalidade escolhida;
 3. a modalidade está habilitada em `config/consultation.php`;
 4. existe preço configurado para o par atendente/modalidade;
-5. o cliente possui o saldo mínimo do preço do atendente (no aceite).
+5. o cliente possui o saldo mínimo do preço do atendente — exigido já na
+   solicitação e revalidado no aceite (sem crédito o pedido não chega ao
+   atendente).
 
 ## 4. Chamadas de áudio e vídeo (WebRTC)
 

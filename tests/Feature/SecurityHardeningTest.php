@@ -9,6 +9,7 @@ use App\Models\ConsultationMessage;
 use App\Models\TarotCard;
 use App\Models\TarotDeck;
 use App\Models\User;
+use App\Models\Wallet;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -72,6 +73,10 @@ class SecurityHardeningTest extends TestCase
     public function test_consultation_request_creation_is_rate_limited_per_client(): void
     {
         $client = User::factory()->create();
+        Wallet::factory()->create([
+            'user_id' => $client->id,
+            'balance_cents' => 10_000,
+        ]);
         $attendant = User::factory()->attendant()->create();
         AttendantProfile::factory()->online()->for($attendant)->create();
 

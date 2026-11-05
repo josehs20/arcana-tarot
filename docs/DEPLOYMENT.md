@@ -152,8 +152,9 @@ seeder. O catálogo real é instalado pelo comando operacional:
 docker compose exec app php artisan arcana:import-tarot-catalog
 ```
 
-- lê o acervo versionado em `database/seeders/assets/tarot` (114 JPEGs em domínio
-  público) e grava as frentes em `storage/app/private/tarot/cards/`;
+- lê o acervo versionado em `database/seeders/assets/tarot` (284 JPEGs — digitalizações
+  em domínio público e frentes originais do Arcana) e grava as frentes em
+  `storage/app/private/tarot/cards/`;
 - cria/atualiza baralhos e cartas pelo `slug`, sem duplicar em reexecuções;
 - nunca sobrescreve imagem enviada pela administração;
 - aceita `--source=/caminho/do/acervo` quando as imagens forem enviadas fora do
@@ -203,12 +204,19 @@ candidatura. Detalhes em `docs/ATTENDANT_ONBOARDING.md`.
 
 ## 7. Worker, Reverb, scheduler e assets
 
-No Compose, `queue` e `reverb` já sobem como serviços. Verifique:
+No Compose, `queue`, `reverb` e `scheduler` já sobem como serviços. Verifique:
 
 ```bash
-docker compose ps queue reverb
-docker compose logs -f queue reverb
+docker compose ps queue reverb scheduler
+docker compose logs -f queue reverb scheduler
 ```
+
+O `scheduler` roda `php artisan schedule:work` em um único loop e é o que executa
+as rotinas `everyMinute` (expiração de solicitações, cobrança por minuto,
+interrupção por inatividade e fechamento de chamadas órfãs). Sem ele, uma
+consulta inativa continua `active` no banco — a tela até encerra pelo próprio
+batimento, mas a rotina periódica não acontece. Não escale esse serviço: com mais
+de uma réplica, use `schedule:run` no cron do host para não duplicar execuções.
 
 Produção deve gerenciar esses processos com supervisor/systemd/orquestrador de
 containers, com reinício automático, limite de memória e logs persistentes. Não

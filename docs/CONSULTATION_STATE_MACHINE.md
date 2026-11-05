@@ -63,10 +63,10 @@ concluída é **idempotente** (retorna a consulta sem duplicar auditoria).
 
 | Ação | Ator | De | Para | `ended_reason` | Regras |
 |---|---|---|---|---|---|
-| Solicitar | Cliente ativo | — | `requested` | — | Atendente ativo, publicado, `online` e sem consulta ativa; cliente sem consulta aberta; preço configurado. |
-| Aceitar | Atendente escalado | `requested` | `active` | — | Atendente ativo/publicado/online; cliente ativo; ambos sem outra consulta aberta/ativa; saldo ≥ mínimo; grava snapshots de comissão e tarifa; **cobra o primeiro minuto**. |
+| Solicitar | Cliente ativo | — | `requested` | — | Atendente ativo, publicado, `online` e sem consulta ativa; cliente sem consulta aberta; preço configurado; **saldo ≥ mínimo (`preço do minuto × minimum_balance_minutes`) já na solicitação** — sem crédito o pedido nem é criado, então nunca chega ao atendente. |
+| Aceitar | Atendente escalado | `requested` | `active` | — | Atendente ativo/publicado/online; cliente ativo; ambos sem outra consulta aberta/ativa; saldo ≥ mínimo (revalidado, pois pode ter sido gasto depois do pedido); grava snapshots de comissão e tarifa; **cobra o primeiro minuto**. |
 | Aceitar novamente | Atendente escalado | `active` | `active` | — | No-op com mensagem de já estar em andamento. |
-| Recusar | Atendente escalado | `requested` | `rejected` | `rejected` | — |
+| Recusar | Atendente escalado | `requested` | `rejected` | `rejected` | Encerra o chat sem cobrança: a tela do cliente passa a mostrar o estado final e ele pode solicitar outro atendimento. |
 | Recusar novamente | Atendente escalado | `rejected` | `rejected` | `rejected` | No-op. |
 | Cancelar | Cliente dono | `requested` | `cancelled` | `cancelled` | Consulta ativa **não** pode ser cancelada; deve ser encerrada. |
 | Cancelar novamente | Cliente dono | `cancelled` | `cancelled` | `cancelled` | No-op. |
@@ -144,6 +144,13 @@ e um atendente não acessa o cancelamento do cliente.
 
 - `attendant_profiles.availability` persiste somente `online`/`offline`;
   `busy` é sempre derivado de consulta `active` e nunca gravado.
+- No **login** (senha ou Google) de um usuário com papel `attendant`,
+  `AttendantAvailabilityManager::signIn()` coloca o perfil em `online`
+  (auditoria `attendant.availability_changed` com motivo `login`) e renova
+  `last_seen_at`. Perfil ausente, perfil não publicado ou consulta `active`
+  mantêm a disponibilidade como está — o login nunca falha por causa do
+  status. Perfil que já está `online` apenas renova a presença, sem auditoria
+  duplicada.
 - `attendant_profiles.last_seen_at` é atualizado por `markSeen()` quando o
   atendente fica online, abre o painel, visualiza a consulta ou aceita a
   solicitação. A escrita é limitada por `last_seen_touch_seconds` para evitar
@@ -177,7 +184,7 @@ Agendadas em `routes/console.php` com `everyMinute()` e
 | Comando | Efeito |
 |---|---|
 | `consultations:expire-requests` | Expira `requested` cujo `created_at` passou de `CONSULTATION_REQUEST_TTL_MINUTES` (padrão 10). |
-| `consultations:interrupt-disconnected` | Interrompe `active` sem nenhuma interação por `consultation_inactivity_timeout_minutes` + `consultation_reconnection_tolerance_seconds`; liquida os minutos vencidos e audita motivo `inactivity`. O nome do comando é histórico: a decisão usa atividade, não presença. |
+| `consultations:interrupt-disconnected` | Interrompe `active` sem nenhuma interação por `consultation_inactivity_timeout_minutes` + `consultation_reconnection_tolerance_seconds`; liquida os minutos vencidos e audita motivo `inactivity`. O nome do comando é histórico: a decisão usa atividade, não presença. A mesma verificação (`ConsultationLifecycleManager::interruptIfInactive`) roda no batimento de presença e na abertura do workspace, para que a consulta não fique `active` quando o scheduler está parado. |
 | `consultations:charge-minutes` | Cobra os minutos iniciados ainda não lançados de consultas `active`; encerra como `out_of_credits` quando não há saldo para o próximo minuto. |
 
 Todos são idempotentes e reportam no console quantas consultas mudaram de
@@ -254,7 +261,7 @@ para devolver 403 na borda.
 | `inactivity_timeout_minutes` | `settings` (admin), fallback `CONSULTATION_INACTIVITY_TIMEOUT_MINUTES` | 5 | Tempo sem interação antes da interrupção automática. |
 | `reconnection_tolerance_seconds` | `settings` (admin), fallback `CONSULTATION_RECONNECTION_TOLERANCE_SECONDS` | 90 | Margem extra para quedas breves de rede. |
 | `activity_ping_seconds` | `CONSULTATION_ACTIVITY_PING_SECONDS` | 20 | Intervalo do batimento de presença do navegador. |
-| `navigation_warning_seconds` | `CONSULTATION_NAVIGATION_WARNING_SECONDS` | 20 | Aviso local após tempo sem interação. |
+| `navigation_warning_seconds` | `CONSULTATION_NAVIGATION_WARNING_SECONDS` | 60 | Aviso local após tempo sem interação. |
 | `message_max_length` | `CONSULTATION_MESSAGE_MAX_LENGTH` | 2000 | Tamanho máximo do texto de uma mensagem. |
 | `message_page_size` | `CONSULTATION_MESSAGE_PAGE_SIZE` | 25 | Mensagens por página do histórico. |
 | `message_rate_per_minute` | `CONSULTATION_MESSAGE_RATE_PER_MINUTE` | 30 | Limite de mensagens por participante/consulta. |
@@ -306,8 +313,11 @@ Ações registradas em `audit_logs` (metadados sem conteúdo sensível):
 
 - solicitação válida, bloqueio de duplicidade aberta e atendente offline/não
   publicado;
-- aceite, snapshots, idempotência e saldo mínimo;
-- recusa e cancelamento idempotentes;
+- bloqueio da solicitação sem saldo mínimo (nada é criado e o evento de aviso ao
+  atendente não é disparado);
+- aceite, snapshots, idempotência e saldo mínimo revalidado no aceite;
+- recusa e cancelamento idempotentes, com o cliente vendo o chat encerrado e
+  liberado para nova solicitação;
 - matriz de autorização (participantes, terceiros e admin);
 - encerramento pelo cliente e liberação de presença;
 - expiração e interrupção automáticas com relógio controlado;

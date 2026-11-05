@@ -120,13 +120,55 @@
                 <div class="mb-3">{{ $messages->links() }}</div>
             @endif
 
-            <ol
-                class="chat-timeline @if ($messages->isEmpty()) d-none @endif"
-                data-chat-timeline
-                aria-label="Histórico da conversa"
-            >
-                @foreach ($messages as $message)
+            {{--
+                A linha do tempo tem rolagem própria e altura limitada: o campo de
+                digitação e o seletor de cartas continuam visíveis enquanto o
+                histórico cresce. `data-chat-stream` é lido pelo chat.js, que só
+                acompanha o fim da conversa quando o participante já está lá.
+            --}}
+            <div class="chat-stream" data-chat-stream>
+                <ol
+                    class="chat-timeline @if ($messages->isEmpty()) d-none @endif"
+                    data-chat-timeline
+                    aria-label="Histórico da conversa"
+                >
+                @php
+                    /*
+                     * Agrupamento do histórico por lote de envio.
+                     *
+                     * As cartas de um mesmo envio nascem como mensagens
+                     * separadas (auditoria e horário próprios), mas ler uma
+                     * tiragem de três cartas como três mensagens espaça o
+                     * conteúdo e enche a conversa de rolagem. O `batch_id` vem
+                     * do servidor; mensagens de texto não têm lote e seguem
+                     * uma por bloco.
+                     */
+                    $timelineGroups = [];
+
+                    foreach ($messages as $timelineMessage) {
+                        $lastGroup = count($timelineGroups) - 1;
+
+                        if (
+                            $timelineMessage->batch_id !== null
+                            && $lastGroup >= 0
+                            && $timelineGroups[$lastGroup]['batch_id'] === $timelineMessage->batch_id
+                        ) {
+                            $timelineGroups[$lastGroup]['messages'][] = $timelineMessage;
+
+                            continue;
+                        }
+
+                        $timelineGroups[] = [
+                            'batch_id' => $timelineMessage->batch_id,
+                            'messages' => [$timelineMessage],
+                        ];
+                    }
+                @endphp
+
+                @foreach ($timelineGroups as $group)
                     @php
+                        $message = $group['messages'][0];
+                        $groupSize = count($group['messages']);
                         $mine = $message->sender_id === auth()->id();
                         $isCard = $message->type === \App\Enums\MessageType::TarotCard;
                         $senderName = $message->sender_id === $consultation->attendant_id
@@ -135,37 +177,61 @@
                         $senderRole = $message->sender_id === $consultation->client_id ? 'Cliente' : 'Atendente';
                     @endphp
 
-                    <li class="chat-message{{ $mine ? ' chat-message--mine' : '' }}" data-message-id="{{ $message->id }}">
+                    <li
+                        class="chat-message{{ $mine ? ' chat-message--mine' : '' }}"
+                        @if ($group['batch_id'] !== null) data-message-batch="{{ $group['batch_id'] }}" @endif
+                        @if (! $isCard) data-message-id="{{ $message->id }}" @endif
+                    >
                         <div class="chat-message__meta">
                             <span class="chat-message__sender">
                                 {{ $mine ? 'Você' : $senderName }} · {{ $senderRole }}
                             </span>
+                            @if ($isCard && $groupSize > 1)
+                                <span class="chat-message__badge" data-chat-cards-count>
+                                    {{ $groupSize }} cartas
+                                </span>
+                            @endif
                             <time datetime="{{ $message->created_at?->toIso8601String() }}">
                                 {{ $message->created_at?->format('d/m/Y H:i') ?? '—' }}
                             </time>
                         </div>
 
                         @if ($isCard)
-                            <figure class="chat-card mb-0">
-                                @if (filled($message->image_path))
-                                    <a href="{{ route('consultations.messages.image', [$consultation, $message]) }}"
-                                       target="_blank" rel="noopener">
-                                        <img src="{{ route('consultations.messages.image', [$consultation, $message]) }}"
-                                             alt="Carta {{ $message->card_name }}"
-                                             loading="lazy">
-                                    </a>
-                                @endif
-                                <figcaption>
-                                    <strong>{{ $message->card_name }}</strong>
-                                    <span>{{ $message->deck_name }}</span>
-                                </figcaption>
-                            </figure>
+                            {{-- Um envio, um bloco: as cartas ficam lado a lado. --}}
+                            <div class="chat-cards" data-chat-cards>
+                                @foreach ($group['messages'] as $cardMessage)
+                                    <figure
+                                        class="chat-card mb-0"
+                                        data-message-id="{{ $cardMessage->id }}"
+                                    >
+                                        @if (filled($cardMessage->image_path))
+                                            <a href="{{ route('consultations.messages.image', [$consultation, $cardMessage]) }}"
+                                               target="_blank" rel="noopener">
+                                                <img src="{{ route('consultations.messages.image', [$consultation, $cardMessage]) }}"
+                                                     alt="Carta {{ $cardMessage->card_name }}"
+                                                     loading="lazy">
+                                            </a>
+                                        @endif
+                                        <figcaption>
+                                            <strong>{{ $cardMessage->card_name }}</strong>
+                                            <span>{{ $cardMessage->deck_name }}</span>
+                                        </figcaption>
+                                    </figure>
+                                @endforeach
+                            </div>
                         @else
                             <p class="chat-message__body">{{ $message->body }}</p>
                         @endif
                     </li>
                 @endforeach
-            </ol>
+                </ol>
+
+                {{-- Aparece quando chega mensagem nova com a rolagem fora do fim. --}}
+                <button type="button" class="chat-jump d-none" data-chat-jump>
+                    <span data-chat-jump-label>Novas mensagens</span>
+                    <span class="chat-jump__icon" aria-hidden="true">↓</span>
+                </button>
+            </div>
 
             @if ($messages->hasPages())
                 <div class="mt-3">{{ $messages->links() }}</div>
@@ -206,6 +272,10 @@
                         </span>
                         <x-ui.button type="submit" variant="primary" size="sm">Enviar mensagem</x-ui.button>
                     </div>
+                    <p class="form-text mb-0" data-chat-privacy-hint>
+                        Não envie CPF, CNPJ, e-mail, telefone ou links externos: o servidor bloqueia a
+                        mensagem e registra a tentativa para auditoria.
+                    </p>
                 </form>
             @elseif ($chatStatus->isFinal())
                 <p class="form-text mt-4 mb-0">
@@ -232,7 +302,7 @@
                             aria-expanded="false"
                             aria-controls="chat-card-picker"
                         >
-                            Enviar uma carta
+                            Enviar cartas
                         </button>
 
                         <div class="collapse mt-3" id="chat-card-picker">
@@ -240,17 +310,48 @@
                                 method="POST"
                                 action="{{ route('consultations.cards.store', $consultation) }}"
                                 data-chat-form="card"
+                                data-chat-card-form
+                                data-max-cards="{{ \App\Support\ConsultationMessageManager::MAX_CARDS_PER_SEND }}"
                             >
                                 @csrf
-                                <fieldset class="chat-card-picker">
-                                    <legend class="form-label">Carta do Tarot</legend>
+                                <fieldset class="chat-card-picker" data-chat-card-picker>
+                                    <legend class="form-label">Cartas do Tarot</legend>
 
+                                    @error('tarot_card_ids')
+                                        <div class="invalid-feedback d-block mb-2">{{ $message }}</div>
+                                    @enderror
+                                    @error('tarot_card_ids.*')
+                                        <div class="invalid-feedback d-block mb-2">{{ $message }}</div>
+                                    @enderror
                                     @error('tarot_card_id')
                                         <div class="invalid-feedback d-block mb-2">{{ $message }}</div>
                                     @enderror
+                                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-2">
+                                    <span class="form-text mt-0">
+                                        A imagem será preservada no histórico mesmo se a carta for alterada depois.
+                                    </span>
+                                    <x-ui.button type="submit" variant="secondary" size="sm">Enviar selecionadas</x-ui.button>
+                                </div>
+                                    {{-- Baralho primeiro, cartas depois: a grade é filtrada no navegador. --}}
+                                    <div class="chat-card-picker__toolbar">
+                                        <label class="chat-card-picker__deck-select">
+                                            <span class="chat-card-picker__deck-select-label">Baralho</span>
+                                            <select class="form-select form-select-sm" data-chat-deck-filter>
+                                                <option value="">Todos os baralhos</option>
+                                                @foreach ($cardDecks as $deck)
+                                                    <option value="{{ $deck->id }}">
+                                                        {{ $deck->name }} ({{ $deck->cards->count() }})
+                                                    </option>
+                                                @endforeach
+                                            </select>
+                                        </label>
+                                        <p class="chat-card-picker__counter" data-chat-card-counter aria-live="polite">
+                                            0 de {{ \App\Support\ConsultationMessageManager::MAX_CARDS_PER_SEND }} cartas selecionadas
+                                        </p>
+                                    </div>
 
                                     @foreach ($cardDecks as $deck)
-                                        <div class="chat-card-picker__deck">
+                                        <div class="chat-card-picker__deck" data-chat-deck="{{ $deck->id }}">
                                             <p class="chat-card-picker__deck-name">
                                                 {{ $deck->name }}
                                                 <span class="chat-card-picker__deck-count">
@@ -261,39 +362,91 @@
 
                                             <div class="chat-card-picker__grid">
                                                 @foreach ($deck->cards as $card)
-                                                    <div class="chat-card-picker__option">
+                                                    @php
+                                                        $cardImageUrl = route('tarot.cards.image', $card);
+                                                        $cardChecked = in_array((string) $card->id, array_map('strval', (array) old('tarot_card_ids', [])), true)
+                                                            || (string) old('tarot_card_id') === (string) $card->id;
+                                                    @endphp
+
+                                                    <div
+                                                        class="chat-card-picker__option"
+                                                        data-chat-card-option
+                                                        data-card-name="{{ $card->name }}"
+                                                        data-card-deck="{{ $deck->name }}"
+                                                        data-card-image="{{ $cardImageUrl }}"
+                                                    >
                                                         <input
                                                             class="chat-card-picker__input"
-                                                            type="radio"
+                                                            type="checkbox"
                                                             id="tarot-card-{{ $card->id }}"
-                                                            name="tarot_card_id"
+                                                            name="tarot_card_ids[]"
                                                             value="{{ $card->id }}"
-                                                            required
-                                                            @checked((string) old('tarot_card_id') === (string) $card->id)
+                                                            data-chat-card-input
+                                                            @checked($cardChecked)
                                                         >
                                                         <label class="chat-card-picker__label" for="tarot-card-{{ $card->id }}">
                                                             <img
                                                                 class="chat-card-picker__image"
-                                                                src="{{ route('tarot.cards.image', $card) }}"
+                                                                src="{{ $cardImageUrl }}"
                                                                 alt="Carta {{ $card->name }}"
                                                                 loading="lazy"
                                                             >
                                                             <span class="chat-card-picker__name">{{ $card->name }}</span>
+                                                            <span class="chat-card-picker__check" aria-hidden="true">✓</span>
                                                         </label>
+                                                        <button
+                                                            type="button"
+                                                            class="chat-card-picker__zoom"
+                                                            data-chat-card-preview
+                                                            aria-label="Ampliar a carta {{ $card->name }}"
+                                                        >
+                                                            <x-ui.icon name="external-link" width="13" height="13" />
+                                                        </button>
                                                     </div>
                                                 @endforeach
                                             </div>
                                         </div>
                                     @endforeach
                                 </fieldset>
-                                <div class="invalid-feedback d-block d-none" data-chat-error role="alert"></div>
-                                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-2">
-                                    <span class="form-text mt-0">
-                                        A imagem será preservada no histórico mesmo se a carta for alterada depois.
-                                    </span>
-                                    <x-ui.button type="submit" variant="secondary" size="sm">Confirmar envio</x-ui.button>
+
+                                <div class="chat-card-picker__selection d-none" data-chat-selection>
+                                    <p class="chat-card-picker__selection-title">Selecionadas</p>
+                                    <ul class="chat-card-picker__chips" data-chat-selection-list></ul>
                                 </div>
+                                <div class="invalid-feedback d-block d-none" data-chat-error role="alert"></div>
+
                             </form>
+                        </div>
+
+                        {{-- Pré-visualização ampliada antes de selecionar a carta. --}}
+                        <div
+                            class="modal fade chat-card-preview"
+                            id="chat-card-preview"
+                            tabindex="-1"
+                            aria-labelledby="chat-card-preview-title"
+                            aria-hidden="true"
+                            data-chat-card-preview-modal
+                        >
+                            <div class="modal-dialog modal-dialog-centered modal-lg">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h2 class="modal-title h5" id="chat-card-preview-title" data-chat-card-preview-title>
+                                            Carta
+                                        </h2>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                                    </div>
+                                    <div class="modal-body chat-card-preview__body">
+                                        <img class="chat-card-preview__image" src="" alt="" data-chat-card-preview-image>
+                                        <p class="form-text mb-0" data-chat-card-preview-deck></p>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-ghost" data-bs-dismiss="modal">Fechar</button>
+                                        <button type="button" class="btn btn-primary" data-chat-card-preview-select>
+                                            Selecionar carta
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     @endif
                 </div>

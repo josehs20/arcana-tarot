@@ -61,8 +61,8 @@
 
 - **Status**: Aceita
 - **Contexto**: status do atendente não pode ser manipulado pelo cliente.
-- **Decisão**: `online`/`offline` são controlados pelo atendente autenticado; `busy` é **derivado** da existência de consulta ativa e nunca escolhido manualmente.
-- **Consequências**: consistência de disponibilidade; exige cálculo/atualização confiável no servidor.
+- **Decisão**: `online`/`offline` são controlados pelo atendente autenticado; `busy` é **derivado** da existência de consulta ativa e nunca escolhido manualmente. Ao autenticar (senha ou Google), o atendente entra **online automaticamente** (`AttendantAvailabilityManager::signIn()`), respeitando as mesmas regras do painel: perfil publicado, usuário ativo e nenhuma consulta ativa.
+- **Consequências**: consistência de disponibilidade; exige cálculo/atualização confiável no servidor. O login nunca falha por causa do status: perfil ausente/não publicado ou consulta ativa mantêm a disponibilidade como está, e a transição automática é auditada com motivo `login`.
 
 ### D-009 — Uma consulta ativa por atendente (MVP)
 

@@ -33,13 +33,13 @@ final class ConsultationCardImageStorage
             || ! str_starts_with($source, $catalogPrefix)
         ) {
             throw ValidationException::withMessages([
-                'tarot_card_id' => 'Esta carta não possui uma imagem disponível para envio.',
+                'tarot_card_ids' => 'Esta carta não possui uma imagem disponível para envio.',
             ]);
         }
 
         if (! $this->disk()->exists($source)) {
             throw ValidationException::withMessages([
-                'tarot_card_id' => 'Esta carta não possui uma imagem disponível para envio.',
+                'tarot_card_ids' => 'Esta carta não possui uma imagem disponível para envio.',
             ]);
         }
 
@@ -48,7 +48,7 @@ final class ConsultationCardImageStorage
 
         if (! is_string($extension) || $extension === '') {
             throw ValidationException::withMessages([
-                'tarot_card_id' => 'A imagem desta carta não está em um formato permitido.',
+                'tarot_card_ids' => 'A imagem desta carta não está em um formato permitido.',
             ]);
         }
 

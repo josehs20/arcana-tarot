@@ -80,8 +80,9 @@ docker compose exec app php artisan arcana:create-attendant \
 
 Após criar:
 
-1. o atendente entra em `/attendant`, revisa o perfil e fica online quando
-   estiver pronto;
+1. o atendente entra em `/attendant` e fica online automaticamente ao fazer
+   login (perfil publicado e sem consulta ativa); se preferir sair do ar, use
+   **Ficar offline** no painel;
 2. o administrador ajusta a taxa em `/admin/comissoes/atendentes/{user}` se
    necessário;
 3. a comissão de cada consulta usa o snapshot do aceite;

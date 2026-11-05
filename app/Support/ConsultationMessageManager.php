@@ -8,8 +8,11 @@ use App\Models\Consultation;
 use App\Models\ConsultationMessage;
 use App\Models\TarotCard;
 use App\Models\User;
+use App\Support\Privacy\ConsultationPrivacyGuard;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -22,13 +25,27 @@ use Throwable;
  */
 final class ConsultationMessageManager
 {
+    /**
+     * Teto de cartas por envio: protege a transação, o disco de snapshots e a
+     * leitura da conversa no celular.
+     */
+    public const MAX_CARDS_PER_SEND = 10;
+
     public function __construct(
         private readonly ConsultationCardImageStorage $images,
         private readonly ConsultationActivityTracker $activity,
+        private readonly ConsultationPrivacyGuard $privacy,
     ) {}
 
     public function sendText(Consultation $consultation, User $sender, string $body): ConsultationMessage
     {
+        /*
+         * O bloqueio de dados pessoais acontece antes da transação: a ocorrência
+         * é gravada fora dela para que o rollback (disparado pelo 422) não
+         * apague o registro da tentativa.
+         */
+        $this->privacy->enforce($consultation, $sender, $body);
+
         $message = DB::transaction(function () use ($consultation, $sender, $body): ConsultationMessage {
             $locked = $this->lockMessagingConsultation($consultation, 'body');
             $this->ensureParticipant($locked, $sender);
@@ -49,11 +66,47 @@ final class ConsultationMessageManager
 
     public function sendCard(Consultation $consultation, User $sender, int $cardId): ConsultationMessage
     {
-        $snapshotPath = null;
+        return $this->sendCards($consultation, $sender, [$cardId])->first();
+    }
+
+    /**
+     * Envia várias cartas de uma vez, na ordem escolhida pelo atendente.
+     *
+     * Tudo acontece em uma única transação: ou todas as cartas são gravadas e
+     * anunciadas, ou nenhuma é. As imagens capturadas são descartadas quando a
+     * transação falha, para não deixar arquivos órfãos no disco.
+     *
+     * Todas as cartas do envio compartilham o mesmo `batch_id`: o chat desenha
+     * o lote como um bloco único, com as imagens lado a lado, em vez de uma
+     * mensagem por carta rolando a conversa.
+     *
+     * @param  list<int>  $cardIds
+     * @return Collection<int, ConsultationMessage>
+     */
+    public function sendCards(Consultation $consultation, User $sender, array $cardIds): Collection
+    {
+        $cardIds = array_values(array_unique(array_map('intval', $cardIds)));
+
+        if ($cardIds === []) {
+            throw ValidationException::withMessages([
+                'tarot_card_ids' => 'Selecione ao menos uma carta para enviar.',
+            ]);
+        }
+
+        if (count($cardIds) > self::MAX_CARDS_PER_SEND) {
+            throw ValidationException::withMessages([
+                'tarot_card_ids' => 'Envie no máximo '.self::MAX_CARDS_PER_SEND.' cartas por vez.',
+            ]);
+        }
+
+        $batchId = (string) Str::uuid();
+
+        /** @var list<string> $snapshotPaths */
+        $snapshotPaths = [];
 
         try {
-            $message = DB::transaction(function () use ($consultation, $sender, $cardId, &$snapshotPath): ConsultationMessage {
-                $locked = $this->lockMessagingConsultation($consultation, 'tarot_card_id');
+            $messages = DB::transaction(function () use ($consultation, $sender, $cardIds, $batchId, &$snapshotPaths): Collection {
+                $locked = $this->lockMessagingConsultation($consultation, 'tarot_card_ids');
                 $this->ensureParticipant($locked, $sender);
 
                 if (! $locked->isAttendant($sender)) {
@@ -62,45 +115,59 @@ final class ConsultationMessageManager
 
                 $this->activity->touchActivity($locked, $sender);
 
-                $card = TarotCard::query()
+                $cards = TarotCard::query()
                     ->with('deck')
                     ->lockForUpdate()
-                    ->find($cardId);
+                    ->whereIn('id', $cardIds)
+                    ->get()
+                    ->keyBy('id');
 
-                if ($card === null) {
-                    throw ValidationException::withMessages([
-                        'tarot_card_id' => 'A carta selecionada não está disponível.',
-                    ]);
+                $created = collect();
+
+                foreach ($cardIds as $cardId) {
+                    $card = $cards->get($cardId);
+
+                    if ($card === null) {
+                        throw ValidationException::withMessages([
+                            'tarot_card_ids' => 'Uma das cartas selecionadas não está disponível.',
+                        ]);
+                    }
+
+                    if (! $card->is_active || $card->deck === null || ! $card->deck->is_active) {
+                        throw ValidationException::withMessages([
+                            'tarot_card_ids' => 'Escolha apenas cartas ativas de baralhos ativos.',
+                        ]);
+                    }
+
+                    $snapshotPath = $this->images->snapshot($locked, $card);
+                    $snapshotPaths[] = $snapshotPath;
+
+                    $created->push(ConsultationMessage::query()->create([
+                        'consultation_id' => $locked->getKey(),
+                        'sender_id' => $sender->getKey(),
+                        'type' => MessageType::TarotCard,
+                        'batch_id' => $batchId,
+                        'body' => null,
+                        'tarot_card_id' => $card->getKey(),
+                        'deck_name' => $card->deck->name,
+                        'card_name' => $card->name,
+                        'image_path' => $snapshotPath,
+                    ]));
                 }
 
-                if (! $card->is_active || $card->deck === null || ! $card->deck->is_active) {
-                    throw ValidationException::withMessages([
-                        'tarot_card_id' => 'Escolha uma carta ativa de um baralho ativo.',
-                    ]);
-                }
-
-                $snapshotPath = $this->images->snapshot($locked, $card);
-
-                return ConsultationMessage::query()->create([
-                    'consultation_id' => $locked->getKey(),
-                    'sender_id' => $sender->getKey(),
-                    'type' => MessageType::TarotCard,
-                    'body' => null,
-                    'tarot_card_id' => $card->getKey(),
-                    'deck_name' => $card->deck->name,
-                    'card_name' => $card->name,
-                    'image_path' => $snapshotPath,
-                ]);
+                return $created;
             });
         } catch (Throwable $exception) {
-            $this->images->discardNewFile($snapshotPath);
+            foreach ($snapshotPaths as $snapshotPath) {
+                $this->images->discardNewFile($snapshotPath);
+            }
 
             throw $exception;
         }
 
-        $this->announce($message);
+        $messages->each(fn (ConsultationMessage $message) => $this->announce($message));
 
-        return $message;
+        return $messages;
     }
 
     /**

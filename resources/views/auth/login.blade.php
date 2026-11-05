@@ -44,6 +44,8 @@
         <x-ui.button type="submit" variant="primary" size="lg" block>Entrar</x-ui.button>
     </form>
 
+    <x-ui.google-auth-button />
+
     <div class="auth-card__links">
         <a href="{{ route('password.request') }}">Esqueceu a senha?</a>
         <span aria-hidden="true">·</span>

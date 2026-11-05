@@ -12,6 +12,21 @@
         : route('login');
     $availableOptions = array_values(array_filter($options, fn (array $option): bool => $option['available']));
     $defaultModality = old('modality', $availableOptions[0]['value'] ?? null);
+
+    /*
+     * Saldo do cliente e mínimo exigido para a modalidade que já vem
+     * selecionada. O servidor é quem barra a solicitação sem crédito; aqui os
+     * números só alimentam o aviso antecipado — o modal de saldo insuficiente,
+     * aberto por `consultation-modalities.js` antes do envio.
+     */
+    $signedInUser = auth()->user();
+    $clientBalanceCents = $signedInUser !== null && $signedInUser->isClient()
+        ? (int) ($signedInUser->wallet?->balance_cents ?? 0)
+        : null;
+    $defaultOption = collect($availableOptions)->firstWhere('value', $defaultModality);
+    $minimumCentsForDefault = $defaultOption === null || $defaultOption['price_cents'] === null
+        ? null
+        : $defaultOption['price_cents'] * $minimumBalanceMinutes;
 @endphp
 
 <x-layouts.public
@@ -95,6 +110,63 @@
                             </ul>
                         </x-ui.card-body>
                     </x-ui.card>
+
+                    {{--
+                        Depoimentos de atendimentos concluídos. A média e a
+                        contagem vêm apenas dos depoimentos visíveis; nomes são
+                        reduzidos a primeiro nome + inicial pelo model.
+                    --}}
+                    <x-ui.card id="depoimentos" class="card-gilded mt-4">
+                        <x-ui.card-header class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                            <h2 class="h5 mb-0">Depoimentos</h2>
+                            @if ($testimonialAverage !== null)
+                                <span class="testimonial-summary">
+                                    <span class="text-gold" aria-hidden="true">
+                                        {{ str_repeat('★', (int) round($testimonialAverage)) }}{{ str_repeat('☆', 5 - (int) round($testimonialAverage)) }}
+                                    </span>
+                                    <span class="ms-2">
+                                        {{ number_format($testimonialAverage, 1, ',', '.') }} de 5 ·
+                                        {{ $testimonialCount }} {{ $testimonialCount === 1 ? 'depoimento' : 'depoimentos' }}
+                                    </span>
+                                </span>
+                            @endif
+                        </x-ui.card-header>
+
+                        @if ($testimonials->isEmpty())
+                            <x-ui.card-body>
+                                <x-ui.empty-state
+                                    icon="★"
+                                    title="Ainda não há depoimentos"
+                                    text="Este atendente ainda não recebeu avaliações públicas. Depoimentos aparecem aqui depois de consultas concluídas."
+                                />
+                            </x-ui.card-body>
+                        @else
+                            <x-ui.card-body>
+                                <ul class="testimonial-list list-unstyled mb-0">
+                                    @foreach ($testimonials as $testimonial)
+                                        <li class="testimonial-list__item">
+                                            <div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2">
+                                                <p class="testimonial-list__author mb-1">
+                                                    {{ $testimonial->clientDisplayName() }}
+                                                </p>
+                                                <p class="testimonial-list__meta mb-1">
+                                                    <span class="text-gold" aria-label="{{ $testimonial->ratingLabel() }}">
+                                                        <span aria-hidden="true">{{ $testimonial->ratingStars() }}</span>
+                                                    </span>
+                                                    <span class="ms-2">{{ $testimonial->created_at?->format('d/m/Y') ?? '' }}</span>
+                                                </p>
+                                            </div>
+                                            <p class="testimonial-list__text mb-0">{{ $testimonial->message }}</p>
+                                        </li>
+                                    @endforeach
+                                </ul>
+                            </x-ui.card-body>
+
+                            <x-ui.card-footer>
+                                {{ $testimonials->links() }}
+                            </x-ui.card-footer>
+                        @endif
+                    </x-ui.card>
                 </div>
 
                 <aside class="col-lg-4">
@@ -145,6 +217,8 @@
                                             data-modality-form
                                             data-modality-audio="{{ collect($options)->firstWhere('value', 'audio')['available'] ?? false ? '1' : '0' }}"
                                             data-modality-video="{{ collect($options)->firstWhere('value', 'video')['available'] ?? false ? '1' : '0' }}"
+                                            data-balance-cents="{{ $clientBalanceCents ?? 0 }}"
+                                            data-minimum-minutes="{{ $minimumBalanceMinutes }}"
                                         >
                                             @csrf
                                             <input type="hidden" name="attendant_id" value="{{ $attendant->user_id }}">
@@ -160,6 +234,7 @@
                                                             name="modality"
                                                             value="{{ $option['value'] }}"
                                                             data-requires-video="{{ $option['requires_video'] ? '1' : '0' }}"
+                                                            data-price-cents="{{ $option['price_cents'] ?? '' }}"
                                                             @checked($defaultModality === $option['value'])
                                                             @disabled(! $option['available'])
                                                             required
@@ -188,7 +263,32 @@
                                                 <div class="invalid-feedback d-block mb-2">{{ $message }}</div>
                                             @enderror
 
+                                            {{--
+                                                Erros devolvidos pelo servidor para esta solicitação
+                                                (saldo recalculado no aceite, consulta já aberta…).
+                                                Saldo insuficiente normalmente é barrado antes pelo
+                                                modal de saldo desta página; esta mensagem é a rede
+                                                de segurança de quem está sem JavaScript ou com a
+                                                página desatualizada. O layout público usa
+                                                `showErrors = false`, então o erro precisa ser
+                                                renderizado aqui.
+                                            --}}
+                                            @error('consultation')
+                                                <x-ui.alert type="danger" :dismissible="false" class="py-2 px-3 mb-2">
+                                                    {{ $message }}
+                                                    <a class="alert-link" href="{{ route('client.credits.index') }}">Comprar créditos</a>
+                                                </x-ui.alert>
+                                            @enderror
+
                                             <div class="alert alert-warning py-2 px-3 mt-3 d-none" data-modality-notice role="status" aria-live="polite"></div>
+
+                                            <p class="small text-ivory-dim mt-3 mb-2">
+                                                Seu saldo: <strong>{{ \App\Support\Money::format($clientBalanceCents ?? 0) }}</strong>
+                                                · mínimo para iniciar:
+                                                <strong data-balance-minimum-label>
+                                                    {{ $minimumCentsForDefault === null ? '—' : \App\Support\Money::format($minimumCentsForDefault) }}
+                                                </strong>
+                                            </p>
 
                                             <p class="small text-ivory-dim mt-3">
                                                 A cobrança é por minuto iniciado, calculada e confirmada pelo servidor.
@@ -203,6 +303,64 @@
                                             O preço é validado pelo servidor ao iniciar a consulta. Você pode cancelar
                                             enquanto aguarda o aceite.
                                         </p>
+
+                                        {{--
+                                            Aviso de saldo insuficiente.
+
+                                            `consultation-modalities.js` compara o saldo renderizado no
+                                            formulário (`data-balance-cents`) com o preço da modalidade
+                                            escolhida e, antes de enviar, abre este modal em vez de deixar o
+                                            servidor recusar o pedido. Os valores abaixo são o estado inicial
+                                            (modalidade padrão); o JS reescreve com os números da seleção. O
+                                            servidor continua sendo a autoridade: sem JavaScript o erro de
+                                            validação aparece no formulário acima.
+                                        --}}
+                                        <div
+                                            class="modal fade"
+                                            id="insufficient-balance-modal"
+                                            tabindex="-1"
+                                            aria-labelledby="insufficient-balance-modal-title"
+                                            aria-hidden="true"
+                                            data-balance-modal
+                                        >
+                                            <div class="modal-dialog modal-dialog-centered">
+                                                <div class="modal-content">
+                                                    <div class="modal-header">
+                                                        <h2 class="modal-title h5" id="insufficient-balance-modal-title">
+                                                            Saldo insuficiente
+                                                        </h2>
+                                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                                                    </div>
+
+                                                    <div class="modal-body">
+                                                        <p class="mb-2">
+                                                            Você escolheu
+                                                            <strong data-balance-modal-modality>{{ $defaultOption['label'] ?? 'esta modalidade' }}</strong>,
+                                                            que exige no mínimo
+                                                            <strong data-balance-modal-minimum>
+                                                                {{ $minimumCentsForDefault === null ? '—' : \App\Support\Money::format($minimumCentsForDefault) }}
+                                                            </strong>
+                                                            ({{ $minimumBalanceMinutes }} minuto(s) de atendimento).
+                                                        </p>
+                                                        <p class="mb-2">
+                                                            Seu saldo atual é
+                                                            <strong data-balance-modal-current>{{ \App\Support\Money::format($clientBalanceCents ?? 0) }}</strong>.
+                                                            A solicitação não foi enviada ao atendente e nada foi cobrado.
+                                                        </p>
+                                                        <p class="small text-ivory-dim mb-0">
+                                                            A cobrança é por minuto iniciado, calculada e confirmada pelo servidor.
+                                                        </p>
+                                                    </div>
+
+                                                    <div class="modal-footer">
+                                                        <button type="button" class="btn btn-ghost" data-bs-dismiss="modal">Agora não</button>
+                                                        <a class="btn btn-primary" href="{{ route('client.credits.index') }}">
+                                                            Comprar créditos
+                                                        </a>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     @else
                                         <a class="btn btn-primary w-100" href="{{ $panelRoute }}">Ir para o meu painel</a>
                                         <p class="small text-ivory-dim mt-3 mb-0">

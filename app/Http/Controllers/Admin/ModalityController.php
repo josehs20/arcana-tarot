@@ -4,18 +4,14 @@ namespace App\Http\Controllers\Admin;
 
 use App\Enums\ConsultationModality;
 use App\Http\Controllers\Controller;
-use App\Models\AttendantModalityPrice;
-use App\Models\AttendantProfile;
-use App\Models\AuditLog;
 use App\Models\Consultation;
 use App\Models\User;
+use App\Support\AttendantModalityManager;
 use App\Support\ConsultationModalityCatalog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 /**
@@ -72,7 +68,7 @@ class ModalityController extends Controller
     public function update(
         Request $request,
         User $user,
-        ConsultationModalityCatalog $catalog,
+        AttendantModalityManager $modalities,
     ): RedirectResponse {
 
         $profile = $user->attendantProfile;
@@ -88,71 +84,12 @@ class ModalityController extends Controller
             'prices.*' => ['nullable', 'integer', 'min:1', 'max:1000000'],
         ]);
 
-        $requested = collect($validated['offered_modalities'] ?? [])
-            ->map(static fn ($value): ConsultationModality => ConsultationModality::from((string) $value))
-            ->push(ConsultationModality::Text)
-            ->unique()
-            ->values();
-
-        $prices = [];
-
-        foreach ($requested as $modality) {
-            if (! $catalog->isEnabled($modality)) {
-                throw ValidationException::withMessages([
-                    'offered_modalities' => 'A modalidade '.$modality->label().' está desativada na infraestrutura.',
-                ]);
-            }
-
-            $price = $validated['prices'][$modality->value] ?? null;
-
-            if ($price === null) {
-                throw ValidationException::withMessages([
-                    'prices' => 'Informe o preço por minuto de '.$modality->label().' para este atendente.',
-                ]);
-            }
-
-            $prices[$modality->value] = (int) $price;
-        }
-
-        $order = array_flip(ConsultationModality::values());
-
-        $values = $requested
-            ->sortBy(static fn (ConsultationModality $modality): int => $order[$modality->value])
-            ->map(static fn (ConsultationModality $modality): string => $modality->value)
-            ->values()
-            ->all();
-
-        DB::transaction(function () use ($profile, $values, $prices, $request): void {
-            $locked = AttendantProfile::query()->lockForUpdate()->findOrFail($profile->getKey());
-            $before = $locked->offeredModalityValues();
-            $beforePrices = $locked->pricesByModality();
-
-            $locked->offered_modalities = $values;
-            $locked->save();
-
-            foreach ($prices as $modality => $cents) {
-                AttendantModalityPrice::query()->updateOrCreate(
-                    [
-                        'attendant_profile_id' => $locked->getKey(),
-                        'modality' => $modality,
-                    ],
-                    ['price_per_minute_cents' => $cents],
-                );
-            }
-
-            AuditLog::query()->create([
-                'actor_id' => $request->user()->getKey(),
-                'action' => 'attendant.modalities_updated',
-                'subject_type' => $locked->getMorphClass(),
-                'subject_id' => $locked->getKey(),
-                'metadata' => [
-                    'before' => $before,
-                    'after' => $values,
-                    'prices_before' => $beforePrices,
-                    'prices_after' => $prices,
-                ],
-            ]);
-        });
+        $modalities->updateOfferedModalities(
+            $profile,
+            $request->user(),
+            $validated['offered_modalities'] ?? [],
+            $validated['prices'] ?? [],
+        );
 
         return back()->with('success', 'Modalidades e preços por minuto do atendente atualizados. Consultas já iniciadas mantêm o preço congelado.');
     }

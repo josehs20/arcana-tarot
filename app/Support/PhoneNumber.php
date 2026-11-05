@@ -38,6 +38,26 @@ class PhoneNumber
     }
 
     /**
+     * Converte o número persistido (DDD + número) para o formato E.164 usado
+     * pelos provedores de SMS, por exemplo `+5511999999999`.
+     */
+    public static function toE164(string $phone, ?string $countryCode = null): string
+    {
+        $digits = preg_replace('/\D+/', '', $phone) ?? '';
+        $countryCode = preg_replace('/\D+/', '', $countryCode ?? (string) config('authentication.sms.country_code', '55')) ?? '';
+
+        if ($countryCode === '') {
+            $countryCode = '55';
+        }
+
+        if (str_starts_with($digits, $countryCode) && strlen($digits) > 10) {
+            $digits = substr($digits, strlen($countryCode));
+        }
+
+        return '+'.$countryCode.$digits;
+    }
+
+    /**
      * Formata para exibição: (11) 99999-9999 ou (11) 9999-9999.
      */
     public static function format(string $phone): string

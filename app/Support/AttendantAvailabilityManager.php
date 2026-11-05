@@ -85,6 +85,66 @@ final class AttendantAvailabilityManager
     }
 
     /**
+     * Coloca o atendente online automaticamente ao entrar na conta.
+     *
+     * O login nunca é bloqueado por causa do status: perfil ausente, perfil não
+     * publicado ou consulta ativa deixam a disponibilidade como está (a
+     * consulta ativa congela o status até o encerramento). Quando o perfil já
+     * está online, apenas a presença (`last_seen_at`) é renovada, sem gerar
+     * auditoria duplicada.
+     */
+    public function signIn(User $attendant): ?AttendantProfile
+    {
+        return DB::transaction(function () use ($attendant): ?AttendantProfile {
+            $profile = AttendantProfile::query()
+                ->where('user_id', $attendant->getKey())
+                ->lockForUpdate()
+                ->first();
+
+            if ($profile === null) {
+                return null;
+            }
+
+            $hasActiveConsultation = Consultation::query()
+                ->where('attendant_id', $attendant->getKey())
+                ->where('status', ConsultationStatus::Active->value)
+                ->exists();
+
+            if ($hasActiveConsultation) {
+                return $profile;
+            }
+
+            if ($profile->availability === AttendantAvailability::Online) {
+                $profile->markSeen();
+
+                return $profile;
+            }
+
+            if (! $profile->is_published) {
+                return $profile;
+            }
+
+            $profile->availability = AttendantAvailability::Online;
+            $profile->save();
+            $profile->markSeen();
+
+            AuditLog::query()->create([
+                'actor_id' => $attendant->getKey(),
+                'action' => 'attendant.availability_changed',
+                'subject_type' => $profile->getMorphClass(),
+                'subject_id' => $profile->getKey(),
+                'metadata' => [
+                    'from' => AttendantAvailability::Offline->value,
+                    'to' => AttendantAvailability::Online->value,
+                    'reason' => 'login',
+                ],
+            ]);
+
+            return $profile;
+        });
+    }
+
+    /**
      * Encerra a presença online do atendente ao sair da conta.
      *
      * O logout nunca é bloqueado: sem perfil ou com consulta ativa, nada muda.

@@ -8,7 +8,12 @@
  *    em qualquer tela do atendente — painel, histórico, perfil ou consulta
  *    aberta — e não só no dashboard.
  *  - `consultation.state`: o aceite acontece. Cliente e atendente são levados
- *    direto para a tela dedicada de atendimento; estados finais limpam a fila.
+ *    direto para a tela dedicada de atendimento; estados finais limpam a fila e
+ *    recarregam a tela (`data-refresh-on-final`), porque a recusa ou o
+ *    encerramento mudam o que a página pode mostrar.
+ *
+ * No modo polling a mesma transição é detectada quando `panel/eventos` deixa de
+ * devolver a consulta aberta (`handleClosedConsultation`).
  *
  * Nada é decidido no navegador: aceitar/recusar chama as rotas do servidor, que
  * revalidam participação, estado e disponibilidade. Se o canal cair, o painel
@@ -48,6 +53,7 @@ const userChannelState = {
     realtimeMode: 'socket',
     poller: null,
     lastState: null,
+    lastConsultationId: null,
     audio: null,
     sound: DEFAULT_REQUEST_SOUND,
     soundUrl: null,
@@ -118,6 +124,42 @@ function workspaceUrlFor(consultationId) {
     const template = userChannelRoot()?.dataset.workspaceUrl;
 
     return template ? template.replace('__ID__', String(consultationId)) : '';
+}
+
+/*
+ * Aviso "Voltar ao atendimento".
+ *
+ * O bloco é montado no servidor (`layouts.partials.active-consultation-banner`)
+ * para funcionar mesmo sem JavaScript. Aqui ele é reconciliado com o estado que
+ * chega pelo canal privado ou pelo polling: quando o atendimento é encerrado o
+ * aviso some, e se outra consulta ficar ativa o link é reapontado. A tela do
+ * próprio atendimento nunca mostra o aviso — lá as pessoas já estão no chat.
+ */
+function consultationReturnBar() {
+    return document.querySelector('[data-consultation-return]');
+}
+
+function syncConsultationReturn(consultation) {
+    const bar = consultationReturnBar();
+
+    if (!bar) {
+        return;
+    }
+
+    if (document.querySelector('[data-consultation-workspace]') || consultation?.status !== 'active') {
+        bar.classList.add('d-none');
+
+        return;
+    }
+
+    const url = workspaceUrlFor(consultation.id);
+    const link = bar.querySelector('[data-consultation-return-link]');
+
+    if (link && url) {
+        link.setAttribute('href', url);
+    }
+
+    bar.classList.remove('d-none');
 }
 
 function leaveTo(url) {
@@ -774,6 +816,9 @@ async function syncPending({ notifyWhenNew = false } = {}) {
 
         if (payload.consultation) {
             applyConsultationState(payload.consultation);
+        } else {
+            syncConsultationReturn(null);
+            handleClosedConsultation();
         }
 
         return 'ok';
@@ -824,12 +869,15 @@ function applyConsultationState(consultation) {
     const requestId = Number(consultation.id);
     const signature = `${requestId}:${consultation.status}`;
 
+    syncConsultationReturn(consultation);
+
     if (userChannelState.requests.has(requestId)) {
         removeRequest(requestId);
     }
 
     if (userChannelState.lastState === null) {
         userChannelState.lastState = signature;
+        userChannelState.lastConsultationId = requestId;
 
         return;
     }
@@ -839,7 +887,38 @@ function applyConsultationState(consultation) {
     }
 
     userChannelState.lastState = signature;
+    userChannelState.lastConsultationId = requestId;
     handleState({ consultation });
+}
+
+/*
+ * A leitura do painel não devolve mais consulta aberta.
+ *
+ * Se esta página está exibindo exatamente a consulta que estava aberta na
+ * leitura anterior, ela acabou de chegar a um estado final — recusada,
+ * cancelada, expirada, encerrada ou interrompida — e precisa mostrar isso em vez
+ * de continuar exibindo "aguardando aceite".
+ *
+ * A comparação com `data-consultation-watch` evita recarregar telas que não
+ * mostram aquela consulta (painel, perfil, carteira) e evita laço: a página do
+ * estado final não tem leitura anterior para comparar.
+ */
+function handleClosedConsultation() {
+    const watchedElement = document.querySelector('[data-consultation-watch]');
+
+    if (!watchedElement || userChannelState.leaving) {
+        return;
+    }
+
+    const watched = Number(watchedElement.dataset.consultationWatch);
+
+    if (!Number.isFinite(watched) || watched !== userChannelState.lastConsultationId) {
+        return;
+    }
+
+    userChannelState.lastState = null;
+    userChannelState.lastConsultationId = null;
+    window.location.reload();
 }
 
 function handleRequest(event) {
@@ -881,6 +960,9 @@ function handleState(event) {
 
     // Mantém a assinatura usada pelo modo polling em sincronia com o canal.
     userChannelState.lastState = `${requestId}:${consultation.status}`;
+    userChannelState.lastConsultationId = requestId;
+
+    syncConsultationReturn(consultation);
 
     if (userChannelState.requests.has(requestId)) {
         removeRequest(requestId);

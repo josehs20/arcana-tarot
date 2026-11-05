@@ -117,6 +117,30 @@ class ConsultationModalityTest extends TestCase
             ->assertSee('R$ 4,00');
     }
 
+    public function test_profile_shows_the_client_balance_and_the_minimum_to_start(): void
+    {
+        $client = $this->client(150);
+        [$attendant] = $this->attendant();
+
+        $this->actingAs($client)
+            ->get(route('attendants.show', $attendant->attendantProfile))
+            ->assertOk()
+            ->assertSee('Seu saldo')
+            ->assertSee('R$ 1,50')
+            // Atributos que o JS usa para avisar o saldo por modalidade.
+            ->assertSee('data-balance-cents="150"', false)
+            ->assertSee('data-minimum-minutes="1"', false)
+            ->assertSee('data-price-cents="100"', false)
+            // Modal aberto por consultation-modalities.js antes do envio.
+            ->assertSee('data-balance-modal', false)
+            ->assertSee('data-balance-modal-minimum', false)
+            ->assertSee('data-balance-modal-current', false)
+            ->assertSee('Saldo insuficiente')
+            ->assertSee('Comprar créditos')
+            ->assertSee(route('client.credits.index'), false)
+            ->assertDontSee('data-balance-warning', false);
+    }
+
     public function test_client_can_request_audio_and_price_is_frozen_on_accept(): void
     {
         Carbon::setTestNow('2026-02-01 10:00:00');
@@ -208,10 +232,16 @@ class ConsultationModalityTest extends TestCase
 
     public function test_accept_requires_balance_for_the_chosen_modality(): void
     {
-        $client = $this->client(150);
+        $client = $this->client(1_000);
         [$attendant] = $this->attendant();
 
         $consultation = $this->requestConsultation($client, $attendant, 'audio');
+
+        /*
+         * Saldo gasto depois da solicitação: o aceite revalida o mínimo da
+         * modalidade escolhida (áudio = 200 × 1 minuto) antes de cobrar.
+         */
+        Wallet::query()->where('user_id', $client->getKey())->update(['balance_cents' => 150]);
 
         $this->actingAs($attendant)
             ->from(route('attendant.dashboard'))
@@ -460,18 +490,25 @@ class ConsultationModalityTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_client_without_any_balance_cannot_start_even_the_first_minute(): void
+    public function test_client_without_any_balance_cannot_even_request_a_consultation(): void
     {
         $client = $this->client(0);
         [$attendant] = $this->attendant();
 
-        $consultation = $this->requestConsultation($client, $attendant, 'text');
-
-        $this->actingAs($attendant)
-            ->from(route('attendant.dashboard'))
-            ->patch(route('attendant.consultations.accept', $consultation))
+        /*
+         * O saldo é exigido na solicitação: sem crédito o pedido nem é criado,
+         * então não chega ao atendente para ser aceito (ou recusado) depois.
+         */
+        $this->actingAs($client)
+            ->from(route('attendants.show', $attendant->attendantProfile))
+            ->post(route('client.consultations.store'), [
+                'attendant_id' => $attendant->getKey(),
+                'modality' => 'text',
+            ])
+            ->assertRedirect(route('attendants.show', $attendant->attendantProfile))
             ->assertSessionHasErrors('consultation');
 
+        $this->assertSame(0, Consultation::query()->count());
         $this->assertSame(0, CreditLedgerEntry::query()->count());
         $this->assertSame(0, (int) Wallet::query()->where('user_id', $client->getKey())->value('balance_cents'));
     }

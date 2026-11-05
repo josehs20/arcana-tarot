@@ -15,7 +15,14 @@
                 @endif
                 <h1 class="arcana-hero__title">{{ $section['title'] }}</h1>
                 <div class="arcana-hero__divider" aria-hidden="true"></div>
-                <p class="arcana-lead mb-4">{{ $section['subtitle'] ?: $section['body'] }}</p>
+                @if ($section['subtitle'])
+                    <p class="arcana-lead mb-3">{{ $section['subtitle'] }}</p>
+                @endif
+
+                {{-- O texto principal é editável em "Conteúdo do site" e precisa
+                     aparecer mesmo quando existe subtítulo (antes ele era
+                     substituído pelo subtítulo e se perdia na home). --}}
+                @include('public.partials.sections.section-body', ['class' => 'mb-4'])
 
                 <div class="d-flex flex-wrap gap-3">
                     @guest

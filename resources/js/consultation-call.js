@@ -27,7 +27,44 @@ const callState = {
     failureReported: false,
     endedHandled: false,
     initiallyActive: false,
+    audioOnlyFallback: false,
 };
+
+/*
+ * Falhas de `getUserMedia` chegam como DOMException com nomes em inglês
+ * (`NotAllowedError`, `NotFoundError`, `NotReadableError`...) que não dizem ao
+ * usuário o que fazer. Cada grupo tem uma causa e uma ação diferentes:
+ *
+ *  - permissão: o navegador bloqueou o acesso; é preciso liberar no cadeado da
+ *    barra de endereço. Não adianta pedir só áudio — o microfone também está
+ *    bloqueado;
+ *  - dispositivo ausente: não há microfone/câmera compatível;
+ *  - dispositivo ocupado: outro programa está usando o equipamento.
+ *
+ * As mensagens abaixo são as únicas exibidas na tela de chamada; o texto
+ * original do navegador fica como último recurso.
+ */
+const MEDIA_PERMISSION_ERRORS = new Set(['NotAllowedError', 'PermissionDeniedError', 'SecurityError']);
+const MEDIA_MISSING_ERRORS = new Set(['NotFoundError', 'DevicesNotFoundError', 'OverconstrainedError']);
+const MEDIA_BUSY_ERRORS = new Set(['NotReadableError', 'TrackStartError', 'AbortError']);
+
+function describeMediaError(error) {
+    const name = error?.name ?? '';
+
+    if (MEDIA_PERMISSION_ERRORS.has(name)) {
+        return 'Permissão de microfone/câmera bloqueada. Libere o acesso no ícone de cadeado da barra de endereço do navegador e tente novamente.';
+    }
+
+    if (MEDIA_MISSING_ERRORS.has(name)) {
+        return 'Nenhum microfone ou câmera compatível foi encontrado neste dispositivo. Conecte o equipamento e tente novamente.';
+    }
+
+    if (MEDIA_BUSY_ERRORS.has(name)) {
+        return 'O microfone ou a câmera está em uso por outro aplicativo. Feche o outro programa que usa o dispositivo e tente novamente.';
+    }
+
+    return error?.message || 'Não foi possível acessar microfone/câmera.';
+}
 
 function callElement(selector) {
     return callState.section?.querySelector(selector) ?? null;
@@ -73,7 +110,7 @@ async function callApi(method, url, body) {
     return data;
 }
 
-function setCallNotice(message) {
+function setCallNotice(message, tone = 'info') {
     const notice = callElement('[data-call-notice]');
 
     if (!notice) {
@@ -81,6 +118,8 @@ function setCallNotice(message) {
     }
 
     notice.textContent = message ?? '';
+    notice.classList.remove('alert-info', 'alert-warning', 'alert-danger', 'alert-success');
+    notice.classList.add(`alert-${tone}`);
     notice.classList.toggle('d-none', !message);
 }
 
@@ -151,7 +190,10 @@ function renderCall() {
 
     const mediaReady = status === 'accepted' || status === 'connected';
     setButton(callElement('[data-call-mute]'), mediaReady);
-    setButton(callElement('[data-call-camera]'), mediaReady && callState.requiresVideo);
+    setButton(
+        callElement('[data-call-camera]'),
+        mediaReady && callState.requiresVideo && !callState.audioOnlyFallback,
+    );
 
     if (placeholder) {
         placeholder.classList.toggle('d-none', status === 'connected' && callState.pc !== null);
@@ -172,7 +214,9 @@ function renderCall() {
     } else if (status === 'accepted') {
         hint.textContent = 'Conectando os navegadores…';
     } else if (status === 'connected') {
-        hint.textContent = 'Chamada em andamento.';
+        hint.textContent = callState.audioOnlyFallback
+            ? 'Chamada em andamento, somente com áudio.'
+            : 'Chamada em andamento.';
     } else if (status === 'ended' || status === 'failed') {
         hint.textContent = call?.ended_reason_label ?? 'Chamada encerrada.';
     } else if (callState.consultationStatus && callState.consultationStatus !== 'active') {
@@ -185,14 +229,38 @@ async function ensureMedia() {
         return callState.localStream;
     }
 
-    if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error('Seu navegador não oferece captura de áudio/vídeo (getUserMedia).');
+    /*
+     * Chamada de áudio/vídeo exige contexto seguro. Em HTTP o navegador nem
+     * expõe `navigator.mediaDevices`, e a mensagem genérica de "navegador sem
+     * suporte" esconderia a causa real do bloqueio.
+     */
+    if (!window.isSecureContext) {
+        throw new Error('Chamadas de áudio e vídeo exigem conexão segura (HTTPS). Abra o painel por HTTPS e tente novamente.');
     }
 
-    callState.localStream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: callState.requiresVideo,
-    });
+    if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error('Este navegador não oferece captura de áudio/vídeo. Atualize o navegador ou use uma versão recente de Chrome, Edge, Firefox ou Safari.');
+    }
+
+    try {
+        callState.localStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: callState.requiresVideo,
+        });
+    } catch (error) {
+        callState.localStream = await requestFallbackMedia(error);
+    }
+
+    /*
+     * Sem câmera a chamada continua: registramos o modo somente áudio para a
+     * interface explicar a diferença e para não exibir o botão de câmera morto.
+     */
+    callState.audioOnlyFallback = callState.requiresVideo
+        && callState.localStream.getVideoTracks().length === 0;
+
+    if (callState.audioOnlyFallback) {
+        setCallNotice('Não foi possível acessar a câmera. A chamada segue somente com áudio.', 'warning');
+    }
 
     const localVideo = callElement('[data-call-local]');
 
@@ -203,9 +271,31 @@ async function ensureMedia() {
     return callState.localStream;
 }
 
+/*
+ * Segunda tentativa quando a primeira falha.
+ *
+ * Permissão bloqueada não melhora pedindo menos dispositivos — o microfone está
+ * bloqueado do mesmo jeito —, então só nesse caso a falha é definitiva. Nas
+ * demais (sem câmera, câmera ocupada) o atendimento não pode travar: pedimos
+ * apenas áudio e seguimos. Se o microfone também falhar, vale a mensagem da
+ * segunda tentativa, que é a que descreve o problema atual.
+ */
+async function requestFallbackMedia(error) {
+    if (!callState.requiresVideo || MEDIA_PERMISSION_ERRORS.has(error?.name ?? '')) {
+        throw new Error(describeMediaError(error));
+    }
+
+    try {
+        return await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    } catch (audioError) {
+        throw new Error(describeMediaError(audioError));
+    }
+}
+
 function stopMedia() {
     callState.localStream?.getTracks().forEach((track) => track.stop());
     callState.localStream = null;
+    callState.audioOnlyFallback = false;
 
     if (callState.pc) {
         callState.pc.onicecandidate = null;
@@ -360,7 +450,7 @@ async function startPeer(isCaller) {
             await sendSignal('offer', { type: 'offer', sdp: pc.localDescription.sdp });
         }
     } catch (error) {
-        setCallNotice(error.message || 'Não foi possível acessar microfone/câmera.');
+        setCallNotice(describeMediaError(error), 'danger');
         stopMedia();
     } finally {
         callState.startingPeer = false;
@@ -401,7 +491,7 @@ async function handleConnectionState(connectionState) {
     if (connectionState === 'failed') {
         if (!callState.failureReported) {
             callState.failureReported = true;
-            setCallNotice('A conexão da chamada falhou. Encerrando a consulta para interromper a cobrança.');
+            setCallNotice('A conexão da chamada falhou. Encerrando a consulta para interromper a cobrança.', 'danger');
             await failCall('connection_failed');
         }
 
@@ -409,7 +499,7 @@ async function handleConnectionState(connectionState) {
     }
 
     if (connectionState === 'disconnected') {
-        setCallNotice('Conexão instável. Tentando reconectar…');
+        setCallNotice('Conexão instável. Tentando reconectar…', 'warning');
     }
 }
 
@@ -537,7 +627,7 @@ function bindCallControls() {
             try {
                 await ensureMedia();
             } catch (error) {
-                setCallNotice(error.message || 'Permissão de microfone/câmera negada.');
+                setCallNotice(describeMediaError(error), 'danger');
                 stopMedia();
 
                 return;
@@ -545,7 +635,12 @@ function bindCallControls() {
 
             const data = await callApi('POST', section.dataset.requestUrl);
             applyPayload(data);
-            setCallNotice('Chamada solicitada. Aguardando o aceite do atendente.');
+            setCallNotice(
+                callState.audioOnlyFallback
+                    ? 'Chamada solicitada sem câmera (somente áudio). Aguardando o aceite do atendente.'
+                    : 'Chamada solicitada. Aguardando o aceite do atendente.',
+                'info',
+            );
         });
     });
 
@@ -554,7 +649,7 @@ function bindCallControls() {
             try {
                 await ensureMedia();
             } catch (error) {
-                setCallNotice(error.message || 'Permissão de microfone/câmera negada.');
+                setCallNotice(describeMediaError(error), 'danger');
                 stopMedia();
 
                 return;
@@ -562,7 +657,12 @@ function bindCallControls() {
 
             const data = await callApi('PATCH', section.dataset.acceptUrl);
             applyPayload(data);
-            setCallNotice('Chamada aceita. Conectando…');
+            setCallNotice(
+                callState.audioOnlyFallback
+                    ? 'Chamada aceita, somente com áudio. Conectando…'
+                    : 'Chamada aceita. Conectando…',
+                'info',
+            );
         });
     });
 

@@ -21,6 +21,7 @@
             'links' => [
                 ['route' => 'client.credits.index', 'pattern' => 'client.credits.*', 'label' => 'Carteira e créditos', 'icon' => 'wallet'],
                 ['route' => 'attendants.index', 'pattern' => 'attendants.*', 'label' => 'Atendentes', 'icon' => 'users'],
+                ['route' => 'client.testimonials.index', 'pattern' => 'client.testimonials.*', 'label' => 'Depoimentos', 'icon' => 'star'],
             ],
         ];
     }

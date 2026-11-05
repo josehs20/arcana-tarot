@@ -10,6 +10,7 @@ use App\Models\ConsultationMessage;
 use App\Models\TarotCard;
 use App\Models\TarotDeck;
 use App\Models\User;
+use App\Support\ConsultationMessageManager;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -74,6 +75,25 @@ class ConsultationChatTest extends TestCase
             'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
             true,
         );
+    }
+
+    /**
+     * Segunda carta do mesmo baralho, para os testes de envio em lote.
+     */
+    private function cardInDeck(TarotDeck $deck, string $name): TarotCard
+    {
+        $image = $this->imageBytes();
+        $path = 'cards/'.Str::random(32).'.png';
+        Storage::disk('tarot_private')->put($path, $image);
+
+        return TarotCard::factory()->create([
+            'deck_id' => $deck->id,
+            'name' => $name,
+            'image_path' => $path,
+            'image_mime' => 'image/png',
+            'image_size' => strlen($image),
+            'is_active' => true,
+        ]);
     }
 
     public function test_participants_can_send_and_read_text_messages(): void
@@ -260,7 +280,7 @@ class ConsultationChatTest extends TestCase
         $this->actingAs($attendant)
             ->get(route('consultations.show', $consultation))
             ->assertOk()
-            ->assertSee('Enviar uma carta')
+            ->assertSee('Enviar cartas')
             ->assertSee('A Estrela')
             ->assertSee($deck->name);
 
@@ -361,7 +381,7 @@ class ConsultationChatTest extends TestCase
         $this->actingAs($attendant)
             ->from(route('consultations.show', $consultation))
             ->post(route('consultations.cards.store', $consultation), ['tarot_card_id' => $card->id])
-            ->assertSessionHasErrors('tarot_card_id');
+            ->assertSessionHasErrors('tarot_card_ids');
 
         $card->update(['is_active' => true]);
         $deck->update(['is_active' => false]);
@@ -369,7 +389,7 @@ class ConsultationChatTest extends TestCase
         $this->actingAs($attendant)
             ->from(route('consultations.show', $consultation))
             ->post(route('consultations.cards.store', $consultation), ['tarot_card_id' => $card->id])
-            ->assertSessionHasErrors('tarot_card_id');
+            ->assertSessionHasErrors('tarot_card_ids');
 
         $deck->update(['is_active' => true]);
         Storage::disk('tarot_private')->delete($card->image_path);
@@ -377,7 +397,7 @@ class ConsultationChatTest extends TestCase
         $this->actingAs($attendant)
             ->from(route('consultations.show', $consultation))
             ->post(route('consultations.cards.store', $consultation), ['tarot_card_id' => $card->id])
-            ->assertSessionHasErrors('tarot_card_id');
+            ->assertSessionHasErrors('tarot_card_ids');
 
         $this->assertDatabaseCount('consultation_messages', 0);
     }
@@ -517,8 +537,9 @@ class ConsultationChatTest extends TestCase
             ->get(route('consultations.show', $consultation))
             ->assertOk()
             ->assertSee('chat-card-picker', false)
-            ->assertSee('name="tarot_card_id"', false)
-            ->assertSee('type="radio"', false)
+            ->assertSee('name="tarot_card_ids[]"', false)
+            ->assertSee('type="checkbox"', false)
+            ->assertSee('data-max-cards="'.ConsultationMessageManager::MAX_CARDS_PER_SEND.'"', false)
             ->assertSee('Baralho Solar')
             ->assertSee('A Estrela')
             ->assertSee('src="'.route('tarot.cards.image', $card).'"', false)
@@ -540,5 +561,160 @@ class ConsultationChatTest extends TestCase
             // atendente já no subtítulo da página.
             ->assertDontSee('Participantes')
             ->assertSee('Conversa com '.$consultation->attendant->name);
+    }
+
+    /**
+     * Várias cartas em um único envio: a rota aceita a lista, grava tudo na
+     * mesma transação e devolve as mensagens criadas para o chat inserir sem
+     * recarregar a página.
+     */
+    public function test_attendant_can_send_several_cards_in_a_single_request(): void
+    {
+        [, $attendant, $consultation] = $this->conversation();
+        [$card, $deck] = $this->card();
+        $second = $this->cardInDeck($deck, 'O Sol');
+        $third = $this->cardInDeck($deck, 'A Lua');
+
+        $response = $this->actingAs($attendant)
+            ->postJson(route('consultations.cards.store', $consultation), [
+                'tarot_card_ids' => [$third->id, $card->id, $second->id],
+            ])
+            ->assertStatus(201)
+            ->assertJsonPath('notice', '3 cartas enviadas.')
+            ->assertJsonCount(3, 'messages')
+            ->assertJsonPath('messages.0.card_name', 'A Lua')
+            ->assertJsonPath('messages.1.card_name', 'A Estrela')
+            ->assertJsonPath('messages.2.card_name', 'O Sol')
+            ->assertJsonPath('messages.0.deck_name', $deck->name)
+            ->assertJsonPath('messages.0.type', MessageType::TarotCard->value)
+            // Compatibilidade com clientes antigos, que leem `message`.
+            ->assertJsonPath('message.card_name', 'A Lua');
+
+        $messages = ConsultationMessage::query()->orderBy('id')->get();
+
+        $this->assertCount(3, $messages);
+        $this->assertSame(
+            ['A Lua', 'A Estrela', 'O Sol'],
+            $messages->pluck('card_name')->all(),
+        );
+        $this->assertSame(
+            [$third->id, $card->id, $second->id],
+            $messages->pluck('tarot_card_id')->all(),
+        );
+
+        foreach ($messages as $message) {
+            $this->assertSame(MessageType::TarotCard, $message->type);
+            $this->assertSame($attendant->id, $message->sender_id);
+            $this->assertStringStartsWith("consultation-cards/{$consultation->id}/", $message->image_path);
+            Storage::disk('tarot_private')->assertExists($message->image_path);
+        }
+
+        // O lote enviado junto compartilha um único `batch_id`, usado pelo chat
+        // para desenhar as imagens lado a lado em um só bloco.
+        $batchIds = $messages->pluck('batch_id')->unique();
+
+        $this->assertCount(1, $batchIds);
+        $this->assertNotNull($batchIds->first());
+        $this->assertSame($batchIds->first(), $response->json('messages.0.batch_id'));
+    }
+
+    /**
+     * Um envio de várias cartas vira um bloco único no histórico: o `batch_id`
+     * gravado no servidor agrupa as imagens e o chat mostra o contador de
+     * cartas em vez de repetir a mensagem para cada figura.
+     */
+    public function test_cards_sent_together_render_as_a_single_block_in_the_timeline(): void
+    {
+        [, $attendant, $consultation] = $this->conversation();
+        [$card, $deck] = $this->card();
+        $second = $this->cardInDeck($deck, 'O Sol');
+
+        $batchId = $this->actingAs($attendant)
+            ->postJson(route('consultations.cards.store', $consultation), [
+                'tarot_card_ids' => [$card->id, $second->id],
+            ])
+            ->assertStatus(201)
+            ->assertJsonCount(2, 'messages')
+            ->json('messages.0.batch_id');
+
+        $this->assertIsString($batchId);
+
+        // Um novo envio abre outro lote: nada é reaproveitado do anterior.
+        $otherBatchId = $this->actingAs($attendant)
+            ->postJson(route('consultations.cards.store', $consultation), [
+                'tarot_card_ids' => [$this->cardInDeck($deck, 'A Lua')->id],
+            ])
+            ->assertStatus(201)
+            ->json('messages.0.batch_id');
+
+        $this->assertIsString($otherBatchId);
+        $this->assertNotSame($batchId, $otherBatchId);
+
+        $response = $this->actingAs($attendant)
+            ->get(route('consultations.show', $consultation))
+            ->assertOk()
+            ->assertSee('data-message-batch="'.$batchId.'"', false)
+            ->assertSee('data-message-batch="'.$otherBatchId.'"', false)
+            ->assertSee('2 cartas');
+
+        $html = (string) $response->getContent();
+
+        // Três cartas, duas mensagens na linha do tempo: o lote de duas imagens
+        // e a carta enviada sozinha.
+        $this->assertSame(2, substr_count($html, 'data-message-batch='));
+        $this->assertSame(2, substr_count($html, 'class="chat-cards"'));
+        $this->assertSame(1, substr_count($html, 'data-chat-cards-count'));
+    }
+
+    /**
+     * Repetir uma carta ou passar do limite não pode gravar nada: o atendente
+     * corrige a seleção e a consulta não fica com cartas pela metade.
+     */
+    public function test_card_batch_rejects_duplicates_and_more_than_the_limit(): void
+    {
+        [, $attendant, $consultation] = $this->conversation();
+        [$card, $deck] = $this->card();
+        $second = $this->cardInDeck($deck, 'O Sol');
+
+        $this->actingAs($attendant)
+            ->post(route('consultations.cards.store', $consultation), [
+                'tarot_card_ids' => [$card->id, $second->id, $card->id],
+            ])
+            ->assertSessionHasErrors('tarot_card_ids.2');
+
+        TarotCard::factory()->count(ConsultationMessageManager::MAX_CARDS_PER_SEND)->create();
+
+        $this->actingAs($attendant)
+            ->post(route('consultations.cards.store', $consultation), [
+                'tarot_card_ids' => TarotCard::query()->pluck('id')->all(),
+            ])
+            ->assertSessionHasErrors('tarot_card_ids');
+
+        $this->actingAs($attendant)
+            ->post(route('consultations.cards.store', $consultation), [
+                'tarot_card_ids' => [],
+            ])
+            ->assertSessionHasErrors('tarot_card_ids');
+
+        $this->assertSame(0, ConsultationMessage::query()->count());
+    }
+
+    /**
+     * O formato antigo (uma carta por requisição) continua funcionando, tanto
+     * para integrações quanto para o formulário sem JavaScript.
+     */
+    public function test_single_card_payload_still_works(): void
+    {
+        [, $attendant, $consultation] = $this->conversation();
+        [$card] = $this->card();
+
+        $this->actingAs($attendant)
+            ->post(route('consultations.cards.store', $consultation), [
+                'tarot_card_id' => $card->id,
+            ])
+            ->assertRedirect(route('consultations.show', $consultation).'#chat')
+            ->assertSessionHas('success', 'Carta enviada.');
+
+        $this->assertSame(1, ConsultationMessage::query()->count());
     }
 }

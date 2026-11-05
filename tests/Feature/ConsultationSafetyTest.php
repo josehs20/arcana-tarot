@@ -16,6 +16,7 @@ use App\Support\ConsultationLifecycleManager;
 use App\Support\ConsultationSafety;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
@@ -36,6 +37,10 @@ class ConsultationSafetyTest extends TestCase
         Setting::query()->create(['key' => 'rate_credits_per_minute', 'value' => '2', 'type' => 'integer']);
         Setting::query()->create(['key' => 'credit_unit_price_cents', 'value' => '150', 'type' => 'integer']);
         Setting::query()->create(['key' => 'minimum_balance_minutes', 'value' => '1', 'type' => 'integer']);
+
+        // O aviso local não vem de `settings`: é configuração de ambiente.
+        // Fixar aqui deixa as asserções independentes do `.env` da máquina.
+        config(['consultation.navigation_warning_seconds' => 20]);
     }
 
     protected function tearDown(): void
@@ -205,7 +210,7 @@ class ConsultationSafetyTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_heartbeat_rejects_non_participants_and_finished_consultations(): void
+    public function test_heartbeat_rejects_non_participants_and_reports_finished_consultations(): void
     {
         $client = $this->client();
         $consultation = $this->activeConsultation($client, $this->attendant());
@@ -219,9 +224,17 @@ class ConsultationSafetyTest extends TestCase
             'ended_reason' => ConsultationEndReason::ClientEnded->value,
         ])->save();
 
+        /*
+         * Consulta já finalizada não cria sessão: o batimento devolve o estado
+         * final e a tela sai do atendimento com o motivo correto.
+         */
         $this->heartbeat($client, $consultation)
-            ->assertStatus(422)
-            ->assertJsonValidationErrors('consultation');
+            ->assertOk()
+            ->assertJsonPath('status', ConsultationStatus::Ended->value)
+            ->assertJsonPath('ended_reason', ConsultationEndReason::ClientEnded->value)
+            ->assertJsonPath('session_token', null);
+
+        $this->assertSame(0, ConsultationPresenceSession::query()->count());
     }
 
     public function test_leave_records_disconnection_without_ending_the_consultation(): void
@@ -322,6 +335,169 @@ class ConsultationSafetyTest extends TestCase
             ->firstOrFail();
 
         $this->assertSame('inactivity', $audit->metadata['reason']);
+    }
+
+    /**
+     * O limite do comando vem de `settings`, ajustável pela administração, e não
+     * do valor fixo do arquivo de configuração.
+     */
+    public function test_interruption_command_uses_the_timeout_saved_by_the_admin(): void
+    {
+        Carbon::setTestNow('2026-11-04 10:00:00');
+
+        Setting::query()->create([
+            'key' => 'consultation_inactivity_timeout_minutes',
+            'value' => '7',
+            'type' => 'integer',
+        ]);
+        Setting::query()->create([
+            'key' => 'consultation_reconnection_tolerance_seconds',
+            'value' => '45',
+            'type' => 'integer',
+        ]);
+
+        $consultation = $this->activeConsultation($this->client(), $this->attendant());
+
+        /* 7 min de inatividade + 45 s de tolerância: 7m30s ainda reconecta. */
+        $consultation->forceFill(['last_activity_at' => now()->subMinutes(7)->subSeconds(30)])->save();
+
+        $this->artisan('consultations:interrupt-disconnected')
+            ->expectsOutput('Consultas interrompidas: 0.')
+            ->assertExitCode(0);
+
+        $this->assertSame(ConsultationStatus::Active, $consultation->fresh()->status);
+
+        Carbon::setTestNow(now()->addSeconds(16));
+
+        $this->artisan('consultations:interrupt-disconnected')
+            ->expectsOutput('Consultas interrompidas: 1.')
+            ->assertExitCode(0);
+
+        $consultation->refresh();
+
+        $this->assertSame(ConsultationStatus::Interrupted, $consultation->status);
+        $this->assertSame(ConsultationEndReason::Inactivity, $consultation->ended_reason);
+    }
+
+    /**
+     * Rede de segurança do agendador: mesmo sem o cron/`schedule:work` no ar,
+     * a tela aberta não mantém a consulta "ativa" para sempre. Vencido o prazo
+     * (inatividade + tolerância), o próprio batimento interrompe.
+     */
+    public function test_heartbeat_interrupts_the_consultation_when_the_inactivity_deadline_expires(): void
+    {
+        Carbon::setTestNow('2026-11-04 10:00:00');
+
+        $client = $this->client();
+        $consultation = $this->activeConsultation($client, $this->attendant(), [
+            'started_at' => now(),
+            'last_activity_at' => now(),
+        ]);
+
+        /* 5 min de inatividade + 90 s de tolerância de reconexão = 6m30s. */
+        Carbon::setTestNow('2026-11-04 10:06:29');
+
+        $this->heartbeat($client, $consultation)
+            ->assertOk()
+            ->assertJsonPath('status', ConsultationStatus::Active->value);
+
+        $this->assertSame(ConsultationStatus::Active, $consultation->fresh()->status);
+
+        Carbon::setTestNow('2026-11-04 10:06:31');
+
+        $this->heartbeat($client, $consultation)
+            ->assertOk()
+            ->assertJsonPath('status', ConsultationStatus::Interrupted->value)
+            ->assertJsonPath('ended_reason', ConsultationEndReason::Inactivity->value)
+            ->assertJsonPath('session_token', null);
+
+        $consultation->refresh();
+
+        $this->assertSame(ConsultationStatus::Interrupted, $consultation->status);
+        $this->assertSame(ConsultationEndReason::Inactivity, $consultation->ended_reason);
+
+        $session = ConsultationPresenceSession::query()->firstOrFail();
+        $this->assertNotNull($session->disconnected_at);
+        $this->assertSame('inactivity', $session->disconnect_reason);
+
+        $this->assertSame(1, AuditLog::query()
+            ->where('action', 'consultation.interrupted')
+            ->where('subject_id', $consultation->id)
+            ->count());
+    }
+
+    /**
+     * Abrir a tela dedicada depois do prazo também finaliza: o usuário cai no
+     * histórico/recibo em vez de entrar numa conversa que deveria ter acabado.
+     */
+    public function test_opening_the_workspace_after_the_inactivity_deadline_interrupts_the_consultation(): void
+    {
+        Carbon::setTestNow('2026-11-04 10:00:00');
+
+        $client = $this->client();
+        $consultation = $this->activeConsultation($client, $this->attendant(), [
+            'started_at' => now(),
+            'last_activity_at' => now(),
+        ]);
+
+        Carbon::setTestNow('2026-11-04 10:07:00');
+
+        $this->actingAs($client)
+            ->get(route('consultations.workspace', $consultation))
+            ->assertRedirect(route('consultations.show', $consultation))
+            ->assertSessionHas(
+                'status',
+                'Este atendimento já foi encerrado. O histórico e o recibo continuam disponíveis na tela da consulta.',
+            );
+
+        $consultation->refresh();
+
+        $this->assertSame(ConsultationStatus::Interrupted, $consultation->status);
+        $this->assertSame(ConsultationEndReason::Inactivity, $consultation->ended_reason);
+    }
+
+    /**
+     * Perfil do Hostoo: sem Redis, sem Reverb e sem worker permanente — cache e
+     * fila no MySQL, eventos no canal `log` e nenhum `schedule:work`. O
+     * encerramento por inatividade tem de acontecer do mesmo jeito, liquidando
+     * os minutos vencidos na própria requisição; o cron apenas antecipa.
+     */
+    public function test_inactivity_interrupt_works_on_the_hostoo_profile_without_a_scheduler(): void
+    {
+        config([
+            'cache.default' => 'database',
+            'queue.default' => 'database',
+            'broadcasting.default' => 'log',
+        ]);
+
+        Carbon::setTestNow('2026-11-04 10:00:00');
+
+        $client = $this->client(2500);
+        $consultation = $this->activeConsultation($client, $this->attendant(), [
+            'started_at' => now(),
+            'last_activity_at' => now(),
+            'billed_minutes' => 0,
+        ]);
+
+        // 7min05s iniciados = 8 minutos vencidos, R$ 3,00 cada (R$ 24,00).
+        Carbon::setTestNow('2026-11-04 10:07:05');
+
+        // Nenhum `consultations:interrupt-disconnected` roda aqui: só o batimento.
+        $this->heartbeat($client, $consultation)
+            ->assertOk()
+            ->assertJsonPath('status', ConsultationStatus::Interrupted->value)
+            ->assertJsonPath('ended_reason', ConsultationEndReason::Inactivity->value)
+            ->assertJsonPath('credits.balance_label', 'R$ 1,00');
+
+        $consultation->refresh();
+
+        $this->assertSame(ConsultationStatus::Interrupted, $consultation->status);
+        $this->assertSame(8, (int) $consultation->billed_minutes);
+        $this->assertSame(100, (int) Wallet::query()->where('user_id', $client->id)->value('balance_cents'));
+
+        // O evento de estado fica na fila do MySQL até o cron chamar `queue:work`
+        // e nada disso depende de Redis; o encerramento já está gravado.
+        $this->assertGreaterThan(0, DB::table('jobs')->count());
     }
 
     public function test_admin_can_view_and_update_safety_thresholds_with_audit(): void
@@ -435,6 +611,7 @@ class ConsultationSafetyTest extends TestCase
             ->get(route('client.credits.index', ['return_consultation' => $consultation->id]))
             ->assertOk()
             ->assertSessionHas('credits.return_consultation', $consultation->id)
+            ->assertSee('data-credit-return', false)
             ->assertSee('Voltar ao atendimento')
             ->assertSee('href="'.$workspaceUrl.'"', false);
 
@@ -443,20 +620,25 @@ class ConsultationSafetyTest extends TestCase
         $this->actingAs($client)
             ->get(route('client.credits.payments.show', $payment))
             ->assertOk()
+            ->assertSee('data-credit-return', false)
             ->assertSee('Voltar ao atendimento')
             ->assertSee('href="'.$workspaceUrl.'"', false);
 
         app(ConsultationLifecycleManager::class)->end($client, $consultation);
 
+        // O botão da carteira sai com a sessão; o aviso global some junto com a
+        // consulta encerrada.
         $this->actingAs($client)
             ->get(route('client.credits.index'))
             ->assertOk()
             ->assertSessionMissing('credits.return_consultation')
+            ->assertDontSee('data-credit-return', false)
             ->assertDontSee('Voltar ao atendimento');
 
         $this->actingAs($client)
             ->get(route('client.credits.payments.show', $payment))
             ->assertOk()
+            ->assertDontSee('data-credit-return', false)
             ->assertDontSee('Voltar ao atendimento');
     }
 
@@ -476,6 +658,7 @@ class ConsultationSafetyTest extends TestCase
             ->get(route('client.credits.index', ['return_consultation' => $foreign->id]))
             ->assertOk()
             ->assertSessionMissing('credits.return_consultation')
-            ->assertDontSee('Voltar ao atendimento');
+            ->assertDontSee('data-credit-return', false)
+            ->assertDontSee('href="'.route('consultations.workspace', $foreign).'"', false);
     }
 }

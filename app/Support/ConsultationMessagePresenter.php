@@ -22,6 +22,7 @@ final class ConsultationMessagePresenter
      *     sender_role: string,
      *     sender_role_label: string,
      *     type: string,
+     *     batch_id: string|null,
      *     body: string|null,
      *     tarot_card_id: int|null,
      *     card_name: string|null,
@@ -52,6 +53,9 @@ final class ConsultationMessagePresenter
             'sender_role' => $isAttendant ? 'attendant' : 'client',
             'sender_role_label' => $isAttendant ? 'Atendente' : 'Cliente',
             'type' => $message->type->value,
+            // Lote de cartas enviadas juntas: o chat usa o mesmo identificador
+            // para desenhar as imagens de um envio em um único bloco.
+            'batch_id' => $message->batch_id,
             'body' => $isCard ? null : $message->body,
             'tarot_card_id' => $message->tarot_card_id,
             'card_name' => $isCard ? $message->card_name : null,

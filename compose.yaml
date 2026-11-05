@@ -89,6 +89,21 @@ services:
       redis:
         condition: service_healthy
 
+  # Agendador: sem este processo nenhuma rotina `everyMinute` roda — cobrança
+  # por minuto, expiração de solicitações, interrupção por inatividade e
+  # fechamento de chamadas órfãs. Um único loop (`schedule:work`) faz o papel
+  # do cron de produção; com mais de uma réplica, troque por
+  # `schedule:run` no cron do host para não duplicar execuções.
+  scheduler:
+    <<: *app
+    user: "1000:1000"
+    command: ["php", "artisan", "schedule:work"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   reverb:
     <<: *app
     user: "1000:1000"

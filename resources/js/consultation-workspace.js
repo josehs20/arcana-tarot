@@ -1,12 +1,14 @@
 /**
  * Tela dedicada de atendimento.
  *
- * Todos os números oficiais (minutos cobrados, valor total, comissão) vêm de
- * `consultations.metrics` e são calculados no servidor. Este módulo só busca o
- * payload: na abertura, no próximo limite de minuto informado pelo próprio
- * servidor (`next_refresh_in_seconds`), ao voltar para a aba e a cada transição
- * de estado recebida pelo Reverb. Quando a consulta deixa de estar ativa, o
- * usuário é levado para a tela de histórico e recibo.
+ * Todos os números oficiais (minutos cobrados, valor total, comissão, tempo
+ * restante de saldo) vêm de `consultations.metrics` e são calculados no
+ * servidor. Este módulo só busca o payload: na abertura, no próximo limite de
+ * minuto informado pelo próprio servidor (`next_refresh_in_seconds`), ao voltar
+ * para a aba e a cada transição de estado recebida pelo Reverb. Entre uma busca
+ * e outra apenas o contador de tempo restante é decrementado localmente. Quando
+ * a consulta deixa de estar ativa, o usuário é levado para a tela de histórico
+ * e recibo.
  */
 const WORKSPACE_STATUS = {
     requested: { dot: 'busy', text: 'status-text--busy', label: 'Solicitada' },
@@ -19,11 +21,14 @@ const WORKSPACE_STATUS = {
 };
 
 const RETRY_DELAY_SECONDS = 30;
+const COUNTDOWN_TICK_MS = 1000;
 
 const workspaceState = {
     loading: false,
     navigating: false,
     refreshTimer: null,
+    countdownTimer: null,
+    countdownDeadline: 0,
 };
 
 function workspaceRoot() {
@@ -62,10 +67,62 @@ function applyMetrics(payload) {
         element.textContent = value;
     });
 
+    startCountdown(payload.remaining_seconds);
     applyStatus(payload.status, payload.status_label);
     scheduleRefresh(payload.next_refresh_in_seconds);
 }
 
+/*
+ * Contagem regressiva até o saldo do cliente acabar.
+ *
+ * O total de segundos é calculado no servidor (`remaining_seconds`) e o
+ * navegador só o decrementa até a próxima busca do payload, que acontece no
+ * limite do minuto cobrado. Assim a tela não inventa números: valor cobrado,
+ * comissão e tempo restante sempre partem de `consultations.metrics`.
+ */
+function formatCountdown(totalSeconds) {
+    const seconds = Math.max(0, Math.floor(totalSeconds));
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const rest = seconds % 60;
+    const pad = (value) => String(value).padStart(2, '0');
+
+    return hours > 0 ? `${hours}:${pad(minutes)}:${pad(rest)}` : `${pad(minutes)}:${pad(rest)}`;
+}
+
+function renderCountdown() {
+    const elements = document.querySelectorAll('[data-consultation-countdown]');
+
+    if (elements.length === 0) {
+        return;
+    }
+
+    const remaining = Math.max(0, Math.round((workspaceState.countdownDeadline - Date.now()) / 1000));
+
+    elements.forEach((element) => {
+        element.textContent = formatCountdown(remaining);
+        element.classList.toggle('is-empty', remaining === 0);
+    });
+}
+
+function startCountdown(seconds) {
+    window.clearInterval(workspaceState.countdownTimer);
+
+    if (typeof seconds !== 'number' || !Number.isFinite(seconds)) {
+        return;
+    }
+
+    workspaceState.countdownDeadline = Date.now() + Math.max(0, seconds) * 1000;
+    renderCountdown();
+    workspaceState.countdownTimer = window.setInterval(renderCountdown, COUNTDOWN_TICK_MS);
+}
+
+/*
+ * O próximo minuto é cobrado por um comando agendado
+ * (`consultations:charge-minutes`). A folga de 2s evita buscar os números no
+ * mesmo instante do limite e receber ainda o valor anterior — comissão e valor
+ * cobrado precisam acompanhar cada minuto iniciado.
+ */
 function scheduleRefresh(seconds) {
     window.clearTimeout(workspaceState.refreshTimer);
 
@@ -75,7 +132,7 @@ function scheduleRefresh(seconds) {
 
     workspaceState.refreshTimer = window.setTimeout(
         () => refreshMetrics(),
-        Math.max(5, seconds) * 1000 + 250,
+        Math.max(5, seconds) * 1000 + 2000,
     );
 }
 
@@ -86,6 +143,7 @@ function leaveWorkspace(root) {
 
     workspaceState.navigating = true;
     window.clearTimeout(workspaceState.refreshTimer);
+    window.clearInterval(workspaceState.countdownTimer);
     window.location.assign(root.dataset.showUrl);
 }
 

@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Support\ConsultationActivityTracker;
 use App\Support\ConsultationLifecycleManager;
 use App\Support\ConsultationMetricsPresenter;
+use App\Support\ConsultationPartyPresenter;
 use App\Support\ConsultationSafety;
 use App\Support\CreditWalletManager;
 use App\Support\Money;
@@ -38,10 +39,11 @@ class ConsultationController extends Controller
         }
 
         $chat = $this->chatData($consultation, $user);
+        $isClient = $consultation->isClient($user);
 
         return view('consultations.show', [
             'consultation' => $consultation,
-            'isClient' => $consultation->isClient($user),
+            'isClient' => $isClient,
             'isAttendant' => $consultation->isAttendant($user),
             'isAdmin' => $user->isAdmin(),
             'layoutVariant' => $user->isAdmin() ? 'admin' : 'panel',
@@ -49,7 +51,11 @@ class ConsultationController extends Controller
             'messages' => $chat['messages'],
             'unreadMessagesCount' => $chat['unreadMessagesCount'],
             'cardDecks' => $chat['cardDecks'],
+            'parties' => ConsultationPartyPresenter::toArray($consultation, $user),
             'call' => $consultation->call,
+            'canLeaveTestimonial' => $isClient && $consultation->allowsTestimonial(),
+            'attendantName' => $consultation->attendant->attendantProfile?->display_name
+                ?? $consultation->attendant->name,
             'callConfig' => $consultation->requiresCall()
                 ? [
                     'ice_servers' => (array) config('consultation.web_rtc.ice_servers', []),
@@ -64,7 +70,7 @@ class ConsultationController extends Controller
      * Tela dedicada de atendimento.
      *
      * Substitui o painel cheio por um ambiente focado: identificação das
-     * partes, horário da solicitação, tempo em andamento, valor cobrado,
+     * partes, horário da solicitação, saldo em créditos, valor cobrado,
      * comissão e chat em tempo real. Só existe depois do aceite; antes disso
      * (ou depois do encerramento) o usuário volta para a tela da consulta,
      * que concentra histórico e recibo.
@@ -74,8 +80,13 @@ class ConsultationController extends Controller
         Consultation $consultation,
         ConsultationSafety $safety,
         CreditWalletManager $wallets,
+        ConsultationLifecycleManager $lifecycle,
     ): View|RedirectResponse {
         Gate::authorize('view', $consultation);
+
+        // Abrir a tela depois do prazo de inatividade também encerra: se o
+        // scheduler estiver parado, a consulta não fica presa em `active`.
+        $consultation = $lifecycle->interruptIfInactive($consultation);
 
         /** @var User $user */
         $user = $request->user();
@@ -112,6 +123,7 @@ class ConsultationController extends Controller
                 ]
                 : null,
             'metrics' => ConsultationMetricsPresenter::toArray($consultation, $user),
+            'parties' => ConsultationPartyPresenter::toArray($consultation, $user),
             'safety' => $safety->values(),
             'creditBalance' => $isClient ? $this->creditBalancePayload($user, $wallets) : null,
             'creditsUrl' => $isClient
@@ -144,6 +156,10 @@ class ConsultationController extends Controller
      * O token é opaco e gerado pelo servidor; reenviá-lo reabre a mesma sessão
      * depois de uma queda de rede. `activity` só é verdadeiro em interações
      * reais (abrir a tela, digitar, enviar), nunca no batimento automático.
+     *
+     * Antes de renovar a sessão, o prazo de inatividade é conferido: vencido o
+     * limite, a consulta é interrompida aqui mesmo e a resposta já volta com o
+     * estado final, que leva a tela para o histórico.
      */
     public function heartbeat(
         Request $request,
@@ -151,6 +167,7 @@ class ConsultationController extends Controller
         ConsultationActivityTracker $tracker,
         ConsultationSafety $safety,
         CreditWalletManager $wallets,
+        ConsultationLifecycleManager $lifecycle,
     ): JsonResponse {
         Gate::authorize('view', $consultation);
 
@@ -162,12 +179,16 @@ class ConsultationController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        $session = $tracker->heartbeat(
-            consultation: $consultation,
-            user: $user,
-            sessionToken: $validated['session_token'] ?? null,
-            countsAsActivity: (bool) ($validated['activity'] ?? false),
-        );
+        $consultation = $lifecycle->interruptIfInactive($consultation);
+
+        $session = $consultation->isActive()
+            ? $tracker->heartbeat(
+                consultation: $consultation,
+                user: $user,
+                sessionToken: $validated['session_token'] ?? null,
+                countsAsActivity: (bool) ($validated['activity'] ?? false),
+            )
+            : null;
 
         $consultation->refresh()->loadMissing(['client', 'attendant']);
 
@@ -175,7 +196,7 @@ class ConsultationController extends Controller
             'consultation_id' => (int) $consultation->getKey(),
             'status' => $consultation->status->value,
             'ended_reason' => $consultation->ended_reason?->value,
-            'session_token' => $session->session_token,
+            'session_token' => $session?->session_token,
             'presence' => $tracker->presence($consultation),
             'navigation_warning_seconds' => $safety->navigationWarningSeconds(),
             'inactivity_timeout_seconds' => $safety->inactivityTimeoutSeconds(),
