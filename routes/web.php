@@ -246,6 +246,19 @@ Route::middleware('auth')->group(function () {
         ->whereNumber(['consultation', 'message'])
         ->name('consultations.messages.image');
 
+    /*
+     * Miniatura da carta no balão do chat.
+     *
+     * O balão exibe a imagem em ~150 px e a conversa recarrega a página inteira
+     * ao navegar pelo histórico. Servir o snapshot original custava dezenas de
+     * KB por carta a cada leitura; a rota entrega o WebP reduzido, gerado uma
+     * única vez no servidor. A imagem cheia continua em
+     * `consultations.messages.image`, aberta pelo link do balão.
+     */
+    Route::get('consultas/{consultation}/mensagens/{message}/imagem/miniatura', [ConsultationMessageController::class, 'imageThumbnail'])
+        ->whereNumber(['consultation', 'message'])
+        ->name('consultations.messages.thumb');
+
     Route::patch('consultas/{consultation}/encerrar', [ConsultationController::class, 'end'])
         ->whereNumber('consultation')
         ->name('consultations.end');

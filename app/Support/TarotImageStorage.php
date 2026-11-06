@@ -140,58 +140,17 @@ final class TarotImageStorage
 
     /**
      * Reduz e recomprime a imagem em memória. Nada é gravado aqui.
+     *
+     * A rotina é compartilhada com as miniaturas do chat; ver
+     * `ImageThumbnail::encode()` para os limites aplicados e o fallback.
      */
     private function buildThumbnail(string $binary): ?string
     {
-        if (
-            ! function_exists('imagecreatefromstring')
-            || ! function_exists('imagescale')
-            || ! function_exists('imagewebp')
-        ) {
-            return null;
-        }
-
-        $size = @getimagesizefromstring($binary);
-
-        // Imagem corrompida, formato não raster ou arquivo gigante (acima de
-        // ~40 megapixels) fica fora da redução para não estourar a memória do
-        // processo compartilhado.
-        if (! is_array($size) || ($size[0] * $size[1]) > 40_000_000) {
-            return null;
-        }
-
-        $source = @imagecreatefromstring($binary);
-
-        if ($source === false) {
-            return null;
-        }
-
-        $targetWidth = max(64, (int) config('tarot.thumbnail.width', 320));
-        $resized = imagesx($source) > $targetWidth
-            ? imagescale($source, $targetWidth, -1, IMG_BICUBIC)
-            : $source;
-
-        if ($resized === false) {
-            imagedestroy($source);
-
-            return null;
-        }
-
-        imagepalettetotruecolor($resized);
-        imagealphablending($resized, false);
-        imagesavealpha($resized, true);
-
-        ob_start();
-        $encoded = imagewebp($resized, null, max(1, min(100, (int) config('tarot.thumbnail.quality', 72))));
-        $data = (string) ob_get_clean();
-
-        if ($resized !== $source) {
-            imagedestroy($resized);
-        }
-
-        imagedestroy($source);
-
-        return $encoded === true && $data !== '' ? $data : null;
+        return ImageThumbnail::encode(
+            $binary,
+            (int) config('tarot.thumbnail.width', 220),
+            (int) config('tarot.thumbnail.quality', 76),
+        );
     }
 
     private function streamedResponse(TarotCard $card, string $path, string $variant): StreamedResponse

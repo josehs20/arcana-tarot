@@ -205,11 +205,13 @@
                                         data-message-id="{{ $cardMessage->id }}"
                                     >
                                         @if (filled($cardMessage->image_path))
+                                            {{-- O balão mostra a miniatura WebP; o link abre o snapshot cheio. --}}
                                             <a href="{{ route('consultations.messages.image', [$consultation, $cardMessage]) }}"
                                                target="_blank" rel="noopener">
-                                                <img src="{{ route('consultations.messages.image', [$consultation, $cardMessage]) }}"
+                                                <img src="{{ route('consultations.messages.thumb', [$consultation, $cardMessage]) }}"
                                                      alt="Carta {{ $cardMessage->card_name }}"
-                                                     loading="lazy">
+                                                     loading="lazy"
+                                                     decoding="async">
                                             </a>
                                         @endif
                                         <figcaption>
@@ -411,6 +413,7 @@
                                                         data-card-name="{{ $card->name }}"
                                                         data-card-deck="{{ $deck->name }}"
                                                         data-card-image="{{ $cardImageUrl }}"
+                                                        data-card-thumb="{{ $cardThumbUrl }}"
                                                     >
                                                         <input
                                                             class="chat-card-picker__input"

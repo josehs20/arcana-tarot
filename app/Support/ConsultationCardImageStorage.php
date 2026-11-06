@@ -100,20 +100,95 @@ final class ConsultationCardImageStorage
             abort(404);
         }
 
-        $allowedMimes = array_keys((array) config('tarot.allowed_image_mimes'));
-        $mime = $this->disk()->mimeType($path);
+        return $this->streamedResponse($message, $path, $this->validatedMime($path));
+    }
 
-        if (! is_string($mime) || ! in_array($mime, $allowedMimes, true)) {
+    /**
+     * Miniatura WebP exibida no balão do chat.
+     *
+     * A conversa mostra cada carta em ~150 px e a página é recarregada inteira
+     * ao navegar pelo histórico. Servir o snapshot original custava dezenas de
+     * KB por carta; a miniatura fica na casa dos KB. O WebP é gerado uma única
+     * vez com o GD e gravado em `thumbnails/`, dentro do diretório da própria
+     * consulta, então a validação de caminho continua valendo.
+     *
+     * A imagem cheia continua em `response()`, aberta pelo link do balão. Sem
+     * GD, com arquivo corrompido ou fora dos formatos permitidos a rota cai de
+     * volta para o snapshot original: a carta nunca deixa de aparecer.
+     */
+    public function thumbnailResponse(ConsultationMessage $message): StreamedResponse
+    {
+        $source = $this->validatedSnapshotPath($message);
+
+        if (! $this->disk()->exists($source)) {
             abort(404);
         }
 
+        // O MIME é validado antes de o arquivo chegar ao GD.
+        $mime = $this->validatedMime($source);
+        $thumbnail = $this->ensureThumbnail($message, $source);
+
+        if ($thumbnail === null) {
+            return $this->streamedResponse($message, $source, $mime);
+        }
+
+        return $this->streamedResponse($message, $thumbnail, 'image/webp');
+    }
+
+    /**
+     * Caminho do WebP reduzido, gerando-o quando ainda não existe.
+     *
+     * @return string|null `null` quando o servidor não consegue reduzir a imagem.
+     */
+    private function ensureThumbnail(ConsultationMessage $message, string $sourcePath): ?string
+    {
+        $thumbnailPath = $this->thumbnailPath($message, $sourcePath);
+
+        if ($this->disk()->exists($thumbnailPath)) {
+            return $thumbnailPath;
+        }
+
+        $binary = $this->disk()->get($sourcePath);
+
+        if (! is_string($binary) || $binary === '') {
+            return null;
+        }
+
+        $thumbnail = ImageThumbnail::encode(
+            $binary,
+            (int) config('tarot.snapshot_thumbnail.width', 180),
+            (int) config('tarot.snapshot_thumbnail.quality', 72),
+        );
+
+        if ($thumbnail === null) {
+            return null;
+        }
+
+        return $this->disk()->put($thumbnailPath, $thumbnail) ? $thumbnailPath : null;
+    }
+
+    /**
+     * `consultation-cards/{consulta}/thumbnails/{arquivo}.webp`.
+     *
+     * Fica dentro do diretório da consulta para que a validação de caminho
+     * (`consultation-cards/{id}/`) cubra também o arquivo reduzido.
+     */
+    private function thumbnailPath(ConsultationMessage $message, string $sourcePath): string
+    {
+        return trim((string) config('tarot.snapshot_directory'), '/')
+            .'/'.$message->consultation_id
+            .'/thumbnails/'.pathinfo($sourcePath, PATHINFO_FILENAME).'.webp';
+    }
+
+    private function streamedResponse(ConsultationMessage $message, string $path, string $mime): StreamedResponse
+    {
         $stream = $this->disk()->readStream($path);
 
         if ($stream === false) {
             abort(404);
         }
 
-        $extension = config("tarot.allowed_image_mimes.{$mime}", 'img');
+        $extension = $mime === 'image/webp' ? 'webp' : config("tarot.allowed_image_mimes.{$mime}", 'img');
 
         return response()->stream(function () use ($stream): void {
             fpassthru($stream);
@@ -128,6 +203,22 @@ final class ConsultationCardImageStorage
             'Cache-Control' => 'private, no-store',
             'X-Content-Type-Options' => 'nosniff',
         ]);
+    }
+
+    /**
+     * O MIME gravado é conferido a cada requisição: um arquivo fora da lista
+     * permitida nunca é servido nem decodificado.
+     */
+    private function validatedMime(string $path): string
+    {
+        $allowedMimes = array_keys((array) config('tarot.allowed_image_mimes'));
+        $mime = $this->disk()->mimeType($path);
+
+        if (! is_string($mime) || ! in_array($mime, $allowedMimes, true)) {
+            abort(404);
+        }
+
+        return $mime;
     }
 
     /**

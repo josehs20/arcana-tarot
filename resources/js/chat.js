@@ -595,9 +595,12 @@ function createCardFigure(message) {
         link.rel = 'noopener';
 
         const image = document.createElement('img');
-        image.src = message.image_url;
+        // O balão carrega a miniatura gerada no servidor; a imagem cheia fica no
+        // link, aberta em nova aba.
+        image.src = message.image_thumb_url ?? message.image_url;
         image.alt = `Carta ${message.card_name ?? ''}`.trim();
         image.loading = 'lazy';
+        image.decoding = 'async';
 
         link.append(image);
         figure.append(link);
@@ -1109,8 +1112,11 @@ function updateCardSelection(form) {
         if (option?.dataset.cardImage) {
             const image = document.createElement('img');
             image.className = 'chat-card-picker__chip-image';
-            image.src = option.dataset.cardImage;
+            // A miniatura já está reduzida e cacheada; o atributo `data-card-image`
+            // continua sendo o original usado pelo modal de pré-visualização.
+            image.src = option.dataset.cardThumb ?? option.dataset.cardImage;
             image.alt = '';
+            image.decoding = 'async';
 
             chip.append(image);
         }
