@@ -50,6 +50,65 @@ const SIREN_HIGH_HZ = 1180;
 // conexão pendurada deixaria os dois botões desabilitados para sempre.
 const DECISION_TIMEOUT_MS = 15000;
 
+/*
+ * Diagnóstico em produção.
+ *
+ * Este arquivo decide quando o modal abre, qual pedido ele representa e se a
+ * sirene toca — tudo invisível na interface. Sem um rastro no console fica
+ * impossível, no servidor compartilhado, separar "o evento não chegou" de "o
+ * pedido saiu da fila" ou de "os botões estão presos". As linhas saem com o
+ * prefixo `[atendimento]` e podem ser silenciadas com `?debug=0` na URL ou
+ * `localStorage['arcana:channel-debug'] = '0'`.
+ */
+const CHANNEL_LOG_PREFIX = '[atendimento]';
+
+function channelDebugEnabled() {
+    try {
+        if (new URLSearchParams(window.location.search).get('debug') === '0') {
+            return false;
+        }
+
+        if (window.localStorage?.getItem('arcana:channel-debug') === '0') {
+            return false;
+        }
+    } catch {
+        // Modo privado/navegador sem storage: mantém o log ligado.
+    }
+
+    return true;
+}
+
+const channelDebug = channelDebugEnabled();
+
+function channelLog(event, details = null) {
+    if (!channelDebug) {
+        return;
+    }
+
+    if (details === null) {
+        console.info(`${CHANNEL_LOG_PREFIX} ${event}`);
+
+        return;
+    }
+
+    console.info(`${CHANNEL_LOG_PREFIX} ${event}`, details);
+}
+
+/**
+ * Nome do bundle em execução.
+ *
+ * Serve para confirmar, no navegador do cliente, qual versão do painel está
+ * carregada — um `public/build` desatualizado no servidor é a primeira
+ * suspeita quando uma correção "não faz efeito".
+ */
+function loadedBuildName() {
+    const script = [...document.querySelectorAll('script[src]')]
+        .map((element) => element.getAttribute('src') ?? '')
+        .find((src) => /\/build\/assets\/.*\.js$/.test(src));
+
+    return script ? script.split('/').pop() : 'desconhecido';
+}
+
 const userChannelState = {
     root: null,
     echo: null,
@@ -78,6 +137,10 @@ const userChannelState = {
     deciding: false,
     leaving: false,
     reloadingForSession: false,
+    // Assinatura da última leitura aplicada: evita repetir log a cada poll.
+    lastQueueSignature: null,
+    // Evita repetir "sirene bloqueada" a cada repetição do toque.
+    alertBlockedLogged: false,
 };
 
 function userChannelRoot() {
@@ -359,6 +422,7 @@ function primeAudio() {
 function handleAudioReady() {
     releaseAudioUnlock();
     updateAudioHint();
+    channelLog('audio.liberado', { estado: userChannelState.audio?.state ?? null, alarmeAtivo: userChannelState.alertActive });
 
     if (userChannelState.sound === CUSTOM_REQUEST_SOUND && userChannelState.soundUrl) {
         void loadCustomSound(userChannelState.soundUrl);
@@ -596,12 +660,24 @@ function playRequestSound(value) {
     const context = userChannelState.audio;
 
     if (!context || context.state !== 'running') {
+        /*
+         * Este é o único motivo pelo qual a sirene "não toca": o navegador ainda
+         * não liberou o áudio (nenhum gesto aconteceu). O log deixa isso
+         * explícito em produção em vez de parecer um alerta perdido — e sai uma
+         * única vez por alerta, não a cada repetição do toque.
+         */
+        if (!userChannelState.alertBlockedLogged) {
+            userChannelState.alertBlockedLogged = true;
+            channelLog('sirene.bloqueada', { estado: context?.state ?? 'sem-contexto' });
+        }
+
         return;
     }
 
     const sound = normalizeRequestSound(value);
 
     userChannelState.alertLastPlayAt = Date.now();
+    channelLog('sirene.toque', { som: sound, contexto: context.state });
 
     if (sound === CUSTOM_REQUEST_SOUND) {
         playCustomRequestSound(userChannelState.soundUrl);
@@ -645,7 +721,14 @@ function startAlert() {
         return;
     }
 
+    channelLog('sirene.inicio', {
+        som: userChannelState.sound,
+        contexto: userChannelState.audio?.state ?? 'sem-contexto',
+        solicitacoes: [...userChannelState.requests.keys()],
+    });
+
     userChannelState.alertActive = true;
+    userChannelState.alertBlockedLogged = false;
     userChannelState.alertLastPlayAt = 0;
 
     // Garante que o próximo clique/tecla da página libere o som e toque o
@@ -666,6 +749,7 @@ function stopAlert() {
     userChannelState.alertStopTimer = null;
     userChannelState.alertActive = false;
     userChannelState.alertLastPlayAt = 0;
+    userChannelState.alertBlockedLogged = false;
     updateAudioHint();
 
     // Corta o toque em curso: o pedido foi respondido ou o alerta silenciado.
@@ -781,9 +865,13 @@ function addRequest(request) {
 
 function removeRequest(requestId) {
     const key = Number(requestId);
+    const existed = userChannelState.requests.delete(key);
 
-    userChannelState.requests.delete(key);
     requestsList()?.querySelector(`[data-request-id="${key}"]`)?.remove();
+
+    if (existed) {
+        channelLog('fila.remove', { id: key, restantes: [...userChannelState.requests.keys()] });
+    }
 
     if (userChannelState.requests.size === 0) {
         requestsList()?.classList.add('d-none');
@@ -797,12 +885,47 @@ function removeRequest(requestId) {
         userChannelState.currentId = null;
 
         /*
+         * Com uma decisão em curso o modal fica onde está: `decide()` já trata
+         * a resposta (recarrega, avança para o próximo pedido ou navega). Mexer
+         * aqui fecharia o modal no meio do `PATCH`.
+         */
+        if (userChannelState.deciding) {
+            channelLog('modal.mantido', { motivo: 'decisao-em-andamento', id: key });
+
+            return;
+        }
+
+        /*
          * O pedido exibido saiu da fila (respondido em outra aba, cancelado
          * pelo cliente…). Se ainda há outros, o modal passa a mostrar o
          * próximo; mantê-lo com o conteúdo antigo deixaria os botões ligados a
          * um `currentId` vazio, e o clique não responderia nada.
          */
         openNextRequest();
+    }
+}
+
+/**
+ * Tira da fila o pedido de uma consulta que **deixou** de estar pendente.
+ *
+ * O feed do painel devolve em `consultation` a consulta aberta do usuário, e
+ * `requested` conta como aberta: a mesma solicitação aparece na fila
+ * (`requests`) **e** em `consultation`. Remover a fila por causa dessa leitura
+ * apagava o pedido que o próprio atendente tinha na tela — e o poll seguinte o
+ * reinseria como "novo", reabrindo o modal e a sirene em laço, com os botões
+ * ligados a nenhum pedido. A fila é a fonte de verdade do que está pendente;
+ * `consultation` só serve aqui para detectar que o pedido foi respondido.
+ */
+function forgetAnsweredRequest(consultation) {
+    const requestId = Number(consultation?.id);
+
+    if (!requestId || consultation?.status === 'requested') {
+        return;
+    }
+
+    if (userChannelState.requests.has(requestId)) {
+        channelLog('fila.respondido', { id: requestId, status: consultation.status });
+        removeRequest(requestId);
     }
 }
 
@@ -875,6 +998,7 @@ function fillRequestModal(request) {
     // modal já aberto não deve sobrescrever o destino de retorno.
     if (!element.classList.contains('show')) {
         userChannelState.modalFocusReturn = document.activeElement;
+        channelLog('modal.abrir', { id: Number(request.id) });
     }
 
     userChannelState.modal = Modal.getOrCreateInstance(element);
@@ -885,6 +1009,9 @@ function openRequestModal(requestId) {
     const request = userChannelState.requests.get(Number(requestId));
 
     if (!request) {
+        // Só acontece se o pedido saiu da fila entre a leitura e a abertura.
+        channelLog('modal.ignorado', { motivo: 'pedido-fora-da-fila', id: Number(requestId) });
+
         return;
     }
 
@@ -893,17 +1020,40 @@ function openRequestModal(requestId) {
 }
 
 /**
+ * Fecha o modal de solicitações, registrando o motivo no log de diagnóstico.
+ */
+function hideRequestModal(reason) {
+    const element = requestModal();
+
+    if (!element) {
+        return;
+    }
+
+    channelLog('modal.fechar', { motivo: reason, id: userChannelState.currentId });
+
+    userChannelState.modal ??= Modal.getOrCreateInstance(element);
+    userChannelState.modal.hide();
+}
+
+/**
  * Abre o próximo pedido da fila.
  *
  * Quando o modal já está aberto o conteúdo é trocado no lugar: fechar e abrir
  * em seguida faria o Bootstrap ignorar a segunda abertura (`_isTransitioning`).
+ * Com uma decisão em curso nada muda — quem fecha ou navega é `decide()`.
  */
 function openNextRequest() {
+    if (userChannelState.deciding) {
+        channelLog('modal.mantido', { motivo: 'decisao-em-andamento', etapa: 'proximo-pedido' });
+
+        return;
+    }
+
     const next = [...userChannelState.requests.keys()][0];
 
     if (next === undefined) {
         userChannelState.currentId = null;
-        userChannelState.modal?.hide();
+        hideRequestModal('fila-vazia');
 
         return;
     }
@@ -925,11 +1075,20 @@ async function decide(action) {
     const element = requestModal();
 
     if (!element || userChannelState.deciding) {
+        channelLog('decisao.ignorada', { acao: action, motivo: element ? 'decisao-em-andamento' : 'sem-modal' });
+
         return;
     }
 
     const request = userChannelState.requests.get(userChannelState.currentId);
     const url = sameOriginUrl(action === 'accept' ? request?.accept_url : request?.reject_url);
+
+    channelLog('decisao', {
+        acao: action,
+        id: userChannelState.currentId,
+        fila: [...userChannelState.requests.keys()],
+        url,
+    });
 
     /*
      * `currentId` vazio significa que a solicitação saiu da fila entre a
@@ -937,6 +1096,8 @@ async function decide(action) {
      * Sem esta mensagem o clique parecia não funcionar.
      */
     if (!request || !url) {
+        channelLog('decisao.sem-pedido', { acao: action, id: userChannelState.currentId, url });
+
         setRequestError('Esta solicitação não está mais disponível. Atualizando a fila…');
         openNextRequest();
         syncPending();
@@ -964,6 +1125,14 @@ async function decide(action) {
 
         const payload = await response.json().catch(() => ({}));
 
+        channelLog('decisao.resposta', {
+            acao: action,
+            id: request.id,
+            status: response.status,
+            mensagem: payload?.message ?? null,
+            redirect: payload?.redirect ?? null,
+        });
+
         /*
          * 419: o token CSRF da página não vale mais (sessão expirada ou cookie
          * refeito). Recarregar recupera token e fila; sem isso o painel ficava
@@ -982,6 +1151,10 @@ async function decide(action) {
          */
         if (response.status === 403 || response.status === 409 || response.status === 410) {
             setRequestError(payload.message ?? 'Esta solicitação não está mais disponível.');
+
+            // Libera a decisão antes de mexer na fila: `removeRequest` abre o
+            // próximo pedido, e `openNextRequest` não age durante uma decisão.
+            finishDecision();
             removeRequest(request.id);
             syncPending();
 
@@ -1002,6 +1175,7 @@ async function decide(action) {
         }
 
         stopAlert();
+        finishDecision();
         removeRequest(request.id);
 
         if (action === 'accept' && payload.redirect) {
@@ -1012,8 +1186,9 @@ async function decide(action) {
 
         setUserNotice(payload.message ?? 'Solicitação recusada.');
         window.setTimeout(() => setUserNotice(''), 6000);
-        openNextRequest();
     } catch (error) {
+        channelLog('decisao.erro', { acao: action, nome: error?.name ?? 'Error', mensagem: error?.message ?? String(error) });
+
         setRequestError(
             error?.name === 'AbortError'
                 ? 'O servidor demorou para responder. Verifique a conexão e tente novamente.'
@@ -1021,11 +1196,25 @@ async function decide(action) {
         );
     } finally {
         window.clearTimeout(timeout);
-        userChannelState.deciding = false;
-        buttons.forEach((button) => {
+        finishDecision();
+    }
+}
+
+/**
+ * Encerra o estado "decidindo": libera os botões e permite que a fila avance.
+ *
+ * Chamado também antes de `removeRequest`, porque é ele quem abre o próximo
+ * pedido — e `openNextRequest` não troca o conteúdo do modal enquanto houver
+ * uma decisão em andamento.
+ */
+function finishDecision() {
+    userChannelState.deciding = false;
+
+    requestModal()
+        ?.querySelectorAll('[data-request-accept], [data-request-reject]')
+        .forEach((button) => {
             button.disabled = false;
         });
-    }
 }
 
 /**
@@ -1091,6 +1280,8 @@ async function syncPending({ notifyWhenNew = false } = {}) {
 
         const payload = await response.json();
 
+        logSyncResult(payload);
+
         applyRequests(payload.requests ?? [], { notifyWhenNew });
 
         if (payload.consultation) {
@@ -1101,12 +1292,43 @@ async function syncPending({ notifyWhenNew = false } = {}) {
         }
 
         return 'ok';
-    } catch {
-        // Silencioso: a próxima leitura tenta novamente com espera maior.
+    } catch (error) {
+        channelLog('sync.erro', { url, mensagem: error?.message ?? String(error) });
+
+        // Silencioso para o usuário: a próxima leitura tenta de novo com espera
+        // maior (o agendador faz o backoff).
         return 'error';
     } finally {
         userChannelState.syncing = false;
     }
+}
+
+/*
+ * Log de uma leitura do feed, emitido só quando algo muda.
+ *
+ * O poll roda a cada 3 s; repetir a mesma foto encheria o console e esconderia
+ * o que importa. `consultation` é registrada sempre que muda de estado, o que
+ * mostra a transição `requested -> active` no aceite.
+ */
+function logSyncResult(payload) {
+    const ids = (payload.requests ?? []).map((request) => Number(request.id));
+    const consultation = payload.consultation;
+    const signature = [
+        ids.join(','),
+        consultation ? `${consultation.id}:${consultation.status}` : 'sem-consulta',
+    ].join('|');
+
+    if (signature === userChannelState.lastQueueSignature) {
+        return;
+    }
+
+    userChannelState.lastQueueSignature = signature;
+    channelLog('sync', {
+        solicitacoes: ids,
+        consulta: consultation ? { id: consultation.id, status: consultation.status } : null,
+        emTela: userChannelState.currentId,
+        modalAberto: requestModal()?.classList.contains('show') ?? false,
+    });
 }
 
 /*
@@ -1131,10 +1353,24 @@ function applyRequests(requests, { notifyWhenNew = false } = {}) {
         addRequest(request);
     });
 
-    if (notifyWhenNew && firstNew !== null && requestModal() !== null) {
-        startAlert();
-        openRequestModal(firstNew.id);
+    if (!notifyWhenNew || firstNew === null || requestModal() === null) {
+        return;
     }
+
+    startAlert();
+
+    /*
+     * Um pedido novo não rouba o modal de quem já está decidindo outro: o
+     * atendente veria o conteúdo trocar no meio do clique. Sem pedido em tela,
+     * abre o primeiro da fila (é o caso da carga inicial e da reconexão).
+     */
+    if (userChannelState.currentId !== null) {
+        channelLog('modal.mantido', { motivo: 'ja-exibe-outro-pedido', atual: userChannelState.currentId, novo: firstNew.id });
+
+        return;
+    }
+
+    openRequestModal(firstNew.id);
 }
 
 /*
@@ -1150,9 +1386,10 @@ function applyConsultationState(consultation) {
 
     syncConsultationReturn(consultation);
 
-    if (userChannelState.requests.has(requestId)) {
-        removeRequest(requestId);
-    }
+    // Só sai da fila quando a consulta deixou de estar pendente: `requested`
+    // aqui é a mesma solicitação que está em `requests` (ver
+    // `forgetAnsweredRequest`).
+    forgetAnsweredRequest(consultation);
 
     if (userChannelState.lastState === null) {
         userChannelState.lastState = signature;
@@ -1225,6 +1462,8 @@ function handleRequest(event) {
 
     if (userChannelState.currentId === null) {
         openRequestModal(request.id);
+    } else {
+        channelLog('modal.mantido', { motivo: 'ja-exibe-outro-pedido', atual: userChannelState.currentId, novo: request.id });
     }
 }
 
@@ -1243,9 +1482,7 @@ function handleState(event) {
 
     syncConsultationReturn(consultation);
 
-    if (userChannelState.requests.has(requestId)) {
-        removeRequest(requestId);
-    }
+    forgetAnsweredRequest(consultation);
 
     /*
      * Aceite confirmado: cliente e atendente vão para a tela de atendimento
@@ -1324,8 +1561,25 @@ function initializeUserChannel() {
      * de solicitação volta a abrir o modal e a tocar o alerta.
      */
     modal?.addEventListener('hidden.bs.modal', () => {
+        channelLog('modal.fechado', { id: userChannelState.currentId, fila: [...userChannelState.requests.keys()] });
+
         userChannelState.currentId = null;
         stopAlert();
+    });
+
+    /*
+     * Rede de segurança do fechamento.
+     *
+     * O Bootstrap ignora `hide()` durante a transição de abertura
+     * (`_isTransitioning`). Se o pedido sair da fila nesse intervalo, o modal
+     * terminava de abrir sem nenhum pedido em tela — botões visíveis e sem
+     * efeito. Ao concluir a abertura sem `currentId`, fecha de novo.
+     */
+    modal?.addEventListener('shown.bs.modal', () => {
+        if (userChannelState.currentId === null) {
+            channelLog('modal.reaberto-sem-pedido', { acao: 'fechando' });
+            hideRequestModal('abriu-sem-pedido');
+        }
     });
 
     // Tira o foco de dentro do modal antes de o Bootstrap aplicar
@@ -1340,6 +1594,22 @@ function initializeUserChannel() {
     }
 
     const mode = root.dataset.realtimeMode === 'poll' ? 'poll' : 'socket';
+
+    /*
+     * Primeira linha do diagnóstico: sem ela não se sabe, no servidor do
+     * cliente, qual build está carregado nem em que modo o painel está. É a
+     * checagem que separa "correção não subiu" de "correção não funcionou".
+     */
+    channelLog('iniciado', {
+        build: loadedBuildName(),
+        modo: mode,
+        usuario: userChannelState.userId,
+        atendente: modal !== null,
+        som: userChannelState.sound,
+        arquivoSom: userChannelState.soundUrl,
+        urlEventos: root.dataset.eventsUrl ?? null,
+        urlPendentes: root.dataset.pendingUrl ?? null,
+    });
 
     userChannelState.realtimeMode = mode;
 
@@ -1358,8 +1628,23 @@ function initializeUserChannel() {
     userChannelState.echo = echo;
 
     echo.private(`user.${userChannelState.userId}`)
-        .listen('.consultation.request', handleRequest)
-        .listen('.consultation.state', handleState)
+        .listen('.consultation.request', (event) => {
+            channelLog('evento.request', {
+                id: Number(event?.request?.id),
+                novo: !userChannelState.requests.has(Number(event?.request?.id)),
+                podeResponder: requestModal() !== null,
+            });
+
+            handleRequest(event);
+        })
+        .listen('.consultation.state', (event) => {
+            channelLog('evento.state', {
+                id: Number(event?.consultation?.id),
+                status: event?.consultation?.status ?? null,
+            });
+
+            handleState(event);
+        })
         .error(() => setUserNotice('Não foi possível autorizar o canal de avisos em tempo real. Atualize o painel para ver novas solicitações.'));
 
     const connection = echo.connector?.pusher?.connection;
