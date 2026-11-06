@@ -17,7 +17,6 @@
     class="modal fade"
     tabindex="-1"
     aria-labelledby="request-modal-title"
-    aria-hidden="true"
     data-request-modal
 >
     <div class="modal-dialog modal-dialog-centered">
@@ -37,6 +36,15 @@
                     aria-live="assertive"
                     data-request-error
                 ></div>
+
+                {{--
+                    Navegadores só liberam áudio depois de uma interação. Enquanto
+                    o contexto estiver suspenso, este aviso explica por que a
+                    sirene ainda não tocou e o que fazer — some no primeiro gesto.
+                --}}
+                <p class="form-text mt-3 mb-0 d-none" data-request-audio-hint>
+                    Clique em qualquer ponto desta janela para liberar o som do alerta neste navegador.
+                </p>
 
                 <p class="form-text mt-3 mb-0">
                     O aceite inicia a consulta imediatamente e mantém sua disponibilidade como

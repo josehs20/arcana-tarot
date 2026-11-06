@@ -46,6 +46,10 @@ const REQUEST_SOUNDS = new Set([DEFAULT_REQUEST_SOUND, 'bell', 'chime', 'pulse',
 const SIREN_LOW_HZ = 640;
 const SIREN_HIGH_HZ = 1180;
 
+// Tempo máximo para o servidor responder ao aceite/recusa. Sem esse limite uma
+// conexão pendurada deixaria os dois botões desabilitados para sempre.
+const DECISION_TIMEOUT_MS = 15000;
+
 const userChannelState = {
     root: null,
     echo: null,
@@ -55,6 +59,8 @@ const userChannelState = {
     lastState: null,
     lastConsultationId: null,
     audio: null,
+    audioUnlockBound: false,
+    audioUnlockListeners: [],
     sound: DEFAULT_REQUEST_SOUND,
     soundUrl: null,
     customBuffer: null,
@@ -62,12 +68,16 @@ const userChannelState = {
     alertNodes: [],
     alertTimer: null,
     alertStopTimer: null,
+    alertActive: false,
+    alertLastPlayAt: 0,
     modal: null,
+    modalFocusReturn: null,
     currentId: null,
     requests: new Map(),
     syncing: false,
     deciding: false,
     leaving: false,
+    reloadingForSession: false,
 };
 
 function userChannelRoot() {
@@ -84,6 +94,46 @@ function requestModal() {
 
 function requestsList() {
     return document.querySelector('[data-requests-list]');
+}
+
+/**
+ * Reduz uma URL do servidor ao caminho relativo quando ela aponta para o mesmo
+ * host da página.
+ *
+ * `route()` devolve URL absoluta. Atrás do proxy da hospedagem compartilhada o
+ * Laravel pode montá-la com `http://` — o que o navegador bloqueia como mixed
+ * content em páginas HTTPS, deixando o aceite/recusa sem resposta. Usar o
+ * caminho relativo mantém o esquema e o host da própria página, que são sempre
+ * os corretos, inclusive quando o TLS termina no proxy.
+ */
+function sameOriginUrl(url) {
+    if (!url) {
+        return '';
+    }
+
+    try {
+        const parsed = new URL(url, window.location.origin);
+
+        return parsed.origin === window.location.origin
+            ? `${parsed.pathname}${parsed.search}`
+            : parsed.toString();
+    } catch {
+        return url;
+    }
+}
+
+/**
+ * Cabeçalhos das chamadas autenticadas feitas por `fetch`.
+ *
+ * O token CSRF vem do `<meta>` do layout do painel; `X-Requested-With` faz o
+ * servidor responder JSON em vez de redirecionar.
+ */
+function requestHeaders() {
+    return {
+        Accept: 'application/json',
+        'X-CSRF-TOKEN': csrfToken(),
+        'X-Requested-With': 'XMLHttpRequest',
+    };
 }
 
 function setUserNotice(message) {
@@ -108,6 +158,24 @@ function setRequestError(message) {
     error.classList.toggle('d-none', !message);
 }
 
+/**
+ * Aviso visível de áudio bloqueado pelo navegador.
+ *
+ * Só aparece enquanto existe alarme pendente e o `AudioContext` ainda não está
+ * em `running`: com ele o atendente sabe que basta um clique para a sirene
+ * tocar, em vez de achar que o aviso sonoro simplesmente não funciona.
+ */
+function updateAudioHint() {
+    const hint = requestModal()?.querySelector('[data-request-audio-hint]');
+
+    if (!hint) {
+        return;
+    }
+
+    const blocked = userChannelState.alertActive && userChannelState.audio?.state !== 'running';
+    hint.classList.toggle('d-none', !blocked);
+}
+
 function updatePendingCount() {
     const total = userChannelState.requests.size;
 
@@ -123,7 +191,7 @@ function updatePendingCount() {
 function workspaceUrlFor(consultationId) {
     const template = userChannelRoot()?.dataset.workspaceUrl;
 
-    return template ? template.replace('__ID__', String(consultationId)) : '';
+    return template ? sameOriginUrl(template.replace('__ID__', String(consultationId))) : '';
 }
 
 /*
@@ -163,13 +231,15 @@ function syncConsultationReturn(consultation) {
 }
 
 function leaveTo(url) {
-    if (!url || userChannelState.leaving) {
+    const target = sameOriginUrl(url);
+
+    if (!target || userChannelState.leaving) {
         return;
     }
 
     userChannelState.leaving = true;
     window.clearTimeout(userChannelState.alertTimer);
-    window.location.assign(url);
+    window.location.assign(target);
 }
 
 /*
@@ -178,10 +248,15 @@ function leaveTo(url) {
  * Os toques predefinidos são sintetizados no próprio navegador. Quando a
  * administração envia um MP3, o arquivo é baixado uma vez e decodificado no
  * AudioContext para tocar junto com o mesmo mecanismo de repetição. A sirene
- * continua sendo o padrão histórico. Navegadores bloqueiam áudio antes de uma
- * interação do usuário, por isso o contexto é preparado no primeiro
- * clique/tecla da página; até lá o alerta fica agendado e começa no primeiro
- * gesto.
+ * continua sendo o padrão histórico.
+ *
+ * Navegadores só liberam áudio depois de uma interação do usuário — e o Chrome
+ * avisa no console quando um `AudioContext` nasce antes disso. Por isso o
+ * contexto nunca é criado no carregamento: os primeiros `pointerdown`,
+ * `keydown` e `touchstart` da página criam e retomam o contexto e, no mesmo
+ * instante em que ele passa a `running`, o alarme que estava aguardando toca.
+ * Criar o contexto dentro do gesto também é o único caminho confiável no
+ * Safari, que mantém suspenso um contexto nascido fora da interação.
  */
 function normalizeRequestSound(value) {
     return REQUEST_SOUNDS.has(value) ? value : DEFAULT_REQUEST_SOUND;
@@ -204,7 +279,9 @@ function loadCustomSound(url) {
         return userChannelState.customLoadPromise;
     }
 
-    const context = primeAudio();
+    // Sem contexto liberado não há como decodificar: o arquivo é baixado no
+    // primeiro gesto do usuário, quando `handleAudioReady` roda.
+    const context = userChannelState.audio;
 
     if (!context) {
         return Promise.resolve(null);
@@ -213,7 +290,7 @@ function loadCustomSound(url) {
     userChannelState.soundUrl = url;
     userChannelState.customBuffer = null;
 
-    const promise = fetch(url, { credentials: 'same-origin' })
+    const promise = fetch(sameOriginUrl(url), { credentials: 'same-origin' })
         .then((response) => {
             if (!response.ok) {
                 throw new Error(`Falha ao baixar o som (${response.status}).`);
@@ -243,6 +320,12 @@ function loadCustomSound(url) {
     return promise;
 }
 
+/**
+ * Cria (uma única vez) e retoma o `AudioContext`.
+ *
+ * Só deve ser chamado a partir de um gesto do usuário: `pointerdown`,
+ * `keydown`, `touchstart` ou o clique no botão de prévia do cadastro.
+ */
 function primeAudio() {
     const AudioContextClass = window.AudioContext ?? window.webkitAudioContext;
 
@@ -250,13 +333,81 @@ function primeAudio() {
         return null;
     }
 
-    userChannelState.audio ??= new AudioContextClass();
+    if (userChannelState.audio === null) {
+        userChannelState.audio = new AudioContextClass();
+        userChannelState.audio.addEventListener('statechange', () => {
+            if (userChannelState.audio?.state === 'running') {
+                handleAudioReady();
+            }
+        });
+    }
 
     if (userChannelState.audio.state === 'suspended') {
         userChannelState.audio.resume().catch(() => {});
     }
 
     return userChannelState.audio;
+}
+
+/**
+ * O contexto passou a rodar: o som está liberado para o resto da página.
+ *
+ * Desarma os gestos (o áudio não volta a ser bloqueado), pré-carrega o MP3
+ * configurado e toca imediatamente o alarme que estava esperando a interação —
+ * sem isso o atendente só ouviria o toque no próximo ciclo de repetição.
+ */
+function handleAudioReady() {
+    releaseAudioUnlock();
+    updateAudioHint();
+
+    if (userChannelState.sound === CUSTOM_REQUEST_SOUND && userChannelState.soundUrl) {
+        void loadCustomSound(userChannelState.soundUrl);
+    }
+
+    if (userChannelState.alertActive && Date.now() - userChannelState.alertLastPlayAt > 800) {
+        playRequestSound(userChannelState.sound);
+    }
+}
+
+function onAudioGesture() {
+    const context = primeAudio();
+
+    if (!context) {
+        releaseAudioUnlock();
+
+        return;
+    }
+
+    if (context.state === 'running') {
+        handleAudioReady();
+    }
+}
+
+function releaseAudioUnlock() {
+    userChannelState.audioUnlockListeners.forEach(([type, listener]) => {
+        document.removeEventListener(type, listener);
+    });
+    userChannelState.audioUnlockListeners = [];
+}
+
+/**
+ * Escuta os primeiros gestos da página até o áudio ser liberado.
+ *
+ * Os listeners não usam `once`: se o primeiro toque não for suficiente para o
+ * navegador liberar o som, o próximo tenta de novo. Eles só saem de cena em
+ * `releaseAudioUnlock`, quando o contexto já está em `running`.
+ */
+function bindAudioUnlock() {
+    if (userChannelState.audioUnlockBound) {
+        return;
+    }
+
+    userChannelState.audioUnlockBound = true;
+
+    ['pointerdown', 'keydown', 'touchstart'].forEach((type) => {
+        document.addEventListener(type, onAudioGesture, { passive: true });
+        userChannelState.audioUnlockListeners.push([type, onAudioGesture]);
+    });
 }
 
 function scheduleTone(context, {
@@ -450,8 +601,11 @@ function playRequestSound(value) {
 
     const sound = normalizeRequestSound(value);
 
+    userChannelState.alertLastPlayAt = Date.now();
+
     if (sound === CUSTOM_REQUEST_SOUND) {
         playCustomRequestSound(userChannelState.soundUrl);
+
         return;
     }
 
@@ -491,7 +645,14 @@ function startAlert() {
         return;
     }
 
-    primeAudio();
+    userChannelState.alertActive = true;
+    userChannelState.alertLastPlayAt = 0;
+
+    // Garante que o próximo clique/tecla da página libere o som e toque o
+    // alarme na hora, mesmo que o atendente ainda não tenha interagido.
+    bindAudioUnlock();
+    updateAudioHint();
+
     playRequestSound(userChannelState.sound);
     scheduleNextAlert();
 
@@ -503,6 +664,9 @@ function stopAlert() {
     window.clearTimeout(userChannelState.alertStopTimer);
     userChannelState.alertTimer = null;
     userChannelState.alertStopTimer = null;
+    userChannelState.alertActive = false;
+    userChannelState.alertLastPlayAt = 0;
+    updateAudioHint();
 
     // Corta o toque em curso: o pedido foi respondido ou o alerta silenciado.
     userChannelState.alertNodes.forEach(({ oscillator }) => {
@@ -632,13 +796,57 @@ function removeRequest(requestId) {
     if (userChannelState.currentId === key) {
         userChannelState.currentId = null;
 
-        // Só fecha quando não há outro pedido para assumir o modal.
-        if (userChannelState.requests.size === 0) {
-            userChannelState.modal?.hide();
-        }
+        /*
+         * O pedido exibido saiu da fila (respondido em outra aba, cancelado
+         * pelo cliente…). Se ainda há outros, o modal passa a mostrar o
+         * próximo; mantê-lo com o conteúdo antigo deixaria os botões ligados a
+         * um `currentId` vazio, e o clique não responderia nada.
+         */
+        openNextRequest();
     }
 }
 
+
+/**
+ * Devolve o foco para fora do modal antes de o Bootstrap escondê-lo.
+ *
+ * O Bootstrap não restaura o foco ao fechar: o elemento focado continua dentro
+ * do modal quando `aria-hidden="true"` é aplicado. O navegador então bloqueia o
+ * atributo (“Blocked aria-hidden on an element because its descendant retained
+ * focus”) e o teclado fica preso numa região invisível. Rodamos no evento
+ * `hide.bs.modal`, que acontece antes de o atributo ser aplicado.
+ */
+function restoreRequestModalFocus() {
+    const element = requestModal();
+    const active = document.activeElement;
+
+    if (!element || !active || !element.contains(active)) {
+        return;
+    }
+
+    const previous = userChannelState.modalFocusReturn;
+    userChannelState.modalFocusReturn = null;
+
+    if (previous?.isConnected && previous !== document.body && typeof previous.focus === 'function') {
+        previous.focus({ preventScroll: true });
+
+        return;
+    }
+
+    const fallback = document.querySelector('#conteudo-principal, main');
+
+    if (fallback) {
+        if (!fallback.hasAttribute('tabindex')) {
+            fallback.setAttribute('tabindex', '-1');
+        }
+
+        fallback.focus({ preventScroll: true });
+
+        return;
+    }
+
+    active.blur();
+}
 
 function fillRequestModal(request) {
     const element = requestModal();
@@ -662,6 +870,12 @@ function fillRequestModal(request) {
     element.querySelectorAll('[data-request-accept], [data-request-reject]').forEach((button) => {
         button.disabled = false;
     });
+
+    // Memoriza de onde o foco veio só na abertura: trocar o conteúdo com o
+    // modal já aberto não deve sobrescrever o destino de retorno.
+    if (!element.classList.contains('show')) {
+        userChannelState.modalFocusReturn = document.activeElement;
+    }
 
     userChannelState.modal = Modal.getOrCreateInstance(element);
     userChannelState.modal.show();
@@ -697,16 +911,42 @@ function openNextRequest() {
     openRequestModal(next);
 }
 
+/**
+ * Responde (aceitar ou recusar) o pedido exibido no modal.
+ *
+ * Toda a decisão é do servidor: aqui só se envia `PATCH` para a rota indicada
+ * pelo cartão da solicitação e se traduz a resposta. O envio usa o caminho
+ * relativo (`sameOriginUrl`) para não depender do esquema/host que o Laravel
+ * gerou — atrás de proxy com TLS isso evitaria um `fetch` bloqueado como mixed
+ * content — e tem tempo limite, para os botões nunca ficarem travados em uma
+ * conexão pendurada.
+ */
 async function decide(action) {
-    const request = userChannelState.requests.get(userChannelState.currentId);
     const element = requestModal();
 
-    if (!request || !element || userChannelState.deciding) {
+    if (!element || userChannelState.deciding) {
         return;
     }
 
-    const url = action === 'accept' ? request.accept_url : request.reject_url;
+    const request = userChannelState.requests.get(userChannelState.currentId);
+    const url = sameOriginUrl(action === 'accept' ? request?.accept_url : request?.reject_url);
+
+    /*
+     * `currentId` vazio significa que a solicitação saiu da fila entre a
+     * abertura do modal e o clique (outra aba respondeu, o cliente cancelou…).
+     * Sem esta mensagem o clique parecia não funcionar.
+     */
+    if (!request || !url) {
+        setRequestError('Esta solicitação não está mais disponível. Atualizando a fila…');
+        openNextRequest();
+        syncPending();
+
+        return;
+    }
+
     const buttons = element.querySelectorAll('[data-request-accept], [data-request-reject]');
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), DECISION_TIMEOUT_MS);
 
     userChannelState.deciding = true;
     buttons.forEach((button) => {
@@ -718,14 +958,22 @@ async function decide(action) {
         const response = await fetch(url, {
             method: 'PATCH',
             credentials: 'same-origin',
-            headers: {
-                Accept: 'application/json',
-                'X-CSRF-TOKEN': csrfToken(),
-                'X-Requested-With': 'XMLHttpRequest',
-            },
+            headers: requestHeaders(),
+            signal: controller.signal,
         });
 
         const payload = await response.json().catch(() => ({}));
+
+        /*
+         * 419: o token CSRF da página não vale mais (sessão expirada ou cookie
+         * refeito). Recarregar recupera token e fila; sem isso o painel ficava
+         * aberto respondendo "não foi possível" para sempre.
+         */
+        if (response.status === 419) {
+            reloadAfterSessionExpiry();
+
+            return;
+        }
 
         /*
          * 403/409/410 significam que outra aba, outro atendente ou o cliente
@@ -748,7 +996,9 @@ async function decide(action) {
         }
 
         if (!response.ok) {
-            throw new Error(`Falha ao responder a solicitação (${response.status}).`);
+            setRequestError(payload.message ?? `Falha ao responder a solicitação (${response.status}). Tente novamente.`);
+
+            return;
         }
 
         stopAlert();
@@ -763,14 +1013,37 @@ async function decide(action) {
         setUserNotice(payload.message ?? 'Solicitação recusada.');
         window.setTimeout(() => setUserNotice(''), 6000);
         openNextRequest();
-    } catch {
-        setRequestError('Não foi possível responder agora. Verifique a conexão e tente novamente.');
+    } catch (error) {
+        setRequestError(
+            error?.name === 'AbortError'
+                ? 'O servidor demorou para responder. Verifique a conexão e tente novamente.'
+                : 'Não foi possível responder agora. Verifique a conexão e tente novamente.',
+        );
     } finally {
+        window.clearTimeout(timeout);
         userChannelState.deciding = false;
         buttons.forEach((button) => {
             button.disabled = false;
         });
     }
+}
+
+/**
+ * Recarrega o painel uma vez quando o servidor recusa o token CSRF.
+ *
+ * A recarga devolve um token novo e a fila atual; a guarda evita laço caso a
+ * sessão já tenha sido encerrada de vez (aí o próximo carregamento leva ao
+ * login, não a este código).
+ */
+function reloadAfterSessionExpiry() {
+    setRequestError('Sua sessão expirou. Recarregando o painel…');
+
+    if (userChannelState.reloadingForSession) {
+        return;
+    }
+
+    userChannelState.reloadingForSession = true;
+    window.setTimeout(() => window.location.reload(), 1200);
 }
 
 
@@ -789,7 +1062,7 @@ async function decide(action) {
  */
 async function syncPending({ notifyWhenNew = false } = {}) {
     const root = userChannelRoot();
-    const url = root?.dataset.eventsUrl || root?.dataset.pendingUrl;
+    const url = sameOriginUrl(root?.dataset.eventsUrl || root?.dataset.pendingUrl);
 
     if (!url || userChannelState.syncing) {
         return 'skipped';
@@ -800,11 +1073,17 @@ async function syncPending({ notifyWhenNew = false } = {}) {
     try {
         const response = await fetch(url, {
             credentials: 'same-origin',
-            headers: {
-                Accept: 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-            },
+            headers: requestHeaders(),
         });
+
+        if (response.status === 419) {
+            // Token CSRF expirado: o painel inteiro para de atualizar até
+            // recarregar. A recarga é única por carregamento (guarda em
+            // `reloadAfterSessionExpiry`), então não há laço.
+            reloadAfterSessionExpiry();
+
+            return 'error';
+        }
 
         if (!response.ok) {
             throw new Error(`Falha ao listar solicitações (${response.status}).`);
@@ -1049,15 +1328,15 @@ function initializeUserChannel() {
         stopAlert();
     });
 
-    // Navegadores exigem interação do usuário antes de liberar áudio; só o
-    // atendente (que tem modal) precisa da sirene.
-    if (modal) {
-        document.addEventListener('pointerdown', primeAudio, { once: true });
-        document.addEventListener('keydown', primeAudio, { once: true });
+    // Tira o foco de dentro do modal antes de o Bootstrap aplicar
+    // `aria-hidden="true"` no fechamento (ver `restoreRequestModalFocus`).
+    modal?.addEventListener('hide.bs.modal', restoreRequestModalFocus);
 
-        if (userChannelState.sound === CUSTOM_REQUEST_SOUND && userChannelState.soundUrl) {
-            void loadCustomSound(userChannelState.soundUrl);
-        }
+    // Navegadores exigem interação do usuário antes de liberar áudio; só o
+    // atendente (que tem modal) precisa da sirene. O contexto nasce no primeiro
+    // gesto (nunca no carregamento) e o alarme pendente toca na hora.
+    if (modal) {
+        bindAudioUnlock();
     }
 
     const mode = root.dataset.realtimeMode === 'poll' ? 'poll' : 'socket';
