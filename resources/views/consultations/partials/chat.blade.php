@@ -258,6 +258,40 @@
                     @error('body')
                         <div class="invalid-feedback">{{ $message }}</div>
                     @enderror
+
+                    {{--
+                        Seletor de emoji do compositor.
+
+                        O painel é montado pelo `chat.js` a partir de uma lista
+                        própria — nenhuma dependência nova entra no bundle — e
+                        insere o caractere na posição do cursor, respeitando o
+                        limite de caracteres do campo. Sem JavaScript o botão
+                        simplesmente não abre, e digitar o emoji pelo teclado do
+                        aparelho continua funcionando.
+                    --}}
+                    <div class="chat-emoji" data-chat-emoji>
+                        <button
+                            type="button"
+                            class="chat-emoji__trigger"
+                            data-chat-emoji-trigger
+                            aria-expanded="false"
+                            aria-controls="chat-emoji-panel"
+                            aria-label="Inserir emoji na mensagem"
+                            title="Inserir emoji"
+                        >
+                            <x-ui.icon name="smile" width="16" height="16" />
+                            <span class="chat-emoji__trigger-text">Emoji</span>
+                        </button>
+
+                        <div
+                            class="chat-emoji__panel d-none"
+                            id="chat-emoji-panel"
+                            data-chat-emoji-panel
+                            role="group"
+                            aria-label="Escolher emoji"
+                        ></div>
+                    </div>
+
                     <div class="invalid-feedback d-block d-none" data-chat-error role="alert"></div>
                     <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-2">
                         <span class="form-text mt-0" data-chat-send-hint>
@@ -363,7 +397,10 @@
                                             <div class="chat-card-picker__grid">
                                                 @foreach ($deck->cards as $card)
                                                     @php
-                                                        $cardImageUrl = route('tarot.cards.image', $card);
+                                                        // A grade usa a miniatura (WebP reduzido e cacheado);
+                                                        // a pré-visualização ampliada continua no original.
+                                                        $cardImageUrl = $card->imageUrl();
+                                                        $cardThumbUrl = $card->thumbnailUrl();
                                                         $cardChecked = in_array((string) $card->id, array_map('strval', (array) old('tarot_card_ids', [])), true)
                                                             || (string) old('tarot_card_id') === (string) $card->id;
                                                     @endphp
@@ -387,9 +424,11 @@
                                                         <label class="chat-card-picker__label" for="tarot-card-{{ $card->id }}">
                                                             <img
                                                                 class="chat-card-picker__image"
-                                                                src="{{ $cardImageUrl }}"
+                                                                src="{{ $cardThumbUrl }}"
                                                                 alt="Carta {{ $card->name }}"
                                                                 loading="lazy"
+                                                                decoding="async"
+                                                                fetchpriority="low"
                                                             >
                                                             <span class="chat-card-picker__name">{{ $card->name }}</span>
                                                             <span class="chat-card-picker__check" aria-hidden="true">✓</span>

@@ -542,7 +542,10 @@ class ConsultationChatTest extends TestCase
             ->assertSee('data-max-cards="'.ConsultationMessageManager::MAX_CARDS_PER_SEND.'"', false)
             ->assertSee('Baralho Solar')
             ->assertSee('A Estrela')
-            ->assertSee('src="'.route('tarot.cards.image', $card).'"', false)
+            // A grade usa a miniatura reduzida; o original só é aberto na
+            // pré-visualização ampliada (`data-card-image`).
+            ->assertSee('src="'.route('tarot.cards.thumb', $card), false)
+            ->assertSee('data-card-image="'.route('tarot.cards.image', $card), false)
             // O seletor antigo (lista simples) não existe mais.
             ->assertDontSee('<select name="tarot_card_id"', false);
     }
@@ -716,5 +719,65 @@ class ConsultationChatTest extends TestCase
             ->assertSessionHas('success', 'Carta enviada.');
 
         $this->assertSame(1, ConsultationMessage::query()->count());
+    }
+
+    /**
+     * A grade do seletor serve miniaturas WebP geradas no servidor, e não o
+     * arquivo original de cada carta: com cinco baralhos ativos a tela pinta
+     * centenas de imagens e o original custava ~50 KB por célula.
+     */
+    public function test_card_picker_uses_webp_thumbnails_and_keeps_the_full_image_route(): void
+    {
+        [, $attendant, $consultation] = $this->conversation();
+        [$card] = $this->card();
+
+        $this->actingAs($attendant)
+            ->get(route('consultations.show', $consultation))
+            ->assertOk()
+            ->assertSee('miniatura?v=', false)
+            ->assertSee('data-card-image="'.route('tarot.cards.image', $card), false);
+
+        $thumbnail = $this->actingAs($attendant)
+            ->get(route('tarot.cards.thumb', $card))
+            ->assertOk()
+            ->assertHeader('Content-Type', 'image/webp')
+            ->assertHeader('X-Content-Type-Options', 'nosniff');
+
+        $this->assertStringContainsString('immutable', (string) $thumbnail->headers->get('Cache-Control'));
+        $this->assertNotNull($thumbnail->headers->get('ETag'));
+
+        // O WebP fica gravado ao lado do original: a próxima abertura do seletor
+        // não repete a redução.
+        $this->assertTrue(
+            Storage::disk('tarot_private')->exists('cards/thumbnails/'.pathinfo((string) $card->image_path, PATHINFO_FILENAME).'.webp'),
+        );
+
+        // A autorização continua a mesma da imagem cheia.
+        $this->actingAs(User::factory()->create())
+            ->get(route('tarot.cards.thumb', $card))
+            ->assertForbidden();
+    }
+
+    /**
+     * Emoji no compositor: o seletor aparece para os dois participantes e uma
+     * mensagem só de emoji é aceita e gravada como qualquer texto.
+     */
+    public function test_emoji_picker_is_available_and_emoji_only_message_is_accepted(): void
+    {
+        [$client, $attendant, $consultation] = $this->conversation();
+
+        foreach ([$client, $attendant] as $participant) {
+            $this->actingAs($participant)
+                ->get(route('consultations.show', $consultation))
+                ->assertOk()
+                ->assertSee('data-chat-emoji-trigger', false)
+                ->assertSee('data-chat-emoji-panel', false);
+        }
+
+        $this->actingAs($client)
+            ->post(route('consultations.messages.store', $consultation), ['body' => '🔮✨🌙'])
+            ->assertRedirect(route('consultations.show', $consultation).'#chat');
+
+        $this->assertSame('🔮✨🌙', ConsultationMessage::query()->sole()->body);
     }
 }

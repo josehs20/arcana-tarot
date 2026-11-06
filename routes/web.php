@@ -47,6 +47,7 @@ use App\Http\Controllers\PageController;
 use App\Http\Controllers\PanelEventsController;
 use App\Http\Controllers\PixWebhookController;
 use App\Http\Controllers\TarotCardImageController;
+use App\Http\Controllers\TarotCardThumbnailController;
 use App\Http\Controllers\ThemePreferenceController;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Support\Facades\Route;
@@ -565,6 +566,15 @@ Route::middleware('auth')->group(function () {
     Route::get('catalogo/cartas/{card}/imagem', TarotCardImageController::class)
         ->whereNumber('card')
         ->name('tarot.cards.image');
+
+    /*
+     * Miniatura da mesma carta. A grade do seletor exibe dezenas de imagens de
+     * uma vez; servir o original ali custava uma requisição PHP e ~50 KB por
+     * célula. A rota entrega o WebP reduzido, gerado uma única vez no servidor.
+     */
+    Route::get('catalogo/cartas/{card}/miniatura', TarotCardThumbnailController::class)
+        ->whereNumber('card')
+        ->name('tarot.cards.thumb');
 
     Route::prefix('admin/candidaturas')
         ->name('admin.applications.')

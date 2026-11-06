@@ -74,14 +74,15 @@
                                 <td>
                                     <div class="d-flex align-items-center gap-3">
                                         @if ($card->hasStoredImage())
-                                            <a href="{{ route('tarot.cards.image', $card) }}" target="_blank" rel="noopener">
+                                            <a href="{{ $card->imageUrl() }}" target="_blank" rel="noopener">
                                                 <img
                                                     class="tarot-thumb"
-                                                    src="{{ route('tarot.cards.image', $card) }}"
+                                                    src="{{ $card->thumbnailUrl() }}"
                                                     alt="Imagem frontal de {{ $card->name }}"
                                                     width="56"
                                                     height="84"
                                                     loading="lazy"
+                                                    decoding="async"
                                                 >
                                             </a>
                                         @else

@@ -1,4 +1,5 @@
 import { Modal } from 'bootstrap';
+import { autoplayAllowed, markAutoplayAllowed } from './audio-autoplay';
 import { createPoller, readMilliseconds } from './polling';
 
 /*
@@ -12,6 +13,19 @@ const MAX_BACKFILL_PAGES = 5;
 
 // Estados finais: nada mais chega, então as leituras periódicas param.
 const FINAL_STATUSES = new Set(['ended', 'cancelled', 'rejected', 'expired', 'interrupted']);
+
+/*
+ * Áudio das mensagens.
+ *
+ * Mesmo problema da sirene do atendente: o navegador só libera som depois de
+ * uma interação e volta a suspender um `AudioContext` ocioso. A retomada é
+ * tentada com espera crescente, na volta do foco e a cada mensagem recebida;
+ * enquanto o contexto está ativo, um buffer silencioso a cada 20 s impede que
+ * ele seja suspenso de novo.
+ */
+const CHAT_AUDIO_RETRY_MS = [600, 2000, 6000, 15000];
+const CHAT_AUDIO_KEEPALIVE_MS = 20000;
+const CHAT_AUDIO_UNLOCK_KEY = 'arcana:audio-unlocked';
 
 const chatState = {
     userId: null,
@@ -28,6 +42,12 @@ const chatState = {
     soundEnabled: true,
     soundArmed: false,
     audio: null,
+    audioRetryTimer: null,
+    audioRetryAttempt: 0,
+    audioKeepAliveTimer: null,
+    audioWatchBound: false,
+    pendingSound: false,
+    emojiGlobalBound: false,
 };
 
 function currentChat() {
@@ -208,7 +228,7 @@ function primeChatAudio() {
     const AudioContextClass = window.AudioContext ?? window.webkitAudioContext;
 
     if (!AudioContextClass) {
-        return;
+        return null;
     }
 
     chatState.audio ??= new AudioContextClass();
@@ -216,6 +236,158 @@ function primeChatAudio() {
     if (chatState.audio.state === 'suspended') {
         chatState.audio.resume().catch(() => {});
     }
+
+    if (chatState.audio.state === 'running') {
+        rememberChatAudioUnlock();
+        startChatAudioKeepAlive();
+        cancelChatAudioRetry();
+    }
+
+    return chatState.audio;
+}
+
+/**
+ * Retoma o áudio para tocar a mensagem sem exigir clique.
+ *
+ * O `AudioContext` some para `suspended` quando o navegador decide que a página
+ * está ociosa — e a aba do chat passa horas aberta. Aqui a retomada é tentada
+ * em três ocasiões: no carregamento (quando este navegador já liberou o som
+ * antes), ao voltar o foco e quando uma mensagem nova chega.
+ */
+function attemptChatAudio() {
+    if (!chatState.soundEnabled) {
+        return null;
+    }
+
+    const context = primeChatAudio();
+
+    if (context && context.state !== 'running') {
+        scheduleChatAudioRetry();
+    }
+
+    return context;
+}
+
+/**
+ * Tenta liberar o som sem gesto, só quando o navegador permite.
+ *
+ * A permissão é sondada por um `<audio>` silencioso (`audio-autoplay.js`), que
+ * não gera aviso no console. Quando o navegador bloqueia, nada é criado: o
+ * áudio fica esperando o primeiro clique, como antes.
+ */
+function attemptChatAutoplay() {
+    autoplayAllowed().then((allowed) => {
+        if (!allowed) {
+            return;
+        }
+
+        markAutoplayAllowed();
+        primeChatAudio();
+    });
+}
+
+function scheduleChatAudioRetry() {
+    if (chatState.audioRetryTimer !== null || !chatState.audio || chatState.audio.state === 'running') {
+        return;
+    }
+
+    const delay = CHAT_AUDIO_RETRY_MS[Math.min(chatState.audioRetryAttempt, CHAT_AUDIO_RETRY_MS.length - 1)];
+
+    chatState.audioRetryAttempt += 1;
+    chatState.audioRetryTimer = window.setTimeout(() => {
+        chatState.audioRetryTimer = null;
+        primeChatAudio();
+
+        if (chatState.audio?.state !== 'running' && chatState.audioRetryAttempt < CHAT_AUDIO_RETRY_MS.length) {
+            scheduleChatAudioRetry();
+        }
+    }, delay);
+}
+
+function cancelChatAudioRetry() {
+    window.clearTimeout(chatState.audioRetryTimer);
+    chatState.audioRetryTimer = null;
+    chatState.audioRetryAttempt = 0;
+}
+
+/**
+ * Silêncio periódico: mantém o contexto em `running` mesmo sem mensagens.
+ */
+function startChatAudioKeepAlive() {
+    if (chatState.audioKeepAliveTimer !== null) {
+        return;
+    }
+
+    chatState.audioKeepAliveTimer = window.setInterval(() => {
+        const context = chatState.audio;
+
+        if (!context) {
+            return;
+        }
+
+        if (context.state !== 'running') {
+            primeChatAudio();
+
+            return;
+        }
+
+        try {
+            const silence = context.createBuffer(1, 1, context.sampleRate);
+            const source = context.createBufferSource();
+            source.buffer = silence;
+            source.connect(context.destination);
+            source.start(0);
+        } catch {
+            // Contexto fechado pelo navegador: a próxima tentativa recria.
+        }
+    }, CHAT_AUDIO_KEEPALIVE_MS);
+}
+
+function chatAudioUnlockedBefore() {
+    try {
+        return window.localStorage?.getItem(CHAT_AUDIO_UNLOCK_KEY) === '1';
+    } catch {
+        return false;
+    }
+}
+
+function rememberChatAudioUnlock() {
+    try {
+        window.localStorage?.setItem(CHAT_AUDIO_UNLOCK_KEY, '1');
+    } catch {
+        // Modo privado/navegador sem storage: o desbloqueio vale só nesta página.
+    }
+}
+
+/**
+ * Retoma um contexto que já existe, sem criar um novo.
+ *
+ * Usado nos eventos de foco/visibilidade: criar `AudioContext` fora de um gesto
+ * só produz o aviso "The AudioContext was not allowed to start" no console, sem
+ * nenhum ganho — o navegador mantém o contexto suspenso de qualquer forma.
+ */
+function resumeChatAudio() {
+    if (!chatState.audio || !chatState.soundEnabled) {
+        return;
+    }
+
+    primeChatAudio();
+}
+
+function bindChatAudioWatch() {
+    if (chatState.audioWatchBound) {
+        return;
+    }
+
+    chatState.audioWatchBound = true;
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            resumeChatAudio();
+        }
+    });
+    window.addEventListener('focus', resumeChatAudio);
+    window.addEventListener('pageshow', resumeChatAudio);
 }
 
 function playIncomingSound() {
@@ -225,7 +397,32 @@ function playIncomingSound() {
 
     const context = chatState.audio;
 
-    if (!context || context.state !== 'running') {
+    if (!context) {
+        return;
+    }
+
+    if (context.state !== 'running') {
+        /*
+         * Contexto ainda retomando (acontece na primeira mensagem depois de a
+         * aba ficar ociosa): o tom entra assim que ele passar a rodar, em vez
+         * de a mensagem chegar em silêncio. O `once` evita pilha de listeners;
+         * `chatState.pendingSound` registra que já existe um esperando.
+         */
+        if (chatState.pendingSound) {
+            return;
+        }
+
+        chatState.pendingSound = true;
+        context.addEventListener('statechange', function playWhenReady() {
+            if (context.state !== 'running') {
+                return;
+            }
+
+            context.removeEventListener('statechange', playWhenReady);
+            chatState.pendingSound = false;
+            playIncomingSound();
+        });
+
         return;
     }
 
@@ -251,6 +448,31 @@ function notifyIncoming(message) {
         return;
     }
 
+    if (!chatState.soundEnabled || !chatState.soundArmed) {
+        return;
+    }
+
+    /*
+     * Primeira mensagem sem nenhum gesto na página: o contexto ainda não
+     * existe. A permissão é sondada antes de criá-lo e o toque sai assim que ele
+     * estiver ativo — sem isso a mensagem chegaria em silêncio justamente em
+     * quem acabou de abrir a aba.
+     */
+    if (!chatState.audio) {
+        autoplayAllowed().then((allowed) => {
+            if (!allowed) {
+                return;
+            }
+
+            markAutoplayAllowed();
+            primeChatAudio();
+            playIncomingSound();
+        });
+
+        return;
+    }
+
+    attemptChatAudio();
     playIncomingSound();
 }
 
@@ -1150,7 +1372,338 @@ async function submitChatForm(form) {
  * Os formulários são religados depois de cada atualização de fragmento, porque
  * `refreshState` substitui o bloco inteiro do chat.
  */
+/*
+ * Seletor de emoji do compositor.
+ *
+ * A lista é própria do projeto — nenhuma dependência nova entra no bundle — e o
+ * painel é montado sob demanda, no primeiro clique, para não custar nada em
+ * quem nunca abre. A inserção respeita a posição do cursor e o `maxlength` do
+ * campo: um emoji não cabe pela metade, então quando não há espaço o envio é
+ * bloqueado com aviso em vez de cortar o caractere.
+ */
+const CHAT_EMOJI_RECENT_KEY = 'arcana:chat-emoji-recent';
+const CHAT_EMOJI_RECENT_LIMIT = 16;
+const CHAT_EMOJI_GROUPS = [
+    {
+        id: 'rostos',
+        label: 'Rostos',
+        icon: '😊',
+        emojis: '😀 😃 😄 😁 😆 😅 😂 🤣 😊 😇 🙂 🙃 😉 😌 😍 🥰 😘 😋 😎 🤩 🥳 😏 😢 😭 😤 😱 🤔 🤗'.split(' '),
+    },
+    {
+        id: 'gestos',
+        label: 'Gestos',
+        icon: '👍',
+        emojis: '👍 👎 👌 ✌️ 🤞 🤟 🤘 👏 🙌 🤲 🙏 💪 👋 🖐️ ☝️ 👉 👈 👆 👇 ✋ 🤝'.split(' '),
+    },
+    {
+        id: 'coracoes',
+        label: 'Corações',
+        icon: '❤️',
+        emojis: '❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 💟 💐'.split(' '),
+    },
+    {
+        id: 'tarot',
+        label: 'Tarot',
+        icon: '🔮',
+        emojis: '🔮 ✨ 🌟 ⭐ 🌙 ☀️ 🕯️ 📿 🔔 🌈 🍀 💫 ☯️ 🌹 🌻 🌺 🌸 🦋 🪄 🎴 🃏'.split(' '),
+    },
+    {
+        id: 'objetos',
+        label: 'Objetos',
+        icon: '🎁',
+        emojis: '🎁 🎉 🎊 💎 💰 👑 📖 ✉️ 📌 🎯 🏆 🎵 🎶 ⏳ 🕰️ 📱 💻 🖊️ 🔑 🧿'.split(' '),
+    },
+    {
+        id: 'comidas',
+        label: 'Comidas',
+        icon: '☕',
+        emojis: '☕ 🍵 🍰 🍫 🍓 🍇 🍉 🍊 🥂 🍾'.split(' '),
+    },
+    {
+        id: 'animais',
+        label: 'Animais e natureza',
+        icon: '🦋',
+        emojis: '🐈 🐕 🦉 🦋 🐝 🐬 🦢 🕊️ 🌿 🌵'.split(' '),
+    },
+];
+
+function readRecentEmojis() {
+    try {
+        const stored = JSON.parse(window.localStorage?.getItem(CHAT_EMOJI_RECENT_KEY) ?? '[]');
+
+        return Array.isArray(stored) ? stored.filter((item) => typeof item === 'string') : [];
+    } catch {
+        return [];
+    }
+}
+
+function rememberEmoji(emoji) {
+    const recent = [emoji, ...readRecentEmojis().filter((item) => item !== emoji)]
+        .slice(0, CHAT_EMOJI_RECENT_LIMIT);
+
+    try {
+        window.localStorage?.setItem(CHAT_EMOJI_RECENT_KEY, JSON.stringify(recent));
+    } catch {
+        // Modo privado/navegador sem storage: os recentes valem só nesta página.
+    }
+
+    return recent;
+}
+
+/**
+ * Monta o painel (abas + grade + recentes) na primeira abertura.
+ */
+function buildEmojiPanel(picker, form) {
+    const panel = picker.querySelector('[data-chat-emoji-panel]');
+
+    if (!panel || panel.dataset.chatEmojiBuilt === '1') {
+        return panel;
+    }
+
+    panel.dataset.chatEmojiBuilt = '1';
+
+    const recents = document.createElement('div');
+    recents.className = 'chat-emoji__recents d-none';
+    recents.dataset.chatEmojiRecents = '';
+
+    const tabs = document.createElement('div');
+    tabs.className = 'chat-emoji__tabs';
+    tabs.setAttribute('role', 'tablist');
+    tabs.setAttribute('aria-label', 'Categorias de emoji');
+
+    const grid = document.createElement('div');
+    grid.className = 'chat-emoji__grid';
+    grid.dataset.chatEmojiGrid = '';
+
+    CHAT_EMOJI_GROUPS.forEach((group, index) => {
+        const tab = document.createElement('button');
+        tab.type = 'button';
+        tab.className = 'chat-emoji__tab';
+        tab.dataset.chatEmojiTab = group.id;
+        tab.setAttribute('role', 'tab');
+        tab.setAttribute('aria-selected', index === 0 ? 'true' : 'false');
+        tab.setAttribute('title', group.label);
+        tab.setAttribute('aria-label', group.label);
+        tab.textContent = group.icon;
+
+        if (index === 0) {
+            tab.classList.add('is-active');
+        }
+
+        tab.addEventListener('click', () => selectEmojiGroup(picker, group.id));
+        tabs.append(tab);
+    });
+
+    panel.append(recents, tabs, grid);
+
+    grid.addEventListener('keydown', (event) => {
+        const items = [...grid.querySelectorAll('[data-chat-emoji]')];
+        const index = items.indexOf(document.activeElement);
+
+        if (index < 0) {
+            return;
+        }
+
+        const columns = Math.max(1, getComputedStyle(grid).gridTemplateColumns.split(' ').length);
+        const moves = {
+            ArrowRight: index + 1,
+            ArrowLeft: index - 1,
+            ArrowDown: index + columns,
+            ArrowUp: index - columns,
+            Home: 0,
+            End: items.length - 1,
+        };
+
+        if (!(event.key in moves)) {
+            return;
+        }
+
+        event.preventDefault();
+        items[Math.min(Math.max(moves[event.key], 0), items.length - 1)]?.focus();
+    });
+
+    panel.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-chat-emoji]');
+
+        if (button) {
+            insertEmoji(form, button.dataset.chatEmoji ?? '');
+        }
+    });
+
+    renderRecentEmojis(picker);
+
+    return selectEmojiGroup(picker, CHAT_EMOJI_GROUPS[0].id);
+}
+
+/**
+ * Troca a categoria exibida mantendo o foco por teclado dentro da grade.
+ */
+function selectEmojiGroup(picker, groupId) {
+    const panel = picker.querySelector('[data-chat-emoji-panel]');
+    const grid = panel?.querySelector('[data-chat-emoji-grid]');
+    const group = CHAT_EMOJI_GROUPS.find((item) => item.id === groupId) ?? CHAT_EMOJI_GROUPS[0];
+
+    if (!panel || !grid) {
+        return panel;
+    }
+
+    panel.querySelectorAll('[data-chat-emoji-tab]').forEach((tab) => {
+        const active = tab.dataset.chatEmojiTab === group.id;
+        tab.classList.toggle('is-active', active);
+        tab.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+
+    grid.replaceChildren(...group.emojis.map((emoji) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'chat-emoji__item';
+        button.dataset.chatEmoji = emoji;
+        button.textContent = emoji;
+
+        return button;
+    }));
+
+    panel.dataset.chatEmojiGroup = group.id;
+
+    return panel;
+}
+
+function renderRecentEmojis(picker) {
+    const panel = picker.querySelector('[data-chat-emoji-panel]');
+    const recents = panel?.querySelector('[data-chat-emoji-recents]');
+    const recent = readRecentEmojis();
+
+    if (!recents) {
+        return;
+    }
+
+    recents.replaceChildren(...recent.map((emoji) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'chat-emoji__item chat-emoji__item--recent';
+        button.dataset.chatEmoji = emoji;
+        button.textContent = emoji;
+
+        return button;
+    }));
+
+    recents.classList.toggle('d-none', recent.length === 0);
+}
+
+/**
+ * Insere o emoji na posição do cursor.
+ *
+ * O `maxlength` do `textarea` conta unidades UTF-16, então um emoji pode não
+ * caber no fim do campo. Nesse caso nada é inserido — cortar o caractere ao
+ * meio geraria texto inválido — e o aviso do formulário explica o limite.
+ */
+function insertEmoji(form, emoji) {
+    const textarea = form?.querySelector('textarea[name="body"]');
+
+    if (!textarea || !emoji) {
+        return;
+    }
+
+    const start = textarea.selectionStart ?? textarea.value.length;
+    const end = textarea.selectionEnd ?? start;
+    const next = `${textarea.value.slice(0, start)}${emoji}${textarea.value.slice(end)}`;
+    const max = textarea.maxLength;
+
+    if (max > 0 && next.length > max) {
+        setFormError(form, `Limite de ${max} caracteres atingido. Remova um pouco do texto para incluir o emoji.`);
+
+        return;
+    }
+
+    setFormError(form, '');
+    textarea.value = next;
+
+    const caret = start + emoji.length;
+    textarea.setSelectionRange(caret, caret);
+    textarea.focus();
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+
+    rememberEmoji(emoji);
+    renderRecentEmojis(form.querySelector('[data-chat-emoji]'));
+}
+
+function closeEmojiPicker(picker) {
+    const panel = picker?.querySelector('[data-chat-emoji-panel]');
+    const trigger = picker?.querySelector('[data-chat-emoji-trigger]');
+
+    panel?.classList.add('d-none');
+    trigger?.setAttribute('aria-expanded', 'false');
+    picker?.removeAttribute('data-chat-emoji-open');
+}
+
+function openEmojiPicker(picker, form) {
+    const trigger = picker.querySelector('[data-chat-emoji-trigger]');
+    const panel = buildEmojiPanel(picker, form);
+
+    panel?.classList.remove('d-none');
+    trigger?.setAttribute('aria-expanded', 'true');
+    picker.dataset.chatEmojiOpen = '1';
+
+    panel?.querySelector('[data-chat-emoji]')?.focus();
+}
+
+/**
+ * Liga o seletor de emoji em cada compositor presente na tela.
+ *
+ * Idempotente: `refreshState` substitui o bloco do chat e o binding roda de
+ * novo, então o marcador `data-chat-emoji-bound` evita listeners duplicados.
+ */
+function bindEmojiPicker(root = document) {
+    root.querySelectorAll('[data-chat-emoji]').forEach((picker) => {
+        if (picker.dataset.chatEmojiBound === '1') {
+            return;
+        }
+
+        picker.dataset.chatEmojiBound = '1';
+
+        const form = picker.closest('form');
+        const trigger = picker.querySelector('[data-chat-emoji-trigger]');
+
+        trigger?.addEventListener('click', () => {
+            if (picker.dataset.chatEmojiOpen === '1') {
+                closeEmojiPicker(picker);
+
+                return;
+            }
+
+            openEmojiPicker(picker, form);
+        });
+
+        picker.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && picker.dataset.chatEmojiOpen === '1') {
+                event.stopPropagation();
+                closeEmojiPicker(picker);
+                trigger?.focus();
+            }
+        });
+    });
+
+    if (chatState.emojiGlobalBound) {
+        return;
+    }
+
+    chatState.emojiGlobalBound = true;
+
+    // Clique fora do seletor fecha o painel; o listener vive no documento
+    // porque o bloco do chat é substituído a cada atualização de estado.
+    document.addEventListener('pointerdown', (event) => {
+        document.querySelectorAll('[data-chat-emoji][data-chat-emoji-open="1"]').forEach((picker) => {
+            if (!picker.contains(event.target)) {
+                closeEmojiPicker(picker);
+            }
+        });
+    });
+}
+
 function bindChatForms(root = document) {
+    bindEmojiPicker(root);
+
     root.querySelectorAll('[data-chat-form]').forEach((form) => {
         if (form.dataset.chatFormBound === '1') {
             return;
@@ -1235,9 +1788,16 @@ function initializeRealtime() {
     bindChatPreferences(chat);
     applyChatPreferences(chat);
 
-    // O áudio só é liberado pelo navegador depois da primeira interação.
+    // O áudio só é liberado pelo navegador depois da primeira interação. Os
+    // gestos continuam sendo o caminho principal; quem já liberou o som neste
+    // navegador tem a retomada tentada no carregamento e na volta do foco.
     document.addEventListener('pointerdown', primeChatAudio, { once: true });
     document.addEventListener('keydown', primeChatAudio, { once: true });
+    bindChatAudioWatch();
+
+    if (chatAudioUnlockedBefore()) {
+        attemptChatAutoplay();
+    }
 
     /*
      * O histórico já está renderizado pelo servidor neste ponto, então tudo que

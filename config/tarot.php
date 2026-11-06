@@ -36,6 +36,34 @@ return [
 
     'image_max_kb' => (int) env('TAROT_IMAGE_MAX_KB', 5120),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Miniaturas do seletor de cartas
+    |--------------------------------------------------------------------------
+    |
+    | A grade do atendente exibe dezenas de cartas por baralho. Servir o arquivo
+    | original (até 5 MB) em uma célula de 76 px multiplica o tráfego e o tempo
+    | de abertura do seletor. A miniatura é gerada uma única vez com a extensão
+    | GD do servidor e gravada ao lado do original no mesmo disco privado; as
+    | requisições seguintes leem o WebP já reduzido.
+    |
+    | `width` é a largura em pixels (a proporção é preservada) e `quality` é a
+    | qualidade do WebP (0–100).
+    |
+    */
+
+    /**
+     * A grade do seletor de cartas exibe dezenas de células de ~90 px. Os
+     * originais do catálogo já são pequenos em pixels (320 px de largura), mas
+     * pesam 17–60 KB cada; a 220 px o WebP fica entre 2 e 27 KB, sem perda
+     * visível na miniatura. Ambientes com baralhos em resolução maior podem
+     * aumentar pelo `.env`.
+     */
+    'thumbnail' => [
+        'width' => (int) env('TAROT_THUMBNAIL_WIDTH', 220),
+        'quality' => (int) env('TAROT_THUMBNAIL_QUALITY', 76),
+    ],
+
     /** @var array<string, string> MIME real => extensão usada no nome aleatório. */
     'allowed_image_mimes' => [
         'image/jpeg' => 'jpg',

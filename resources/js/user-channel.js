@@ -29,6 +29,7 @@
 
 import { Modal } from 'bootstrap';
 
+import { autoplayAllowed, markAutoplayAllowed } from './audio-autoplay';
 import { createPoller, readMilliseconds } from './polling';
 
 // Ritmo do alerta: cada toque dura ALERT_SOUND_DURATION_MS e o conjunto se
@@ -45,6 +46,32 @@ const CUSTOM_REQUEST_SOUND = 'custom';
 const REQUEST_SOUNDS = new Set([DEFAULT_REQUEST_SOUND, 'bell', 'chime', 'pulse', CUSTOM_REQUEST_SOUND]);
 const SIREN_LOW_HZ = 640;
 const SIREN_HIGH_HZ = 1180;
+
+/*
+ * Desbloqueio do áudio.
+ *
+ * O navegador só libera som depois de uma interação na página, e o Chrome
+ * volta a suspender um `AudioContext` que ficou tempo demais sem produzir
+ * nada. O atendente deixa o painel aberto em outra tela e não clica nele — era
+ * exatamente nesse cenário que a sirene ficava muda.
+ *
+ * Quatro mecanismos resolvem isso:
+ *  1. uma sondagem de autoplay (`audio-autoplay.js`) confirma, sem criar
+ *     `AudioContext`, se o navegador já libera som para o site; quando libera, a
+ *     sirene toca no carregamento sem nenhum clique;
+ *  2. quando o navegador bloqueia, os primeiros `pointerdown`, `keydown` e
+ *     `touchstart` criam o contexto e o alarme pendente toca na hora;
+ *  3. voltar para a aba (`visibilitychange`), focar a janela (`focus`) ou
+ *     restaurar a página (`pageshow`) retomam o contexto existente;
+ *  4. enquanto o contexto está em `running`, um buffer silencioso a cada 20 s
+ *     impede que ele seja suspenso de novo (o Safari suspende contextos ociosos).
+ *
+ * O marcador em `localStorage` registra que este navegador já liberou o som uma
+ * vez; ele alimenta o diagnóstico (`audio.probe`) e o áudio das mensagens.
+ */
+const AUDIO_RETRY_DELAYS_MS = [0, 600, 2000, 5000, 12000, 25000];
+const AUDIO_KEEPALIVE_MS = 20000;
+const AUDIO_UNLOCK_STORAGE_KEY = 'arcana:audio-unlocked';
 
 // Tempo máximo para o servidor responder ao aceite/recusa. Sem esse limite uma
 // conexão pendurada deixaria os dois botões desabilitados para sempre.
@@ -118,8 +145,13 @@ const userChannelState = {
     lastState: null,
     lastConsultationId: null,
     audio: null,
+    audioReady: false,
     audioUnlockBound: false,
     audioUnlockListeners: [],
+    audioRetryTimer: null,
+    audioRetryAttempt: 0,
+    audioKeepAliveTimer: null,
+    audioWatchBound: false,
     sound: DEFAULT_REQUEST_SOUND,
     soundUrl: null,
     customBuffer: null,
@@ -401,7 +433,12 @@ function primeAudio() {
         userChannelState.audio.addEventListener('statechange', () => {
             if (userChannelState.audio?.state === 'running') {
                 handleAudioReady();
+
+                return;
             }
+
+            // Voltou a suspender: a próxima retomada volta a anunciar.
+            userChannelState.audioReady = false;
         });
     }
 
@@ -420,7 +457,15 @@ function primeAudio() {
  * sem isso o atendente só ouviria o toque no próximo ciclo de repetição.
  */
 function handleAudioReady() {
+    if (userChannelState.audioReady) {
+        return;
+    }
+
+    userChannelState.audioReady = true;
     releaseAudioUnlock();
+    rememberAudioUnlock();
+    cancelAudioRetry();
+    startAudioKeepAlive();
     updateAudioHint();
     channelLog('audio.liberado', { estado: userChannelState.audio?.state ?? null, alarmeAtivo: userChannelState.alertActive });
 
@@ -432,6 +477,168 @@ function handleAudioReady() {
         playRequestSound(userChannelState.sound);
     }
 }
+
+/**
+ * Tentativa de tocar sem gesto, só quando o navegador realmente permite.
+ *
+ * A permissão é consultada antes de criar o `AudioContext` (ver
+ * `audio-autoplay.js`): assim o painel não gera o aviso do Chrome nem mantém um
+ * contexto suspenso quando o autoplay está bloqueado — nesse caso o alerta
+ * continua dependendo do primeiro clique, como antes.
+ */
+function attemptAutoplayAudio() {
+    autoplayAllowed().then((allowed) => {
+        if (!allowed) {
+            return;
+        }
+
+        markAutoplayAllowed();
+        attemptAudioResume();
+    });
+}
+
+/**
+ * Retoma o áudio sem esperar gesto.
+ *
+ * É a chamada feita no carregamento, na volta do foco e quando uma solicitação
+ * chega. Se o navegador ainda não liberar, o retorno é `suspended` e a próxima
+ * tentativa fica agendada.
+ */
+function attemptAudioResume() {
+    const context = primeAudio();
+
+    if (!context) {
+        releaseAudioUnlock();
+
+        return null;
+    }
+
+    if (context.state === 'running') {
+        handleAudioReady();
+
+        return context;
+    }
+
+    context.resume().catch(() => {});
+
+    return context;
+}
+
+/**
+ * Insiste em retomar o contexto por alguns segundos.
+ *
+ * O intervalo é curto nas primeiras tentativas (a liberação costuma acontecer
+ * logo após o clique de login/disponibilidade) e alonga depois, para não gastar
+ * CPU em uma aba deixada aberta sem interação.
+ */
+function scheduleAudioRetry() {
+    // Sem contexto criado não há o que retomar: insistir aqui só produziria o
+    // aviso do Chrome. Quem decide criar é `attemptAutoplayAudio`/o gesto.
+    if (userChannelState.audioRetryTimer !== null || userChannelState.audio === null || userChannelState.audio.state === 'running') {
+        return;
+    }
+
+    const delay = AUDIO_RETRY_DELAYS_MS[Math.min(userChannelState.audioRetryAttempt, AUDIO_RETRY_DELAYS_MS.length - 1)];
+
+    userChannelState.audioRetryAttempt += 1;
+    userChannelState.audioRetryTimer = window.setTimeout(() => {
+        userChannelState.audioRetryTimer = null;
+        attemptAudioResume();
+
+        if (userChannelState.audio?.state !== 'running' && userChannelState.audioRetryAttempt < AUDIO_RETRY_DELAYS_MS.length) {
+            scheduleAudioRetry();
+        }
+    }, delay);
+}
+
+function cancelAudioRetry() {
+    window.clearTimeout(userChannelState.audioRetryTimer);
+    userChannelState.audioRetryTimer = null;
+    userChannelState.audioRetryAttempt = 0;
+}
+
+/**
+ * Silêncio periódico que impede o navegador de suspender o contexto ocioso.
+ *
+ * Um buffer de uma amostra não produz som audível, mas mantém o
+ * `AudioContext` em `running` — sem ele o Safari suspende o áudio depois de
+ * alguns segundos sem uso e a sirene só voltaria no próximo clique.
+ */
+function startAudioKeepAlive() {
+    if (userChannelState.audioKeepAliveTimer !== null) {
+        return;
+    }
+
+    userChannelState.audioKeepAliveTimer = window.setInterval(() => {
+        const context = userChannelState.audio;
+
+        if (!context) {
+            return;
+        }
+
+        if (context.state !== 'running') {
+            attemptAudioResume();
+
+            return;
+        }
+
+        try {
+            const silence = context.createBuffer(1, 1, context.sampleRate);
+            const source = context.createBufferSource();
+            source.buffer = silence;
+            source.connect(context.destination);
+            source.start(0);
+        } catch {
+            // Contexto fechado pelo navegador: a próxima tentativa recria.
+        }
+    }, AUDIO_KEEPALIVE_MS);
+}
+
+function audioUnlockedBefore() {
+    try {
+        return window.localStorage?.getItem(AUDIO_UNLOCK_STORAGE_KEY) === '1';
+    } catch {
+        return false;
+    }
+}
+
+function rememberAudioUnlock() {
+    try {
+        window.localStorage?.setItem(AUDIO_UNLOCK_STORAGE_KEY, '1');
+    } catch {
+        // Modo privado/navegador sem storage: o desbloqueio vale só nesta página.
+    }
+}
+
+/**
+ * Retomadas fora do gesto: voltar para a aba, focar a janela ou restaurar a
+ * página a partir do cache do navegador.
+ */
+function bindAudioWatch() {
+    if (userChannelState.audioWatchBound) {
+        return;
+    }
+
+    userChannelState.audioWatchBound = true;
+
+    const retry = () => {
+        if (!userChannelState.audio) {
+            return;
+        }
+
+        attemptAudioResume();
+    };
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            retry();
+        }
+    });
+    window.addEventListener('focus', retry);
+    window.addEventListener('pageshow', retry);
+}
+
+
 
 function onAudioGesture() {
     const context = primeAudio();
@@ -671,6 +878,13 @@ function playRequestSound(value) {
             channelLog('sirene.bloqueada', { estado: context?.state ?? 'sem-contexto' });
         }
 
+        // Tenta retomar por conta própria em vez de esperar o atendente clicar.
+        if (context) {
+            scheduleAudioRetry();
+        } else {
+            attemptAutoplayAudio();
+        }
+
         return;
     }
 
@@ -734,7 +948,17 @@ function startAlert() {
     // Garante que o próximo clique/tecla da página libere o som e toque o
     // alarme na hora, mesmo que o atendente ainda não tenha interagido.
     bindAudioUnlock();
+    bindAudioWatch();
     updateAudioHint();
+
+    /*
+     * Tenta tocar sem depender de clique: quando o navegador já libera o som
+     * para este site, o contexto nasce em `running` e a sirene soa agora. Se não
+     * libera, nada é criado (sem ruído no console) e o próximo gesto resolve.
+     */
+    if (userChannelState.audio?.state !== 'running') {
+        attemptAutoplayAudio();
+    }
 
     playRequestSound(userChannelState.sound);
     scheduleNextAlert();
@@ -1588,9 +1812,26 @@ function initializeUserChannel() {
 
     // Navegadores exigem interação do usuário antes de liberar áudio; só o
     // atendente (que tem modal) precisa da sirene. O contexto nasce no primeiro
-    // gesto (nunca no carregamento) e o alarme pendente toca na hora.
+    // gesto e o alarme pendente toca na hora; quando este navegador já liberou o
+    // som uma vez, a retomada é tentada já no carregamento, sem clique.
     if (modal) {
         bindAudioUnlock();
+        bindAudioWatch();
+
+        /*
+         * Sondagem de autoplay em toda visita ao painel do atendente.
+         *
+         * Quem já usou o painel costuma ter o site liberado pelo navegador, e a
+         * sondagem confirma isso antes de criar o contexto: a sirene toca sem
+         * nenhuma interação e o console fica limpo quando o autoplay está
+         * bloqueado. Sem a sondagem, o alarme dependeria sempre de um clique.
+         */
+        attemptAutoplayAudio();
+
+        channelLog('audio.probe', {
+            jaLiberado: audioUnlockedBefore(),
+            contexto: userChannelState.audio?.state ?? 'sem-contexto',
+        });
     }
 
     const mode = root.dataset.realtimeMode === 'poll' ? 'poll' : 'socket';

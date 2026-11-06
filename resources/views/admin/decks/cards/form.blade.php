@@ -86,10 +86,10 @@
                         @if ($hasStoredImage)
                             <div class="mb-4">
                                 <p class="form-label mb-2">Imagem atual</p>
-                                <a href="{{ route('tarot.cards.image', $card) }}" target="_blank" rel="noopener">
+                                <a href="{{ $card->imageUrl() }}" target="_blank" rel="noopener">
                                     <img
                                         class="tarot-card-preview"
-                                        src="{{ route('tarot.cards.image', $card) }}"
+                                        src="{{ $card->imageUrl() }}"
                                         alt="Imagem frontal atual de {{ $card->name }}"
                                     >
                                 </a>

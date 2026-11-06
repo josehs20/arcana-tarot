@@ -58,6 +58,30 @@ class TarotCard extends Model
     }
 
     /**
+     * URL da imagem original, versionada pelo checksum do arquivo.
+     *
+     * O `v` muda sempre que a arte é substituída, então o `Cache-Control:
+     * immutable` da rota nunca devolve uma imagem desatualizada.
+     */
+    public function imageUrl(): string
+    {
+        return route('tarot.cards.image', ['card' => $this, 'v' => $this->imageVersion()]);
+    }
+
+    /**
+     * URL da miniatura WebP usada nas grades (seletor de cartas, catálogo).
+     */
+    public function thumbnailUrl(): string
+    {
+        return route('tarot.cards.thumb', ['card' => $this, 'v' => $this->imageVersion()]);
+    }
+
+    private function imageVersion(): string
+    {
+        return substr(sha1($this->image_path.'|'.$this->image_checksum), 0, 12);
+    }
+
+    /**
      * Cartas elegíveis para novos envios: ativas e de baralhos ativos.
      */
     public function scopeAvailableForSelection(Builder $query): Builder

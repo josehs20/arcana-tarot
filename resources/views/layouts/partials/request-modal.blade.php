@@ -40,10 +40,15 @@
                 {{--
                     Navegadores só liberam áudio depois de uma interação. Enquanto
                     o contexto estiver suspenso, este aviso explica por que a
-                    sirene ainda não tocou e o que fazer — some no primeiro gesto.
+                    sirene ainda não tocou. O `user-channel.js` tenta retomar o
+                    som sozinho (no carregamento, ao voltar o foco e em cada
+                    solicitação); o clique aqui é o último recurso, e vale uma
+                    vez por navegador.
                 --}}
                 <p class="form-text mt-3 mb-0 d-none" data-request-audio-hint>
-                    Clique em qualquer ponto desta janela para liberar o som do alerta neste navegador.
+                    O navegador está bloqueando o som até a primeira interação com a página.
+                    Clique uma vez em qualquer ponto — depois o alerta toca sozinho, mesmo com
+                    a janela em segundo plano.
                 </p>
 
                 <p class="form-text mt-3 mb-0">
