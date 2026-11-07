@@ -728,6 +728,53 @@ final class ConsultationLifecycleManager
     }
 
     /**
+     * Rede de segurança da cobrança por minuto.
+     *
+     * `consultations:charge-minutes` é a rotina oficial e continua sendo quem
+     * debita a carteira durante a conversa. Sem scheduler vivo, porém, a
+     * consulta seguia `active` com o contador zerado: o cliente conversava de
+     * graça e ninguém encerrava. Aqui a própria requisição do participante
+     * (batimento de presença ou abertura da tela) encerra a consulta quando o
+     * saldo já não cobre todos os minutos iniciados.
+     *
+     * O teste é exatamente o do próximo `billDue`: se a carteira paga todos os
+     * minutos vencidos, nada acontece e a cobrança continua no cron — a leitura
+     * periódica não debita. Só a transição de estado grava em dinheiro, com as
+     * mesmas garantias de `endBySystem` (lock, idempotência por minuto, motivo
+     * `out_of_credits` e auditoria).
+     */
+    public function closeIfOutOfCredits(Consultation $consultation): Consultation
+    {
+        if (! $consultation->isActive()) {
+            return $consultation;
+        }
+
+        $startedAt = $consultation->started_at;
+        $pricePerMinuteCents = $consultation->pricePerMinuteCents();
+
+        if ($startedAt === null || $pricePerMinuteCents === null || $pricePerMinuteCents <= 0) {
+            return $consultation;
+        }
+
+        $elapsedSeconds = max(0, now()->getTimestamp() - $startedAt->getTimestamp());
+        $dueMinutes = max(1, (int) ceil($elapsedSeconds / 60));
+        $unbilledMinutes = $dueMinutes - max(0, (int) $consultation->billed_minutes);
+
+        if ($unbilledMinutes <= 0) {
+            return $consultation;
+        }
+
+        $consultation->loadMissing('client.wallet');
+        $balanceCents = max(0, (int) ($consultation->client?->wallet?->balance_cents ?? 0));
+
+        if ($balanceCents >= $unbilledMinutes * $pricePerMinuteCents) {
+            return $consultation;
+        }
+
+        return $this->endBySystem($consultation, ConsultationEndReason::OutOfCredits);
+    }
+
+    /**
      * Confirma a transação antes de anunciar o novo estado. Eventos não são
      * emitidos em no-ops idempotentes. Falhas de fila/broadcast são registradas
      * em log e não revertem a transição já persistida.

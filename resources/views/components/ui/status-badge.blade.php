@@ -40,6 +40,9 @@
         'confirmed' => ['label' => 'Confirmado', 'dot' => 'online', 'text' => 'status-text--online'],
         'failed' => ['label' => 'Falhou', 'dot' => 'offline', 'text' => 'status-text--offline'],
         'refunded' => ['label' => 'Estornado', 'dot' => 'offline', 'text' => 'status-text--offline'],
+
+        // Disparo de e-mails (status por destinatário e resumo da campanha)
+        'sent' => ['label' => 'Enviado', 'dot' => 'online', 'text' => 'status-text--online'],
     ];
 
     $entry = $map[$status] ?? $map['offline'];

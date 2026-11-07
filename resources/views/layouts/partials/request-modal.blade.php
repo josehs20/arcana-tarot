@@ -5,8 +5,8 @@
     o atendente em qualquer tela — painel, histórico, perfil, consulta aberta —
     e não apenas no dashboard. `resources/js/user-channel.js` abre este modal
     quando o canal privado entrega `consultation.request` e também quando a
-    ressincronização encontra pedidos que já estavam aguardando, sempre com a
-    sirene tocando.
+    ressincronização encontra pedidos que já estavam aguardando, sempre com o
+    toque de chamada configurado soando.
 
     Aceitar e recusar passam pelas rotas do servidor, que revalidam estado,
     participação e disponibilidade — o modal nunca decide nada sozinho. Sem
@@ -39,8 +39,8 @@
 
                 {{--
                     Navegadores só liberam áudio depois de uma interação. Enquanto
-                    o contexto estiver suspenso, este aviso explica por que a
-                    sirene ainda não tocou. O `user-channel.js` tenta retomar o
+                    o contexto estiver suspenso, este aviso explica por que o
+                    toque ainda não soou. O `user-channel.js` tenta retomar o
                     som sozinho (no carregamento, ao voltar o foco e em cada
                     solicitação); o clique aqui é o último recurso, e vale uma
                     vez por navegador.
@@ -54,7 +54,7 @@
                 <p class="form-text mt-3 mb-0">
                     O aceite inicia a consulta imediatamente e mantém sua disponibilidade como
                     <strong>Ocupado</strong> até o encerramento. A recusa encerra a solicitação sem cobrança.
-                    A sirene para assim que você responde ou fecha esta janela.
+                    O toque de chamada é interrompido assim que você responde ou fecha esta janela.
                 </p>
             </div>
 

@@ -199,6 +199,52 @@ class ConsultationWorkspaceTest extends TestCase
             );
     }
 
+    /**
+     * Formulários que navegam de propósito dispensam o aviso nativo de saída.
+     *
+     * O guard `consultation-presence` mantém o `beforeunload` do navegador
+     * armado enquanto a consulta está ativa. Encerrar a consulta e sair da
+     * conta são ações pedidas pela própria pessoa — e o logout já encerra a
+     * consulta no servidor — então esses formulários levam `data-allow-leave`
+     * para não abrir o diálogo no meio da submissão.
+     */
+    public function test_intentional_navigation_forms_skip_the_leave_warning(): void
+    {
+        $client = $this->clientWithBalance(1000);
+        $attendant = $this->onlineAttendant();
+        $consultation = $this->activeConsultation($client, $attendant);
+
+        /*
+         * O atributo é procurado dentro do próprio `<form>` da ação: outros
+         * links da tela (comprar créditos) também usam `data-allow-leave`.
+         */
+        $assertAllowLeaveForm = function (TestResponse $response, string $action): void {
+            $response->assertOk();
+
+            $this->assertMatchesRegularExpression(
+                '/<form\b[^>]*action="'.preg_quote($action, '/').'"[^>]*\bdata-allow-leave\b/s',
+                $response->getContent(),
+                'O formulário de '.$action.' deve declarar a saída intencional (data-allow-leave).',
+            );
+        };
+
+        $assertAllowLeaveForm(
+            $this->actingAs($client)->get(route('consultations.workspace', $consultation)),
+            route('consultations.end', $consultation),
+        );
+
+        $assertAllowLeaveForm(
+            $this->actingAs($attendant)->get(route('consultations.workspace', $consultation)),
+            route('consultations.end', $consultation),
+        );
+
+        // Sair da conta encerra a consulta no servidor: a saída é esperada.
+        $assertAllowLeaveForm(
+            $this->actingAs($client)->get(route('client.dashboard')),
+            route('logout'),
+        );
+    }
+
     public function test_workspace_sends_users_back_while_the_consultation_is_not_active(): void
     {
         $client = User::factory()->create();
@@ -272,8 +318,12 @@ class ConsultationWorkspaceTest extends TestCase
             ->assertJsonPath('available_minutes', 3)
             ->assertJsonPath('balance_cents', 1000)
             ->assertJsonPath('balance_label', 'R$ 10,00')
-            ->assertJsonPath('remaining_seconds', 195)
-            ->assertJsonPath('remaining_label', '03:15')
+            // Contador de dinheiro: 2 minutos já debitados + 3 que o saldo
+            // ainda paga (= 5 minutos comprados) menos os 45 s percorridos.
+            // Contar só o minuto em andamento prendia a tela em 00:00 enquanto
+            // o comando de cobrança estava atrasado e havia saldo.
+            ->assertJsonPath('remaining_seconds', 255)
+            ->assertJsonPath('remaining_label', '04:15')
             ->assertJsonPath('remaining_explanation', 'Saldo de R$ 10,00 ÷ R$ 3,00 por minuto.');
 
         $this->actingAs($client)
@@ -338,7 +388,9 @@ class ConsultationWorkspaceTest extends TestCase
 
     /**
      * Sem saldo para o próximo minuto o servidor não vai debitar: a projeção
-     * para no que já foi cobrado e o contador chega a zero.
+     * para no que já foi cobrado, o contador chega a zero e a consulta é
+     * encerrada — inclusive sem o comando agendado, para que ninguém converse
+     * de graça quando o scheduler está parado.
      */
     public function test_remaining_time_never_promises_a_minute_the_wallet_cannot_pay(): void
     {
@@ -362,11 +414,17 @@ class ConsultationWorkspaceTest extends TestCase
             ->assertJsonPath('charged_cents', 600)
             ->assertJsonPath('charged_explanation', '2 minutos iniciados');
 
+        // Abrir a tela de atendimento confere o saldo: a consulta é encerrada
+        // por falta de créditos e o participante vai para o histórico/recibo.
         $this->actingAs($attendant)
             ->get(route('consultations.workspace', $consultation))
-            ->assertOk()
-            ->assertSee('data-remaining-seconds="0"', false)
-            ->assertSee('00:00');
+            ->assertRedirect(route('consultations.show', $consultation));
+
+        $consultation->refresh();
+
+        $this->assertSame(ConsultationStatus::Ended, $consultation->status);
+        $this->assertSame(ConsultationEndReason::OutOfCredits, $consultation->ended_reason);
+        $this->assertSame(600, $consultation->totalChargedCents());
     }
 
     /**

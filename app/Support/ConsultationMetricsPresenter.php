@@ -23,6 +23,11 @@ use App\Models\User;
  * projetaria o último minuto. Quando a carteira não cobre a próxima cobrança a
  * projeção para, porque o servidor não vai debitar.
  *
+ * O contador regressivo (`remaining_seconds`) também é calculado em dinheiro:
+ * minutos debitados + minutos que o saldo ainda paga, menos o tempo já
+ * percorrido. Ele zera exatamente quando o servidor encerra a consulta por
+ * saldo insuficiente (`ConsultationLifecycleManager::closeIfOutOfCredits`).
+ *
  * O razão de comissões só recebe o lançamento no encerramento
  * (`CommissionManager::accrue()`), então durante o atendimento a comissão é
  * **estimada** com a regra do fechamento — taxa snapshot x valor cobrado — e
@@ -83,7 +88,7 @@ final class ConsultationMetricsPresenter
         $charge = self::charge($consultation, $status, $billedMinutes, $elapsedMinutes, $pricePerMinuteCents, $available);
         $balance = self::balance($consultation, $charge['pending_minutes'], $pricePerMinuteCents);
         $commission = self::commission($consultation, $isAttendant, $charge['cents']);
-        $remaining = self::remainingTime($available, $elapsedSeconds, $charge['pending_minutes']);
+        $remaining = self::remainingTime($available, $elapsedSeconds, $billedMinutes);
 
         $waitingSeconds = 0;
 
@@ -180,7 +185,14 @@ final class ConsultationMetricsPresenter
         }
 
         $canBillNextMinute = ($available['minutes'] ?? 0) >= 1;
-        $displayMinutes = $canBillNextMinute ? max($billedMinutes, $elapsedMinutes) : $billedMinutes;
+        // A projeção para no que a carteira paga: com o comando de cobrança
+        // atrasado, `elapsed_minutes` pode passar de `billed + available` e o
+        // cartão prometeria minutos que o servidor nunca vai debitar.
+        $projectedMinutes = min(
+            $billedMinutes + max(0, (int) $available['minutes']),
+            max($billedMinutes, $elapsedMinutes),
+        );
+        $displayMinutes = $canBillNextMinute ? $projectedMinutes : $billedMinutes;
         $pendingMinutes = max(0, $displayMinutes - $billedMinutes);
 
         return [
@@ -199,35 +211,31 @@ final class ConsultationMetricsPresenter
     /**
      * Contagem regressiva até o saldo do cliente acabar.
      *
-     * O saldo da carteira já está descontado dos minutos debitados, então
-     * `available_minutes` conta **todos** os minutos que o dinheiro ainda paga,
-     * inclusive o minuto em andamento. A conta certa é:
+     * A conta é feita em dinheiro, não no relógio: os minutos já debitados
+     * (`billed_minutes`, pagos desde o aceite) mais os que a carteira ainda paga
+     * (`available_minutes`) formam o tempo comprado. Descontando o que já passou
+     * desde `started_at`:
      *
-     *   (minutos que o saldo paga − minutos ainda não debitados) × 60
-     *       + segundos que faltam para o minuto em andamento terminar
+     *   (minutos pagos + minutos que o saldo paga) × 60 − segundos decorridos
      *
-     * Descontar os minutos pendentes é o que mantém o contador descendo: sem
-     * isso ele voltava para o início do minuto a cada busca do payload, porque
-     * `elapsed % 60` zerava enquanto o saldo ainda não tinha sido debitado —
-     * o contador ficava preso em torno de dois minutos e nunca chegava a zero.
-     *
-     * Quando o saldo não cobre nem o minuto em andamento a contagem zera: o
-     * servidor interrompe a consulta no próximo ponto de cobrança.
+     * O contador chega a zero exatamente quando não há mais minuto pago em
+     * andamento nem saldo para o próximo — a mesma condição que o servidor usa
+     * para encerrar a consulta (`ConsultationLifecycleManager::
+     * closeIfOutOfCredits`). Contar apenas o que falta para o próximo limite de
+     * minuto prendia a tela em `00:00` enquanto o comando de cobrança estava
+     * atrasado e ainda havia saldo para continuar.
      *
      * @param  array{minutes: int|null, label: string|null, explanation: string|null}  $available
      * @return array{seconds: int|null, label: string|null, explanation: string|null}
      */
-    private static function remainingTime(array $available, ?int $elapsedSeconds, int $pendingMinutes): array
+    private static function remainingTime(array $available, ?int $elapsedSeconds, int $billedMinutes): array
     {
         if ($available['minutes'] === null) {
             return ['seconds' => null, 'label' => null, 'explanation' => null];
         }
 
-        $secondsToNextMinute = $elapsedSeconds === null ? 0 : (60 - ($elapsedSeconds % 60)) % 60;
-        $paidMinutes = max(0, $available['minutes'] - max(0, $pendingMinutes));
-        $seconds = $available['minutes'] <= 0
-            ? 0
-            : $paidMinutes * 60 + $secondsToNextMinute;
+        $coveredSeconds = ($billedMinutes + $available['minutes']) * 60;
+        $seconds = max(0, $coveredSeconds - max(0, (int) $elapsedSeconds));
 
         return [
             'seconds' => $seconds,

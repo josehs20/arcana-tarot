@@ -74,7 +74,7 @@
                             @endif
                             <li><hr class="dropdown-divider"></li>
                             <li>
-                                <form method="POST" action="{{ route('logout') }}">
+                                <form method="POST" action="{{ route('logout') }}" data-allow-leave>
                                     @csrf
                                     <button type="submit" class="dropdown-item text-danger">Sair</button>
                                 </form>

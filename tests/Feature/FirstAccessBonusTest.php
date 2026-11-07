@@ -53,6 +53,7 @@ class FirstAccessBonusTest extends TestCase
             'email' => 'cliente.bonus@example.com',
             'phone' => '(11) 98888-7777',
             'birth_date' => '1990-08-14',
+            'gender' => 'female',
             'password' => 'senha-segura',
             'password_confirmation' => 'senha-segura',
         ];

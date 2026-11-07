@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\AttendantAvailability;
+use App\Enums\Gender;
 use App\Enums\LedgerEntryType;
 use App\Enums\UserRole;
 use App\Models\AttendantProfile;
@@ -108,6 +109,7 @@ class AdminUserManagementTest extends TestCase
                 'email' => 'cliente.novo@example.com',
                 'phone' => '(21) 97777-6666',
                 'birth_date' => '1992-03-04',
+                'gender' => 'female',
                 'password' => 'nova-senha-2026',
                 'password_confirmation' => 'nova-senha-2026',
             ])
@@ -120,6 +122,7 @@ class AdminUserManagementTest extends TestCase
         $this->assertSame('cliente.novo@example.com', $client->email);
         $this->assertSame('21977776666', $client->phone);
         $this->assertSame('1992-03-04', $client->birth_date?->toDateString());
+        $this->assertSame(Gender::Female, $client->gender);
         $this->assertTrue(Hash::check('nova-senha-2026', $client->password));
 
         $audit = AuditLog::query()->where('action', 'user.updated_by_operator')->latest('id')->firstOrFail();

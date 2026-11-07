@@ -226,10 +226,12 @@ TWILIO_VERIFY_SERVICE_SID=VAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 1. `POST /register` (`RegisterRequest`): nome/e-mail normalizados, telefone
    normalizado para DDD + número (10 ou 11 dígitos) e validado por
    `PhoneNumber::isValid()` (DDD 1–9; celular `9XXXXXXXX` ou fixo `2–9XXXXXXX`).
+   A data de nascimento (18+) e o sexo (`Gender`: feminino, masculino ou outro)
+   são obrigatórios.
 2. Com SMS ativo, `PhoneVerificationService::start()` grava a verificação
    **pendente** (`phone_verifications`) com `payload = {name, email,
-   password_hash}` (hash, nunca a senha) e `expires_at`, envia o código em E.164
-   e guarda o id na sessão.
+   birth_date, gender, password_hash}` (hash, nunca a senha) e `expires_at`,
+   envia o código em E.164 e guarda o id na sessão.
 3. `GET /register/confirmar-celular` mostra o número mascarado
    (`(11) *****-1234`), validade em minutos, tentativas restantes e o botão de
    reenvio com contagem regressiva.
@@ -289,7 +291,7 @@ Migration `2026_11_07_120000_create_phone_verifications_table`.
 | `phone` | DDD + número (E.164 é derivado no envio). |
 | `status` | `pending`, `approved`, `expired`, `failed` (`PhoneVerificationStatus`). |
 | `attempts` | Quantidade de conferências já feitas. |
-| `payload` | JSON com `name`, `email` e `password_hash` até a aprovação. |
+| `payload` | JSON com `name`, `email`, `birth_date`, `gender` e `password_hash` até a aprovação. |
 | `expires_at` / `consumed_at` | Validade local e momento do consumo. |
 | `ip_address` | Origem do pedido (auditoria/abuso). |
 

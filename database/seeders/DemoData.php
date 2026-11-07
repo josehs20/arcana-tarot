@@ -17,6 +17,10 @@ final class DemoData
     public const ADMIN_EMAIL = 'admin@arcana.local';
 
     /**
+     * O toque de chamada da demonstração é o MP3 versionado em
+     * `public/olha-o-gas.mp3` (`AttendantRequestSound::OlhaOGas`), para o
+     * cenário reproduzir o aviso sonoro exatamente como o atendente o ouve.
+     *
      * @var array<string, array{email: string, name: string, display_name: string, bio: string, specialties: list<string>, request_sound: string, commission_rate_bps: int, availability: string}>
      */
     public const ATTENDANTS = [
@@ -26,7 +30,7 @@ final class DemoData
             'display_name' => 'Marina Luz',
             'bio' => 'Leituras acolhedoras de Tarot com foco em amor, carreira e autoconhecimento.',
             'specialties' => ['Amor', 'Carreira', 'Autoconhecimento'],
-            'request_sound' => 'siren',
+            'request_sound' => 'olha-o-gas',
             'commission_rate_bps' => 3000,
             'availability' => 'online',
         ],
@@ -36,7 +40,7 @@ final class DemoData
             'display_name' => 'Rafael Monteiro',
             'bio' => 'Atendimento objetivo para decisões profissionais, estudos e projetos pessoais.',
             'specialties' => ['Carreira', 'Prosperidade', 'Estudos'],
-            'request_sound' => 'siren',
+            'request_sound' => 'olha-o-gas',
             'commission_rate_bps' => 2500,
             'availability' => 'offline',
         ],
@@ -46,7 +50,7 @@ final class DemoData
             'display_name' => 'Íris Campos',
             'bio' => 'Leituras espiritualizadas e cuidadosas, com escuta atenta e linguagem simples.',
             'specialties' => ['Espiritualidade', 'Família', 'Autoconhecimento'],
-            'request_sound' => 'siren',
+            'request_sound' => 'olha-o-gas',
             'commission_rate_bps' => 2000,
             'availability' => 'online',
         ],

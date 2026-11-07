@@ -35,6 +35,7 @@ import './consultation-call';
 import './user-channel';
 import './attendant-sound-preview';
 import './credit-packages';
+import './bulk-email';
 import './panel-sidebar';
 import './theme';
 import './auth-verification';

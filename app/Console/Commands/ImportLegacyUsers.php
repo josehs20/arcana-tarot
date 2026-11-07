@@ -5,44 +5,42 @@ namespace App\Console\Commands;
 use App\Enums\LegacyImportStatus;
 use App\Models\AuditLog;
 use App\Support\Legacy\LegacyDumpException;
+use App\Support\Legacy\LegacyDumpFactory;
+use App\Support\Legacy\LegacyDumpSource;
 use App\Support\Legacy\LegacyImportEntry;
 use App\Support\Legacy\LegacyImportOptions;
 use App\Support\Legacy\LegacyImportPlan;
-use App\Support\Legacy\LegacySqlDumpReader;
 use App\Support\Legacy\LegacyUserImporter;
 use App\Support\Money;
+use DateTimeImmutable;
 use Illuminate\Console\Command;
 use Throwable;
 
 /**
- * Importa usuários, senhas compatíveis e saldos do banco legado.
+ * Importa usuários, senhas compatíveis, dados cadastrais e saldos do banco
+ * legado (`eam_usuarios` + `eam_clientes`).
  *
- * A execução padrão é uma simulação: nada é gravado sem `--execute`.
+ * O mapeamento do banco é fixo (`LegacySchemaPreset`): este comando importa um
+ * único legado, então não há opções de tabela/coluna. A exportação pode ser um
+ * dump SQL, um CSV com todos os blocos, um arquivo por tabela ou um diretório
+ * com eles — os arquivos informados são lidos como uma origem só. A execução
+ * padrão é uma simulação: nada é gravado sem `--execute`.
  */
 class ImportLegacyUsers extends Command
 {
     protected $signature = 'arcana:import-legacy-users
-        {file? : Caminho do dump SQL legado}
+        {file?* : Arquivos ou diretório da exportação legada (padrão: storage/app/imports)}
         {--execute : Grava os usuários; sem a opção apenas simula}
-        {--force : Executa mesmo com avisos (dump truncado, tabelas rejeitadas)}
-        {--limit= : Lê no máximo esta quantidade de registros}
-        {--users-table= : Tabela que contém as credenciais}
-        {--email-column= : Coluna de e-mail}
-        {--password-column= : Coluna de senha}
-        {--name-column= : Coluna de nome}
-        {--phone-column= : Coluna de telefone}
-        {--user-key-column= : Coluna identificadora do usuário no legado}
-        {--credits-table= : Tabela de saldos (ou "none" para não importar saldos)}
-        {--credits-user-column= : Coluna que referencia o usuário na tabela de saldos}
-        {--credits-balance-column= : Coluna de saldo em reais}';
+        {--force : Executa mesmo com avisos (exportação truncada)}
+        {--limit= : Lê no máximo esta quantidade de registros}';
 
-    protected $description = 'Importa usuários, senhas compatíveis e créditos do banco legado (simulação por padrão)';
+    protected $description = 'Importa usuários, senhas compatíveis, dados cadastrais e créditos do banco legado (simulação por padrão)';
 
     public function handle(LegacyUserImporter $importer): int
     {
         try {
             $options = $this->buildOptions();
-            $reader = new LegacySqlDumpReader($options->dumpPath);
+            $reader = LegacyDumpFactory::open($options->sourcePaths);
 
             if ($reader->size() === 0) {
                 $this->error("Arquivo legado vazio ou ilegível: {$options->dumpPath}");
@@ -50,21 +48,21 @@ class ImportLegacyUsers extends Command
                 return self::FAILURE;
             }
 
-            $plan = $importer->plan($reader, $options->mapping);
+            $plan = $importer->plan($reader);
 
             $this->renderHeader($reader, $plan, $options);
             $warnings = $this->renderWarnings($reader);
 
             if (! $plan->isReady()) {
                 $this->newLine();
-                $this->error('Importação bloqueada: corrija o mapeamento ou use um dump com credenciais.');
+                $this->error('Importação bloqueada: corrija os problemas acima antes de importar.');
 
                 return self::FAILURE;
             }
 
             if ($warnings !== [] && $options->execute && ! $options->force) {
                 $this->newLine();
-                $this->error('Dump com avisos: use --force para importar mesmo assim ou obtenha uma exportação íntegra.');
+                $this->error('Arquivo com avisos: use --force para importar mesmo assim ou obtenha uma exportação íntegra.');
 
                 return self::FAILURE;
             }
@@ -79,39 +77,50 @@ class ImportLegacyUsers extends Command
 
     private function buildOptions(): LegacyImportOptions
     {
-        $path = $this->argument('file') ?: storage_path('app/imports/astros21.sql');
+        $files = array_values(array_filter(
+            array_map(static fn (string|int|float|null $path): string => trim((string) $path), (array) $this->argument('file')),
+            static fn (string $path): bool => $path !== '',
+        ));
+
         $limit = $this->option('limit');
 
         return new LegacyImportOptions(
-            dumpPath: (string) $path,
+            dumpPath: $files === [] ? storage_path('app/imports') : $files,
             execute: (bool) $this->option('execute'),
             force: (bool) $this->option('force'),
             limit: is_numeric($limit) ? (int) $limit : null,
-            mapping: array_filter([
-                'users_table' => $this->option('users-table'),
-                'email_column' => $this->option('email-column'),
-                'password_column' => $this->option('password-column'),
-                'name_column' => $this->option('name-column'),
-                'phone_column' => $this->option('phone-column'),
-                'user_key_column' => $this->option('user-key-column'),
-                'credits_table' => $this->option('credits-table'),
-                'credits_user_column' => $this->option('credits-user-column'),
-                'credits_balance_column' => $this->option('credits-balance-column'),
-            ], fn (mixed $value): bool => is_string($value) && trim($value) !== ''),
         );
     }
 
-    private function renderHeader(LegacySqlDumpReader $reader, LegacyImportPlan $plan, LegacyImportOptions $options): void
+    private function renderHeader(LegacyDumpSource $reader, LegacyImportPlan $plan, LegacyImportOptions $options): void
     {
         $this->info($options->execute ? 'Importação de usuários legados (GRAVANDO DADOS)' : 'Importação de usuários legados (SIMULAÇÃO)');
-        $this->line('Arquivo: '.$reader->path().' ('.$this->formatBytes($reader->size()).')');
+
+        $files = $reader->files();
+        $single = count($files) === 1;
+
+        if ($single) {
+            $this->line('Arquivo: '.$files[0]['path'].' ('.$this->formatBytes($reader->size()).')');
+        } else {
+            $this->line('Arquivos ('.count($files).', '.$this->formatBytes($reader->size()).'):');
+
+            foreach ($files as $file) {
+                $this->line('  - '.$file['path'].' ('.$this->formatBytes($file['size']).')');
+            }
+        }
+
         $this->line('Origem das credenciais: '.$plan->sourceLabel());
         $this->line('Origem dos saldos: '.$plan->creditsLabel());
+        $this->line('Dados complementares: '.$plan->profileLabel());
+
+        if ($plan->exclusionLabel() !== null) {
+            $this->line('Contas fora da importação: '.$plan->exclusionLabel());
+        }
 
         $tables = $reader->tables();
 
         $this->newLine();
-        $this->line('Tabelas encontradas no dump ('.count($tables).'):');
+        $this->line('Tabelas encontradas '.($single ? 'no arquivo' : 'nos arquivos').' ('.count($tables).'):');
 
         foreach ($tables as $table) {
             $this->line("  - {$table->name} ({$table->describeColumns()})");
@@ -148,17 +157,21 @@ class ImportLegacyUsers extends Command
     /**
      * @return array<int, string>
      */
-    private function renderWarnings(LegacySqlDumpReader $reader): array
+    private function renderWarnings(LegacyDumpSource $reader): array
     {
         $warnings = [];
-        $marker = $reader->truncationMarker();
+        $single = count($reader->files()) === 1;
 
-        if ($marker !== null) {
-            $warnings[] = "o dump termina com uma mensagem de erro da exportação (\"{$marker}\"); os dados podem estar incompletos.";
-        }
+        foreach ($reader->integrityIssues() as $issue) {
+            $subject = $single ? 'o arquivo' : 'o arquivo '.basename($issue['path']);
 
-        if ($reader->endsWithoutTerminator()) {
-            $warnings[] = 'o dump não termina com ";" — a exportação foi interrompida no meio de um comando.';
+            if ($issue['marker'] !== null) {
+                $warnings[] = "{$subject} termina com uma mensagem de erro da exportação (\"{$issue['marker']}\"); os dados podem estar incompletos.";
+            }
+
+            if ($issue['unterminated']) {
+                $warnings[] = "{$subject} não termina com \";\" — a exportação foi interrompida no meio de um comando.";
+            }
         }
 
         if ($warnings !== []) {
@@ -174,7 +187,7 @@ class ImportLegacyUsers extends Command
 
     private function runImport(
         LegacyUserImporter $importer,
-        LegacySqlDumpReader $reader,
+        LegacyDumpSource $reader,
         LegacyImportPlan $plan,
         LegacyImportOptions $options,
     ): int {
@@ -195,7 +208,7 @@ class ImportLegacyUsers extends Command
                 $counts[$entry->status->value]++;
                 $credits += max(0, $entry->balanceCents);
 
-                $this->renderEntry($entry, $options->execute);
+                $this->renderEntry($entry, $options->execute, $plan);
             }
         } catch (LegacyDumpException $exception) {
             $this->error($exception->getMessage());
@@ -213,7 +226,7 @@ class ImportLegacyUsers extends Command
         return $counts[LegacyImportStatus::Failed->value] > 0 ? self::FAILURE : self::SUCCESS;
     }
 
-    private function renderEntry(LegacyImportEntry $entry, bool $executed): void
+    private function renderEntry(LegacyImportEntry $entry, bool $executed, LegacyImportPlan $plan): void
     {
         $details = [];
 
@@ -222,6 +235,18 @@ class ImportLegacyUsers extends Command
 
             if ($entry->balanceCents > 0) {
                 $details[] = 'saldo '.Money::format($entry->balanceCents);
+            }
+
+            if ($entry->birthDate !== null) {
+                $details[] = 'nasc. '.$this->formatDate($entry->birthDate);
+            }
+
+            if ($entry->gender !== null) {
+                $details[] = 'sexo '.$entry->gender->label();
+            }
+
+            if ($plan->hasProfile() && ! $entry->profileMatched) {
+                $details[] = 'sem dados complementares em '.$plan->profileTable?->name;
             }
         }
 
@@ -235,6 +260,16 @@ class ImportLegacyUsers extends Command
             $entry->email ?? $entry->legacyKey,
             implode(' | ', $details),
         ));
+    }
+
+    /**
+     * Data legada em `Y-m-d` para o formato brasileiro do relatório.
+     */
+    private function formatDate(string $date): string
+    {
+        $parsed = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+
+        return $parsed === false ? $date : $parsed->format('d/m/Y');
     }
 
     /**
@@ -279,6 +314,8 @@ class ImportLegacyUsers extends Command
                     'dump_path' => $options->dumpPath,
                     'source_table' => $plan->userTable?->name,
                     'legacy_key_column' => $plan->legacyKeyColumn,
+                    'profile_source' => $plan->profileTable?->name,
+                    'excluded_source' => $plan->excludeTable?->name,
                     'records' => $total,
                     'totals' => $counts,
                     'credits_cents' => $credits,

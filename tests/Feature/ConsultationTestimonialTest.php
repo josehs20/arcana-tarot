@@ -292,6 +292,21 @@ class ConsultationTestimonialTest extends TestCase
             ->assertSee('Enviar depoimento');
     }
 
+    public function test_testimonial_prompt_collects_the_rating_through_five_star_radios(): void
+    {
+        [$client, , , $consultation] = $this->endedConsultation();
+
+        $response = $this->actingAs($client)
+            ->get(route('consultations.show', $consultation))
+            ->assertOk()
+            ->assertSee('data-star-rating', false)
+            ->assertSee('Como foi sua consulta?');
+
+        preg_match_all('/name="rating"\s+value="(\d)"/', $response->getContent(), $matches);
+
+        $this->assertSame(['1', '2', '3', '4', '5'], $matches[1]);
+    }
+
     public function test_consultation_page_hides_the_prompt_once_the_testimonial_exists(): void
     {
         [$client, $attendant, , $consultation] = $this->endedConsultation();
@@ -309,6 +324,39 @@ class ConsultationTestimonialTest extends TestCase
             ->assertOk()
             ->assertDontSee('data-testimonial-prompt', false)
             ->assertDontSee('Como foi sua consulta?');
+    }
+
+    public function test_consultation_page_keeps_a_persistent_invitation_until_the_testimonial_is_written(): void
+    {
+        [$client, $attendant, , $consultation] = $this->endedConsultation();
+
+        $this->actingAs($client)
+            ->get(route('consultations.show', $consultation))
+            ->assertOk()
+            ->assertSee('data-testimonial-invite', false)
+            ->assertSee('Como foi a consulta?')
+            ->assertSee('Avaliar atendimento')
+            ->assertSee('data-bs-target="#testimonial-modal-'.$consultation->getKey().'"', false);
+
+        $this->actingAs($attendant)
+            ->get(route('consultations.show', $consultation))
+            ->assertOk()
+            ->assertDontSee('data-testimonial-invite', false);
+
+        ConsultationTestimonial::factory()->create([
+            'consultation_id' => $consultation->id,
+            'client_id' => $client->id,
+            'attendant_id' => $attendant->id,
+            'rating' => 4,
+            'message' => 'Depoimento escrito antes de reabrir a tela da consulta.',
+        ]);
+
+        $this->actingAs($client)
+            ->get(route('consultations.show', $consultation))
+            ->assertOk()
+            ->assertDontSee('data-testimonial-invite', false)
+            ->assertDontSee('Como foi a consulta?')
+            ->assertDontSee('data-testimonial-prompt', false);
     }
 
     public function test_admin_moderation_page_lists_testimonials_and_blocks_non_admins(): void

@@ -2,10 +2,12 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Enums\Gender;
 use App\Support\PhoneNumber;
 use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class RegisterRequest extends FormRequest
 {
@@ -62,6 +64,7 @@ class RegisterRequest extends FormRequest
                 'before:'.now()->subYears(self::MINIMUM_AGE)->toDateString(),
                 'after:'.now()->subYears(self::MAXIMUM_AGE)->toDateString(),
             ],
+            'gender' => ['required', 'string', Rule::enum(Gender::class)],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ];
     }
@@ -83,6 +86,9 @@ class RegisterRequest extends FormRequest
             'birth_date.date_format' => 'Informe a data de nascimento no formato DD/MM/AAAA.',
             'birth_date.before' => 'É preciso ter 18 anos ou mais para se cadastrar.',
             'birth_date.after' => 'Confira a data de nascimento informada.',
+            'gender.required' => 'Informe o sexo.',
+            'gender.string' => 'Informe o sexo.',
+            'gender.enum' => 'Escolha uma opção válida de sexo.',
             'password.required' => 'Informe uma senha.',
             'password.min' => 'A senha deve ter pelo menos 8 caracteres.',
             'password.confirmed' => 'A confirmação da senha não confere.',

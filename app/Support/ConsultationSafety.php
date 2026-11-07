@@ -67,13 +67,26 @@ final class ConsultationSafety
     }
 
     /**
+     * Janela do aviso de saldo baixo exibido ao cliente na tela de atendimento.
+     *
+     * Sai do `config` porque é uma decisão de interface, não da política de
+     * inatividade: o servidor continua sendo quem cobra e quem encerra a
+     * consulta quando a carteira não cobre o próximo minuto.
+     */
+    public function lowBalanceWarningSeconds(): int
+    {
+        return max(60, min(3600, (int) config('consultation.low_balance_warning_minutes', 5) * 60));
+    }
+
+    /**
      * Valores usados no formulário administrativo.
      *
      * @return array{
      *     inactivity_timeout_minutes: int,
      *     reconnection_tolerance_seconds: int,
      *     navigation_warning_seconds: int,
-     *     activity_ping_seconds: int
+     *     activity_ping_seconds: int,
+     *     low_balance_warning_seconds: int
      * }
      */
     public function values(): array
@@ -83,6 +96,7 @@ final class ConsultationSafety
             'reconnection_tolerance_seconds' => $this->reconnectionToleranceSeconds(),
             'navigation_warning_seconds' => $this->navigationWarningSeconds(),
             'activity_ping_seconds' => $this->activityPingSeconds(),
+            'low_balance_warning_seconds' => $this->lowBalanceWarningSeconds(),
         ];
     }
 

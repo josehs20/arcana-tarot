@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\AttendantAvailability;
+use App\Enums\Gender;
 use App\Enums\UserRole;
 use App\Models\AttendantProfile;
 use App\Models\AuditLog;
@@ -22,6 +23,7 @@ class AuthTest extends TestCase
             'email' => 'cliente@example.com',
             'phone' => '(11) 99999-9999',
             'birth_date' => '1990-05-20',
+            'gender' => Gender::Female->value,
             'password' => 'senha-segura',
             'password_confirmation' => 'senha-segura',
         ]);
@@ -33,12 +35,35 @@ class AuthTest extends TestCase
             'phone' => '11999999999',
             'phone_verified_at' => null,
             'role' => UserRole::Client->value,
+            'gender' => Gender::Female->value,
         ]);
 
         $user = User::query()->where('email', 'cliente@example.com')->firstOrFail();
         $this->assertSame('1990-05-20', $user->birth_date?->format('Y-m-d'));
+        $this->assertSame(Gender::Female, $user->gender);
+        $this->assertSame('Feminino', $user->genderLabel());
         $this->assertNotNull($user->wallet);
         $this->assertSame(0, $user->wallet->balance_cents);
+    }
+
+    public function test_registration_requires_a_gender(): void
+    {
+        $payload = [
+            'name' => 'Cliente Teste',
+            'email' => 'cliente@example.com',
+            'phone' => '(11) 99999-9999',
+            'birth_date' => '1990-05-20',
+            'password' => 'senha-segura',
+            'password_confirmation' => 'senha-segura',
+        ];
+
+        $this->post('/register', $payload)->assertSessionHasErrors('gender');
+
+        $this->post('/register', $payload + ['gender' => 'indefinido'])
+            ->assertSessionHasErrors('gender');
+
+        $this->assertGuest();
+        $this->assertDatabaseMissing('users', ['email' => 'cliente@example.com']);
     }
 
     public function test_registration_requires_a_birth_date(): void
@@ -88,6 +113,7 @@ class AuthTest extends TestCase
             'email' => '  MARIA@Example.COM ',
             'phone' => '+55 (11) 98888-7777',
             'birth_date' => '1985-01-31',
+            'gender' => Gender::Other->value,
             'password' => 'senha-segura',
             'password_confirmation' => 'senha-segura',
         ])->assertRedirect(route('client.dashboard'));
@@ -96,6 +122,7 @@ class AuthTest extends TestCase
             'name' => 'Maria da Silva',
             'email' => 'maria@example.com',
             'phone' => '11988887777',
+            'gender' => Gender::Other->value,
         ]);
     }
 
@@ -134,6 +161,7 @@ class AuthTest extends TestCase
             'email' => 'hacker@example.com',
             'phone' => '(11) 97777-6666',
             'birth_date' => '1992-03-10',
+            'gender' => Gender::Male->value,
             'password' => 'senha-segura',
             'password_confirmation' => 'senha-segura',
             'role' => UserRole::Admin->value,

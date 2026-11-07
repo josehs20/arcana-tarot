@@ -131,7 +131,6 @@
                                         <a class="btn btn-ghost btn-sm" href="{{ route('admin.finance.wallets.show', $user) }}">Carteira</a>
                                     @endif
                                     @if ($user->isAttendant() && $user->attendantProfile)
-                                        <a class="btn btn-ghost btn-sm" href="{{ route('admin.commissions.attendant', $user) }}">Comissão</a>
                                         <a class="btn btn-ghost btn-sm" href="{{ route('admin.attendants.index', ['q' => $user->email]) }}">Som</a>
                                     @endif
                                     @can('manageStatus', $user)

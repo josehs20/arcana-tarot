@@ -59,6 +59,15 @@
             required
         />
 
+        <x-ui.select
+            name="gender"
+            label="Sexo"
+            :options="\App\Enums\Gender::options()"
+            placeholder="Selecione"
+            help="Usado para personalizar o atendimento."
+            required
+        />
+
         <x-ui.field
             name="password"
             label="Senha"

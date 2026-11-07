@@ -143,7 +143,15 @@
                         @endif
 
                         @can('end', $consultation)
-                            <form method="POST" action="{{ route('consultations.end', $consultation) }}">
+                            {{--
+                                Encerrar é a saída pretendida: `data-allow-leave` dispensa o
+                                aviso nativo de navegação (beforeunload) no envio do formulário.
+                            --}}
+                            <form
+                                method="POST"
+                                action="{{ route('consultations.end', $consultation) }}"
+                                data-allow-leave
+                            >
                                 @csrf
                                 @method('PATCH')
                                 <x-ui.button type="submit" variant="danger" block>Encerrar consulta</x-ui.button>
@@ -159,47 +167,111 @@
             </div>
         </div>
 
-        {{-- Aviso após tempo sem interação; o relógio oficial continua no servidor. --}}
-        <div
-            class="modal fade"
-            id="consultation-inactivity-warning"
-            tabindex="-1"
-            aria-labelledby="consultation-inactivity-warning-title"
-            aria-hidden="true"
-            data-bs-backdrop="static"
-            data-bs-keyboard="false"
-            data-consultation-inactivity-warning
-        >
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h2 class="modal-title h5" id="consultation-inactivity-warning-title">
-                            Você ainda está no atendimento?
-                        </h2>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
-                    </div>
-                    <div class="modal-body">
-                        <p class="mb-2">
-                            Não identificamos interação há {{ $safety['navigation_warning_seconds'] }} segundos.
-                            O atendimento continua ativo e sendo cobrado.
-                        </p>
-                        <p class="form-text mb-0">
-                            Sem interação de nenhum participante por {{ $safety['inactivity_timeout_minutes'] }} minutos,
-                            a consulta é encerrada automaticamente pelo servidor. <strong>Sair do chat</strong>
-                            encerra o atendimento agora e interrompe a cobrança.
-                        </p>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-ghost" data-consultation-leave-confirm>
-                            Sair do chat
-                        </button>
-                        <button type="button" class="btn btn-primary" data-consultation-continue>
-                            Continuar no atendimento
-                        </button>
+        @if ($isAttendant)
+            {{--
+                Aviso após tempo sem interação; o relógio oficial continua no
+                servidor. Só o atendente recebe este modal: o cliente é avisado
+                quando o saldo está acabando (`consultation-low-balance-warning`)
+                e dois alertas simultâneos travariam a conversa sem que ele
+                pudesse resolver nada.
+            --}}
+            <div
+                class="modal fade"
+                id="consultation-inactivity-warning"
+                tabindex="-1"
+                aria-labelledby="consultation-inactivity-warning-title"
+                aria-hidden="true"
+                data-bs-backdrop="static"
+                data-bs-keyboard="false"
+                data-consultation-inactivity-warning
+            >
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h2 class="modal-title h5" id="consultation-inactivity-warning-title">
+                                Você ainda está no atendimento?
+                            </h2>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="mb-2">
+                                Não identificamos interação há {{ $safety['navigation_warning_seconds'] }} segundos.
+                                O atendimento continua ativo e sendo cobrado.
+                            </p>
+                            <p class="form-text mb-0">
+                                Sem interação de nenhum participante por {{ $safety['inactivity_timeout_minutes'] }} minutos,
+                                a consulta é encerrada automaticamente pelo servidor. <strong>Sair do chat</strong>
+                                encerra o atendimento agora e interrompe a cobrança.
+                            </p>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-ghost" data-consultation-leave-confirm>
+                                Sair do chat
+                            </button>
+                            <button type="button" class="btn btn-primary" data-consultation-continue>
+                                Continuar no atendimento
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
+        @endif
+
+        @if ($isClient && $creditsUrl)
+            {{--
+                Aviso de saldo baixo, exclusivo do cliente.
+
+                O limite chega pronto do servidor em
+                `data-remaining-threshold-seconds` e o módulo
+                `resources/js/consultation-workspace.js` compara com o contador
+                regressivo calculado em `consultations.metrics`
+                (`remaining_seconds`). Nada é decidido no navegador: o aviso é
+                apenas informativo e o encerramento por saldo insuficiente
+                continua sendo do servidor.
+            --}}
+            <div
+                class="modal fade"
+                id="consultation-low-balance-warning"
+                tabindex="-1"
+                aria-labelledby="consultation-low-balance-warning-title"
+                aria-hidden="true"
+                data-bs-backdrop="static"
+                data-bs-keyboard="false"
+                data-consultation-low-balance-warning
+                data-remaining-threshold-seconds="{{ $safety['low_balance_warning_seconds'] }}"
+            >
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h2 class="modal-title h5" id="consultation-low-balance-warning-title">
+                                Seu saldo está acabando
+                            </h2>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="mb-2">
+                                Restam menos de
+                                {{ (int) ceil($safety['low_balance_warning_seconds'] / 60) }} minutos
+                                de saldo para continuar este atendimento.
+                            </p>
+                            <p class="form-text mb-0">
+                                A cobrança é por minuto iniciado. Quando o saldo não cobrir o próximo minuto,
+                                o servidor encerra a consulta automaticamente — comprar créditos agora mantém
+                                a conversa ativa.
+                            </p>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-ghost" data-bs-dismiss="modal">
+                                Continuar no atendimento
+                            </button>
+                            <a class="btn btn-primary" href="{{ $creditsUrl }}" data-allow-leave>
+                                Comprar créditos
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        @endif
 
         {{-- Aviso ao navegar para fora do chat sem encerrar a consulta. --}}
         <div

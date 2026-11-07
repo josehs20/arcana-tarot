@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\Gender;
 use App\Enums\PhoneVerificationStatus;
 use App\Enums\SmsVerificationResult;
 use App\Enums\UserRole;
@@ -56,6 +57,7 @@ class SmsRegistrationTest extends TestCase
             'email' => 'cliente.sms@example.com',
             'phone' => '(11) 99999-9999',
             'birth_date' => '1990-08-14',
+            'gender' => Gender::Female->value,
             'password' => 'senha-segura',
             'password_confirmation' => 'senha-segura',
         ], $overrides);
@@ -102,6 +104,7 @@ class SmsRegistrationTest extends TestCase
         $this->assertSame(UserRole::Client, $user->role);
         $this->assertSame('11999999999', $user->phone);
         $this->assertSame('1990-08-14', $user->birth_date?->format('Y-m-d'));
+        $this->assertSame(Gender::Female, $user->gender);
         $this->assertNotNull($user->phone_verified_at);
         $this->assertNotNull($user->wallet);
         $this->assertTrue(Hash::check('senha-segura', $user->password));

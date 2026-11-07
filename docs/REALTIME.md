@@ -478,14 +478,16 @@ Quando um cliente solicita um atendimento, o servidor emite
    por minuto, horário e os botões **Aceitar atendimento** / **Recusar**.
 
 O toque é escolhido em **Admin → Atendentes**, por atendente, entre `siren`
-(padrão), `bell`, `chime`, `pulse` e `custom` (MP3 enviado pela administração,
-com até 5 segundos e 1 MB). A alteração de um toque predefinido é auditada em
+(padrão da plataforma), `bell`, `chime`, `pulse`, `olha-o-gas` (MP3 versionado em
+`public/olha-o-gas.mp3`, padrão dos atendentes de demonstração) e `custom` (MP3
+enviado pela administração, com até 5 segundos e 1 MB). A alteração de um toque
+predefinido é auditada em
 `attendant.request_sound_updated`; upload e remoção do MP3 usam
 `attendant.request_sound_file_uploaded` e `attendant.request_sound_file_removed`.
-O valor chega ao navegador por `data-request-sound` e, no caso de `custom`, a URL
-pública do arquivo por `data-request-sound-url`, ambos no bloco
-`[data-user-channel]`. O botão **Ouvir** dessa tela reproduz a prévia antes de
-salvar.
+O valor chega ao navegador por `data-request-sound` e, nos toques servidos por
+arquivo (`olha-o-gas` e `custom`), a URL pública por `data-request-sound-url`,
+ambos no bloco `[data-user-channel]`. O botão **Ouvir** dessa tela reproduz a
+prévia antes de salvar — inclusive do MP3 da plataforma.
 
 O modal e o bloco do canal vivem no layout do painel
 (`layouts/partials/realtime-alerts.blade.php` + `layouts/partials/request-modal.blade.php`),
@@ -495,9 +497,11 @@ continua existindo como lista persistente e como fallback sem JavaScript.
 
 Detalhes do alerta sonoro:
 
-- os toques predefinidos são sintetizados com Web Audio API, sem arquivo de
-  áudio no bundle; a sirene padrão varre 640–1180 Hz com filtro passa-baixa em
-  2,2 kHz;
+- os toques predefinidos sintetizados (sirene, campainha, sino e bip) usam Web
+  Audio API, sem arquivo de áudio no bundle; a sirene padrão varre 640–1180 Hz
+  com filtro passa-baixa em 2,2 kHz;
+- `olha-o-gas` é o único predefinido servido por arquivo: o MP3 versionado em
+  `public/olha-o-gas.mp3`, entregue por `data-request-sound-url`;
 - o MP3 personalizado é baixado uma vez, decodificado no mesmo `AudioContext` e
   reproduzido pelo mesmo ciclo de repetição; se o arquivo sumir do disco, o
   servidor envia a sirene como fallback;

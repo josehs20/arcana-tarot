@@ -146,6 +146,7 @@ class PhoneVerificationController extends Controller
                 'phone' => $verification->phone,
                 'phone_verified_at' => now(),
                 'birth_date' => ($payload['birth_date'] ?? '') !== '' ? $payload['birth_date'] : null,
+                'gender' => ($payload['gender'] ?? '') !== '' ? $payload['gender'] : null,
                 'password' => $payload['password_hash'],
                 'role' => UserRole::Client->value,
                 'is_active' => true,

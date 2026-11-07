@@ -25,6 +25,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    {{--
+        Modo de entrega em tempo real decidido no servidor
+        (`App\Support\Realtime\RealtimeMode`). `resources/js/echo.js` lê este
+        marcador e não abre WebSocket quando o modo é `poll` — é o que impede o
+        navegador de tentar `wss://host:8080` em hospedagem sem Reverb.
+    --}}
+    <meta name="realtime-mode" content="{{ \App\Support\Realtime\RealtimeMode::current() }}">
     <meta name="theme-endpoint" content="{{ route('preferences.theme.update') }}">
     <meta name="robots" content="noindex, nofollow">
     <title>{{ $title }}</title>
@@ -71,9 +78,10 @@
     </div>
 
     {{--
-        Avisos em tempo real do `user.{id}`: modal de aceite/recusa e sirene do
-        atendente, navegação automática do cliente para a tela de atendimento.
-        Fica no layout para valer em qualquer tela do painel, não só no dashboard.
+        Avisos em tempo real do `user.{id}`: modal de aceite/recusa e toque de
+        chamada do atendente, navegação automática do cliente para a tela de
+        atendimento. Fica no layout para valer em qualquer tela do painel, não só
+        no dashboard.
     --}}
     @unless ($isAdmin)
         @include('layouts.partials.realtime-alerts')

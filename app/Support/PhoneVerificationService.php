@@ -25,7 +25,7 @@ final class PhoneVerificationService
     /**
      * Cria a verificação pendente e envia o código.
      *
-     * @param  array{name: string, email: string, birth_date?: string|null, password_hash: string}  $payload
+     * @param  array{name: string, email: string, birth_date?: string|null, gender?: string|null, password_hash: string}  $payload
      *
      * @throws SmsVerificationException quando o provedor não consegue enviar
      */

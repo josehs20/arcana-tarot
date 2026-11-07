@@ -13,7 +13,7 @@ use Generator;
  * arquivo é executado como SQL. A primeira passagem coleta os `CREATE TABLE`;
  * a segunda percorre os `INSERT` da tabela escolhida.
  */
-final class LegacySqlDumpReader
+final class LegacySqlDumpReader implements LegacyDumpSource
 {
     private const CHUNK_BYTES = 1_048_576;
 
@@ -26,13 +26,6 @@ final class LegacySqlDumpReader
     private const STATEMENT_STOP = ";'\"`#-/";
 
     private const INSERT_MODIFIERS = ['LOW_PRIORITY', 'DELAYED', 'HIGH_PRIORITY', 'IGNORE'];
-
-    private const TRUNCATION_MARKERS = [
-        'MySQL server has gone away',
-        'mysqli_sql_exception',
-        'Fatal error</b>',
-        '<div class="alert alert-danger"',
-    ];
 
     /** @var resource|null */
     private $handle = null;
@@ -53,57 +46,38 @@ final class LegacySqlDumpReader
         $this->close();
     }
 
-    public function path(): string
+    public function files(): array
     {
-        return $this->path;
+        return [['path' => $this->path, 'size' => $this->size()]];
+    }
+
+    public function sourceLabel(): string
+    {
+        return 'dump SQL';
     }
 
     public function size(): int
     {
-        clearstatcache(true, $this->path);
-
-        $size = @filesize($this->path);
-
-        return $size === false ? 0 : $size;
+        return LegacyDumpTail::size($this->path);
     }
 
-    /**
-     * Marcador textual de exportação interrompida encontrado no fim do
-     * arquivo, ou `null` quando o fim do dump parece íntegro.
-     */
-    public function truncationMarker(): ?string
+    public function integrityIssues(): array
     {
-        $size = $this->size();
+        $marker = LegacyDumpTail::truncationMarker($this->path);
+        $unterminated = $this->endsWithoutTerminator();
 
-        if ($size === 0) {
-            return null;
+        if ($marker === null && ! $unterminated) {
+            return [];
         }
 
-        $handle = @fopen($this->path, 'rb');
-
-        if ($handle === false) {
-            throw new LegacyDumpException('Não foi possível abrir o arquivo legado para leitura.');
-        }
-
-        $length = min($size, 65_536);
-        fseek($handle, $size - $length);
-        $tail = (string) fread($handle, $length);
-        fclose($handle);
-
-        foreach (self::TRUNCATION_MARKERS as $marker) {
-            if (str_contains($tail, $marker)) {
-                return $marker;
-            }
-        }
-
-        return null;
+        return [['path' => $this->path, 'marker' => $marker, 'unterminated' => $unterminated]];
     }
 
     /**
      * Indica que o arquivo termina sem o `;` final de um comando, sinal de
      * exportação interrompida no meio de um `INSERT`.
      */
-    public function endsWithoutTerminator(): bool
+    private function endsWithoutTerminator(): bool
     {
         $size = $this->size();
 

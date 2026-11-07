@@ -95,7 +95,8 @@
             <span>Ver site público</span>
         </a>
 
-        <form method="POST" action="{{ route('logout') }}">
+        {{-- O logout encerra a consulta no servidor: sair é intencional e não avisa. --}}
+        <form method="POST" action="{{ route('logout') }}" data-allow-leave>
             @csrf
             <button type="submit" class="panel-sidebar__footer-link panel-sidebar__footer-link--danger" data-label="Sair da conta">
                 <x-ui.icon name="log-out" class="panel-nav__icon" />

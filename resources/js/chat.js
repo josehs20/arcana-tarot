@@ -2,6 +2,8 @@ import { Modal } from 'bootstrap';
 import { autoplayAllowed, markAutoplayAllowed } from './audio-autoplay';
 import { createPoller, readMilliseconds } from './polling';
 
+import { markIntentionalNavigation } from './navigation-intent';
+
 /*
  * Rede de segurança quando o WebSocket está disponível: com o canal conectado
  * quem entrega a mensagem é o broadcast, então esta leitura só cobre o que se
@@ -1763,6 +1765,7 @@ function handleState(event) {
      * recarregar a lista inteira de consultas.
      */
     if (consultation.status === 'active' && chat.dataset.workspace !== '1') {
+        markIntentionalNavigation();
         window.location.assign(chat.dataset.workspaceUrl);
 
         return;

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Enums\Gender;
 use App\Http\Requests\Admin\Concerns\HandlesAttendantFields;
 use App\Models\User;
 use App\Support\PhoneNumber;
@@ -90,6 +91,7 @@ class UpdateUserRequest extends FormRequest
                 'before:'.now()->subYears(self::MINIMUM_AGE)->toDateString(),
                 'after:'.now()->subYears(self::MAXIMUM_AGE)->toDateString(),
             ],
+            'gender' => ['nullable', 'string', Rule::enum(Gender::class)],
             'password' => ['nullable', 'string', 'min:8', 'confirmed'],
         ];
 
@@ -138,6 +140,7 @@ class UpdateUserRequest extends FormRequest
             'birth_date.date_format' => 'Informe a data de nascimento no formato DD/MM/AAAA.',
             'birth_date.before' => 'A data de nascimento exige idade igual ou superior a 18 anos.',
             'birth_date.after' => 'Confira a data de nascimento informada.',
+            'gender.enum' => 'Escolha uma opção válida de sexo.',
             'password.min' => 'A senha deve ter pelo menos 8 caracteres.',
             'password.confirmed' => 'A confirmação da senha não confere.',
             'display_name.required' => 'Informe o nome profissional exibido no diretório.',

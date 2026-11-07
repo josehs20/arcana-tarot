@@ -2,6 +2,7 @@
 
 namespace App\Support\Legacy;
 
+use App\Enums\Gender;
 use App\Enums\LegacyPasswordFormat;
 
 /**
@@ -21,5 +22,8 @@ final class LegacyUserRecord
         public readonly LegacyPasswordFormat $passwordFormat,
         public readonly ?string $phone = null,
         public readonly int $balanceCents = 0,
+        public readonly ?string $birthDate = null,
+        public readonly ?Gender $gender = null,
+        public readonly bool $profileMatched = false,
     ) {}
 }

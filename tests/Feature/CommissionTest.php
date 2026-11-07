@@ -183,6 +183,25 @@ class CommissionTest extends TestCase
             ->assertSee('Configuração da taxa');
     }
 
+    public function test_commission_shortcut_moves_from_the_users_screen_to_the_attendants_screen(): void
+    {
+        $admin = User::factory()->admin()->create();
+        [$attendant, $profile] = $this->attendant(3000);
+
+        $this->actingAs($admin)
+            ->get(route('admin.users.index', ['role' => 'attendant']))
+            ->assertOk()
+            ->assertSee($attendant->name)
+            ->assertDontSee(route('admin.commissions.attendant', $attendant));
+
+        $this->actingAs($admin)
+            ->get(route('admin.attendants.index'))
+            ->assertOk()
+            ->assertSee($attendant->name)
+            ->assertSee(route('admin.commissions.attendant', $attendant))
+            ->assertSee('30%');
+    }
+
     public function test_non_admin_cannot_change_commission_rate(): void
     {
         $client = $this->client();

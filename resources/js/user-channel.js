@@ -2,11 +2,11 @@
  * Canal privado do usuário (`user.{id}`) nos painéis.
  *
  * O Reverb entrega aqui os avisos que não pertencem à conversa aberta:
- *  - `consultation.request`: um cliente solicitou o atendente. A sirene toca,
- *    o modal de aceite/recusa abre e a fila é atualizada sem recarregar. O
- *    bloco que registra o canal fica no layout do painel, então o aviso aparece
- *    em qualquer tela do atendente — painel, histórico, perfil ou consulta
- *    aberta — e não só no dashboard.
+ *  - `consultation.request`: um cliente solicitou o atendente. O toque de
+ *    chamada configurado soa, o modal de aceite/recusa abre e a fila é atualizada
+ *    sem recarregar. O bloco que registra o canal fica no layout do painel, então
+ *    o aviso aparece em qualquer tela do atendente — painel, histórico, perfil ou
+ *    consulta aberta — e não só no dashboard.
  *  - `consultation.state`: o aceite acontece. Cliente e atendente são levados
  *    direto para a tela dedicada de atendimento; estados finais limpam a fila e
  *    recarregam a tela (`data-refresh-on-final`), porque a recusa ou o
@@ -22,14 +22,15 @@
  * Sem WebSocket — hospedagem compartilhada, modo `data-realtime-mode="poll"` —
  * o mesmo `data-events-url` passa a ser lido em intervalos curtos e vira a via
  * principal: ele devolve a fila do atendente e a consulta aberta do usuário,
- * então o modal de aceite, a sirene e a navegação para o atendimento continuam
- * funcionando por HTTP. Toda leitura é somente leitura no servidor: não marca
- * atividade, presença, mensagens lidas nem cobrança.
+ * então o modal de aceite, o toque de chamada e a navegação para o atendimento
+ * continuam funcionando por HTTP. Toda leitura é somente leitura no servidor:
+ * não marca atividade, presença, mensagens lidas nem cobrança.
  */
 
 import { Modal } from 'bootstrap';
 
 import { autoplayAllowed, markAutoplayAllowed } from './audio-autoplay';
+import { markIntentionalNavigation } from './navigation-intent';
 import { createPoller, readMilliseconds } from './polling';
 
 // Ritmo do alerta: cada toque dura ALERT_SOUND_DURATION_MS e o conjunto se
@@ -39,11 +40,22 @@ const ALERT_REPEAT_MS = 2400;
 const ALERT_MAX_MS = 90000;
 const ALERT_SOUND_DURATION_MS = 1500;
 const ALERT_GAIN = 0.12;
-const CUSTOM_SOUND_GAIN = 0.8;
-const CUSTOM_FALLBACK_REPEAT_MS = 5500;
+const FILE_SOUND_GAIN = 0.8;
+const FILE_FALLBACK_REPEAT_MS = 5500;
 const DEFAULT_REQUEST_SOUND = 'siren';
 const CUSTOM_REQUEST_SOUND = 'custom';
-const REQUEST_SOUNDS = new Set([DEFAULT_REQUEST_SOUND, 'bell', 'chime', 'pulse', CUSTOM_REQUEST_SOUND]);
+const PLATFORM_MP3_REQUEST_SOUND = 'olha-o-gas';
+const REQUEST_SOUNDS = new Set([
+    DEFAULT_REQUEST_SOUND,
+    'bell',
+    'chime',
+    'pulse',
+    PLATFORM_MP3_REQUEST_SOUND,
+    CUSTOM_REQUEST_SOUND,
+]);
+// Toques servidos por arquivo: o MP3 enviado pela administração e o MP3
+// versionado em `public/olha-o-gas.mp3`. Os demais são sintetizados aqui.
+const FILE_REQUEST_SOUNDS = new Set([PLATFORM_MP3_REQUEST_SOUND, CUSTOM_REQUEST_SOUND]);
 const SIREN_LOW_HZ = 640;
 const SIREN_HIGH_HZ = 1180;
 
@@ -154,8 +166,8 @@ const userChannelState = {
     audioWatchBound: false,
     sound: DEFAULT_REQUEST_SOUND,
     soundUrl: null,
-    customBuffer: null,
-    customLoadPromise: null,
+    fileBuffer: null,
+    fileLoadPromise: null,
     alertNodes: [],
     alertTimer: null,
     alertStopTimer: null,
@@ -334,16 +346,21 @@ function leaveTo(url) {
 
     userChannelState.leaving = true;
     window.clearTimeout(userChannelState.alertTimer);
+
+    // Redirecionamentos do painel (aceite, encerramento, sessão expirada) são
+    // navegações esperadas: não devem abrir o aviso nativo do navegador.
+    markIntentionalNavigation();
     window.location.assign(target);
 }
 
 /*
  * Alerta sonoro de nova solicitação.
  *
- * Os toques predefinidos são sintetizados no próprio navegador. Quando a
- * administração envia um MP3, o arquivo é baixado uma vez e decodificado no
- * AudioContext para tocar junto com o mesmo mecanismo de repetição. A sirene
- * continua sendo o padrão histórico.
+ * Os toques predefinidos sintetizados são gerados no próprio navegador. Quando o
+ * toque depende de um MP3 — o versionado em `public/olha-o-gas.mp3` ou o enviado
+ * pela administração — o arquivo é baixado uma vez (a URL chega em
+ * `data-request-sound-url`) e decodificado no AudioContext para tocar junto com
+ * o mesmo mecanismo de repetição. A sirene continua sendo o padrão histórico.
  *
  * Navegadores só liberam áudio depois de uma interação do usuário — e o Chrome
  * avisa no console quando um `AudioContext` nasce antes disso. Por isso o
@@ -361,17 +378,17 @@ function normalizeRequestSound(value) {
  * Baixa e decodifica o MP3 uma única vez por URL. Se o download falhar, o
  * chamador simplesmente não toca o arquivo e o alerta visual continua ativo.
  */
-function loadCustomSound(url) {
+function loadFileSound(url) {
     if (!url) {
         return Promise.resolve(null);
     }
 
-    if (userChannelState.customBuffer && userChannelState.soundUrl === url) {
-        return Promise.resolve(userChannelState.customBuffer);
+    if (userChannelState.fileBuffer && userChannelState.soundUrl === url) {
+        return Promise.resolve(userChannelState.fileBuffer);
     }
 
-    if (userChannelState.customLoadPromise && userChannelState.soundUrl === url) {
-        return userChannelState.customLoadPromise;
+    if (userChannelState.fileLoadPromise && userChannelState.soundUrl === url) {
+        return userChannelState.fileLoadPromise;
     }
 
     // Sem contexto liberado não há como decodificar: o arquivo é baixado no
@@ -383,7 +400,7 @@ function loadCustomSound(url) {
     }
 
     userChannelState.soundUrl = url;
-    userChannelState.customBuffer = null;
+    userChannelState.fileBuffer = null;
 
     const promise = fetch(sameOriginUrl(url), { credentials: 'same-origin' })
         .then((response) => {
@@ -398,19 +415,19 @@ function loadCustomSound(url) {
         }))
         .then((buffer) => {
             if (userChannelState.soundUrl === url) {
-                userChannelState.customBuffer = buffer;
+                userChannelState.fileBuffer = buffer;
             }
 
             return buffer;
         })
         .catch(() => null)
         .finally(() => {
-            if (userChannelState.customLoadPromise === promise) {
-                userChannelState.customLoadPromise = null;
+            if (userChannelState.fileLoadPromise === promise) {
+                userChannelState.fileLoadPromise = null;
             }
         });
 
-    userChannelState.customLoadPromise = promise;
+    userChannelState.fileLoadPromise = promise;
 
     return promise;
 }
@@ -469,8 +486,8 @@ function handleAudioReady() {
     updateAudioHint();
     channelLog('audio.liberado', { estado: userChannelState.audio?.state ?? null, alarmeAtivo: userChannelState.alertActive });
 
-    if (userChannelState.sound === CUSTOM_REQUEST_SOUND && userChannelState.soundUrl) {
-        void loadCustomSound(userChannelState.soundUrl);
+    if (FILE_REQUEST_SOUNDS.has(userChannelState.sound) && userChannelState.soundUrl) {
+        void loadFileSound(userChannelState.soundUrl);
     }
 
     if (userChannelState.alertActive && Date.now() - userChannelState.alertLastPlayAt > 800) {
@@ -798,7 +815,7 @@ function playPulse() {
     scheduleTone(context, { frequency: 880, start: start + 0.3, duration: 0.18, gain: 0.14 });
 }
 
-function playCustomBuffer(buffer) {
+function playFileBuffer(buffer) {
     const context = userChannelState.audio;
 
     if (!context || context.state !== 'running' || !buffer) {
@@ -809,7 +826,7 @@ function playCustomBuffer(buffer) {
     source.buffer = buffer;
 
     const gain = context.createGain();
-    gain.gain.value = CUSTOM_SOUND_GAIN;
+    gain.gain.value = FILE_SOUND_GAIN;
 
     source.connect(gain).connect(context.destination);
     source.start();
@@ -828,21 +845,21 @@ function playCustomBuffer(buffer) {
     return true;
 }
 
-function playCustomRequestSound(url) {
+function playFileRequestSound(url) {
     const context = userChannelState.audio;
 
     if (!context || context.state !== 'running' || !url) {
         return;
     }
 
-    if (userChannelState.customBuffer && userChannelState.soundUrl === url) {
-        playCustomBuffer(userChannelState.customBuffer);
+    if (userChannelState.fileBuffer && userChannelState.soundUrl === url) {
+        playFileBuffer(userChannelState.fileBuffer);
         return;
     }
 
-    loadCustomSound(url).then((buffer) => {
+    loadFileSound(url).then((buffer) => {
         if (buffer && userChannelState.audio?.state === 'running') {
-            playCustomBuffer(buffer);
+            playFileBuffer(buffer);
         }
     });
 }
@@ -893,8 +910,8 @@ function playRequestSound(value) {
     userChannelState.alertLastPlayAt = Date.now();
     channelLog('sirene.toque', { som: sound, contexto: context.state });
 
-    if (sound === CUSTOM_REQUEST_SOUND) {
-        playCustomRequestSound(userChannelState.soundUrl);
+    if (FILE_REQUEST_SOUNDS.has(sound)) {
+        playFileRequestSound(userChannelState.soundUrl);
 
         return;
     }
@@ -903,20 +920,20 @@ function playRequestSound(value) {
 }
 
 function alertRepeatMs() {
-    if (userChannelState.sound !== CUSTOM_REQUEST_SOUND) {
+    if (!FILE_REQUEST_SOUNDS.has(userChannelState.sound)) {
         return ALERT_REPEAT_MS;
     }
 
-    if (userChannelState.customBuffer) {
+    if (userChannelState.fileBuffer) {
         return Math.max(
             ALERT_REPEAT_MS,
-            Math.ceil(userChannelState.customBuffer.duration * 1000) + 400,
+            Math.ceil(userChannelState.fileBuffer.duration * 1000) + 400,
         );
     }
 
     // Ainda carregando: espera o limite máximo do arquivo para não sobrepor
     // duas reproduções caso o download termine durante o primeiro toque.
-    return CUSTOM_FALLBACK_REPEAT_MS;
+    return FILE_FALLBACK_REPEAT_MS;
 }
 
 function scheduleNextAlert() {
@@ -1003,8 +1020,8 @@ export function previewRequestSound(value, url = null) {
 
     const sound = normalizeRequestSound(value);
     const play = () => {
-        if (sound === CUSTOM_REQUEST_SOUND) {
-            playCustomRequestSound(url ?? userChannelState.soundUrl);
+        if (FILE_REQUEST_SOUNDS.has(sound)) {
+            playFileRequestSound(url ?? userChannelState.soundUrl);
             return;
         }
 
@@ -1456,7 +1473,10 @@ function reloadAfterSessionExpiry() {
     }
 
     userChannelState.reloadingForSession = true;
-    window.setTimeout(() => window.location.reload(), 1200);
+    window.setTimeout(() => {
+        markIntentionalNavigation();
+        window.location.reload();
+    }, 1200);
 }
 
 
@@ -1658,6 +1678,10 @@ function handleClosedConsultation() {
 
     userChannelState.lastState = null;
     userChannelState.lastConsultationId = null;
+
+    // A consulta observada chegou ao estado final: recarregar mostra o
+    // resultado e é uma navegação esperada, sem aviso nativo.
+    markIntentionalNavigation();
     window.location.reload();
 }
 
@@ -1721,6 +1745,7 @@ function handleState(event) {
     }
 
     if (consultation.is_final && userChannelRoot()?.dataset.refreshOnFinal === '1') {
+        markIntentionalNavigation();
         window.location.reload();
     }
 }

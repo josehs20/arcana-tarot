@@ -2,6 +2,7 @@
 
 namespace App\Support\Legacy;
 
+use App\Enums\Gender;
 use App\Enums\LegacyImportStatus;
 use App\Enums\LegacyPasswordFormat;
 
@@ -19,6 +20,9 @@ final class LegacyImportEntry
         public readonly int $balanceCents = 0,
         public readonly ?string $reason = null,
         public readonly ?int $userId = null,
+        public readonly ?string $birthDate = null,
+        public readonly ?Gender $gender = null,
+        public readonly bool $profileMatched = false,
     ) {}
 
     public function isSuccess(): bool

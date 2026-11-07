@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\Gender;
 use App\Enums\ThemePreference;
 use App\Enums\UserRole;
 use Database\Factories\UserFactory;
@@ -13,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-#[Fillable(['name', 'email', 'phone', 'phone_verified_at', 'birth_date', 'email_verified_at', 'google_id', 'password', 'remember_token', 'role', 'is_active', 'theme_preference', 'chat_send_on_enter', 'chat_sound_enabled'])]
+#[Fillable(['name', 'email', 'phone', 'phone_verified_at', 'birth_date', 'gender', 'email_verified_at', 'google_id', 'password', 'remember_token', 'role', 'is_active', 'theme_preference', 'chat_send_on_enter', 'chat_sound_enabled'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -29,6 +30,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'phone_verified_at' => 'datetime',
             'birth_date' => 'date',
+            'gender' => Gender::class,
             'password' => 'hashed',
             'role' => UserRole::class,
             'is_active' => 'boolean',
@@ -112,6 +114,15 @@ class User extends Authenticatable
     public function birthDateLabel(): ?string
     {
         return $this->birth_date?->format('d/m/Y');
+    }
+
+    /**
+     * Sexo já formatado para exibição ("Feminino"), ou null quando não
+     * informado (contas antigas, Google e importações sem o dado).
+     */
+    public function genderLabel(): ?string
+    {
+        return $this->gender?->label();
     }
 
     /**

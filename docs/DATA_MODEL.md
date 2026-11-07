@@ -55,6 +55,8 @@ polimórficas:
 | `is_active` | boolean | desativação administrativa |
 | `phone` | string(20) nullable | índice; obrigatório na validação do cadastro |
 | `phone_verified_at` | timestamp nullable | reservado para verificação por SMS |
+| `birth_date` | date nullable | obrigatório no cadastro por e-mail; nulo em contas antigas e do Google |
+| `gender` | string(16) nullable | enum `Gender`: `female`, `male`, `other`; obrigatório no cadastro por e-mail |
 | `theme_preference` | string(16) | enum `ThemePreference`; padrão `light` |
 | `chat_send_on_enter` | boolean | padrão `true`; Enter envia e Shift+Enter quebra linha |
 | `chat_sound_enabled` | boolean | padrão `true`; aviso sonoro de mensagem recebida |
@@ -85,8 +87,9 @@ polimórficas:
 > implementados no Prompt 08; `busy` nunca é persistido. `last_seen_at` foi
 > adicionado no Prompt 10 e sustenta a política de presença descrita em
 > `docs/CONSULTATION_STATE_MACHINE.md`. `request_sound` aceita `siren`
-> (padrão), `bell`, `chime`, `pulse` e `custom`; os quatro primeiros são
-> sintetizados no navegador e `custom` usa o MP3 apontado por
+> (padrão), `bell`, `chime`, `pulse`, `olha-o-gas` e `custom`; sirene, campainha,
+> sino e bip são sintetizados no navegador, `olha-o-gas` usa o MP3 versionado em
+> `public/olha-o-gas.mp3` e `custom` usa o MP3 apontado por
 > `request_sound_path` (até 5 segundos e 1 MB, no disco `public`). Se o arquivo
 > personalizado faltar, o painel volta a tocar a sirene. O som só altera o aviso
 > de nova solicitação, nunca o aceite ou a cobrança.

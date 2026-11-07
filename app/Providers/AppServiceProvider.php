@@ -162,6 +162,14 @@ class AppServiceProvider extends ServiceProvider
                 ->by('credit-purchase:'.($request->user()?->getKey() ?? $request->ip()));
         });
 
+        // Disparo de e-mails: o limite protege o SMTP de um duplo clique ou de
+        // um formulário reenviado, já que cada campanha enfileira centenas de
+        // mensagens.
+        RateLimiter::for('admin-bulk-email', function (Request $request): Limit {
+            return Limit::perMinute(5)
+                ->by('admin-bulk-email:'.($request->user()?->getKey() ?? $request->ip()));
+        });
+
         View::composer('layouts.partials.sidebar-admin', function ($view): void {
             $user = auth()->user();
             $count = $user && $user->is_active && $user->isAdmin()

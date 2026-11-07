@@ -1922,6 +1922,57 @@
     }
 }
 
+// ---- Nota por estrelas (modal de depoimento) --------------------------
+// Os rádios nativos ficam `.visually-hidden`, mas continuam focáveis: as setas
+// do teclado trocam a nota e o anel de foco é desenhado na estrela. O
+// preenchimento dourado (`.star-rating__star--filled`) é aplicado pelo
+// `testimonial-modal.js` a partir do rádio marcado.
+.star-rating {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .15rem;
+}
+
+.star-rating__star {
+    color: var(--arcana-ivory-muted);
+    cursor: pointer;
+    display: inline-flex;
+    line-height: 1;
+    padding: .1rem;
+    transition: color .12s ease, transform .12s ease;
+
+    svg {
+        fill: transparent;
+        stroke: currentColor;
+        transition: fill .12s ease;
+    }
+
+    &:hover {
+        transform: scale(1.1);
+    }
+}
+
+.star-rating__star--filled {
+    color: var(--arcana-gold-light);
+
+    svg {
+        fill: currentColor;
+    }
+}
+
+.star-rating__input:focus-visible + .star-rating__star {
+    border-radius: $arcana-radius-sm;
+    outline: 2px solid var(--arcana-gold);
+    outline-offset: 2px;
+}
+
+.star-rating__value {
+    color: var(--arcana-ivory-dim);
+    font-size: .85rem;
+    margin-left: .45rem;
+}
+
 .testimonial-summary {
     align-items: center;
     color: var(--arcana-ivory-dim);
@@ -2198,3 +2249,47 @@
         animation: none;
     }
 }
+
+// =====================================================================
+// Disparo de e-mails (/admin/emails)
+// =====================================================================
+
+.bulk-email-preview {
+    background: rgba(var(--arcana-purple-rgb), .14);
+    border: 1px solid rgba(var(--arcana-gold-rgb), .18);
+    border-radius: $arcana-radius-sm;
+    margin-top: 1rem;
+    padding: .85rem 1rem;
+}
+
+.bulk-email-preview__label {
+    color: var(--arcana-ivory-dim);
+    font-size: .72rem;
+    letter-spacing: .05em;
+    margin: 0 0 .5rem;
+    text-transform: uppercase;
+}
+
+.bulk-email-preview__subject {
+    color: var(--arcana-ivory);
+    font-weight: 500;
+    margin: 0 0 .5rem;
+    overflow-wrap: anywhere;
+}
+
+// O corpo é texto puro escrito pela administração: as quebras de linha
+// digitadas precisam aparecer na prévia sem virar HTML.
+.bulk-email-preview__body {
+    color: var(--arcana-ivory-muted);
+    font-size: .9rem;
+    line-height: 1.6;
+    margin: 0;
+    overflow-wrap: anywhere;
+    white-space: pre-line;
+}
+
+.bulk-email-recipient-cell {
+    max-width: 22rem;
+    overflow-wrap: anywhere;
+}
+

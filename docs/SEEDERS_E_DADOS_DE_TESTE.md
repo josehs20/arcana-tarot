@@ -187,15 +187,17 @@ Essas credenciais são exclusivamente locais, fictícias e não devem ser reutil
 
 | Chave | Nome | E-mail | Comissão | Som de chamada | Estado |
 |---|---|---|---|---|---|
-| `marina` | Marina Luz | `marina.luz@arcana.local` | 30% | Sirene (padrão) | Online, publicada e disponível; possui histórico concluído de 13 minutos |
-| `rafael` | Rafael Monteiro | `rafael.monteiro@arcana.local` | 25% | Sirene (padrão) | Offline e publicado |
-| `iris` | Íris Campos | `iris.campos@arcana.local` | 20% | Sirene (padrão) | Online, publicada e disponível; sem atendimento ativo |
+| `marina` | Marina Luz | `marina.luz@arcana.local` | 30% | Olha o gás (MP3 da plataforma) | Online, publicada e disponível; possui histórico concluído de 13 minutos |
+| `rafael` | Rafael Monteiro | `rafael.monteiro@arcana.local` | 25% | Olha o gás (MP3 da plataforma) | Offline e publicado |
+| `iris` | Íris Campos | `iris.campos@arcana.local` | 20% | Olha o gás (MP3 da plataforma) | Online, publicada e disponível; sem atendimento ativo |
 
 A comissão é congelada no aceite da consulta. Alterar a taxa atual de um atendente não altera comissões históricas.
 
-Os seeders usam a sirene e não enviam MP3 personalizado: uploads de som são
-arquivos enviados pela administração, não dados de demonstração. O arquivo fica
-no disco `public` e exige `php artisan storage:link` no ambiente.
+Os seeders usam o toque `olha-o-gas`, servido pelo MP3 versionado em
+`public/olha-o-gas.mp3`, e não enviam MP3 personalizado: uploads de som são
+arquivos enviados pela administração, não dados de demonstração. Um upload
+personalizado fica no disco `public` e exige `php artisan storage:link` no
+ambiente.
 
 ### Clientes
 

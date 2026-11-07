@@ -4,12 +4,13 @@
     O layout inclui este bloco em toda tela de cliente e de atendente (nunca na
     administração). Antes o canal privado só existia no dashboard, então um
     pedido feito enquanto o atendente navegava pelo histórico, pelo perfil ou
-    por uma consulta aberta não abria o modal nem tocava a sirene.
+    por uma consulta aberta não abria o modal nem tocava o toque de chamada.
 
     O bloco apenas publica os endpoints; `resources/js/user-channel.js` abre o
     canal `user.{id}`, abre o modal de aceite/recusa e toca o som configurado
-    (sirene, toque sintetizado ou MP3 enviado pela administração). Nenhuma
-    decisão acontece no navegador: aceitar/recusar chamam as rotas do servidor.
+    (sintetizado no navegador ou MP3 — o da plataforma ou o enviado pela
+    administração). Nenhuma decisão acontece no navegador: aceitar/recusar
+    chamam as rotas do servidor.
 --}}
 @php
     $realtimeUser = auth()->user();
@@ -17,9 +18,12 @@
     $realtimeProfile = $realtimeIsAttendant ? $realtimeUser->attendantProfile : null;
     $realtimeSound = $realtimeProfile?->effectiveRequestSound();
     $realtimeRequestSound = $realtimeSound?->value ?? 'siren';
-    $realtimeRequestSoundUrl = $realtimeSound?->isCustom()
-        ? $realtimeProfile?->requestSoundUrl()
-        : null;
+    /*
+     * O bloco publica a URL do arquivo quando o toque depende de download: o
+     * MP3 versionado da plataforma (`olha-o-gas`) ou o enviado pela
+     * administração (`custom`). Toques sintetizados não enviam URL.
+     */
+    $realtimeRequestSoundUrl = $realtimeProfile?->effectiveRequestSoundUrl();
 
     /*
      * Mesma decisão do chat: com WebSocket o aviso vem pelo canal privado; sem

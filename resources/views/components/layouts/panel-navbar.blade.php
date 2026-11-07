@@ -86,7 +86,7 @@
                     </li>
                     <li><hr class="dropdown-divider"></li>
                     <li>
-                        <form method="POST" action="{{ route('logout') }}">
+                        <form method="POST" action="{{ route('logout') }}" data-allow-leave>
                             @csrf
                             <button type="submit" class="dropdown-item text-danger">
                                 <x-ui.icon name="log-out" width="16" height="16" class="me-2" />

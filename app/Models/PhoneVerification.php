@@ -71,7 +71,7 @@ class PhoneVerification extends Model
     /**
      * Dados do cadastro guardados até a confirmação do código.
      *
-     * @return array{name: string, email: string, password_hash: string, birth_date: string}
+     * @return array{name: string, email: string, password_hash: string, birth_date: string, gender: string}
      */
     public function registrationPayload(): array
     {
@@ -84,6 +84,8 @@ class PhoneVerification extends Model
             // A data de nascimento é obrigatória no cadastro (18+) e precisa
             // sobreviver à etapa do SMS: sem ela a conta nasceria incompleta.
             'birth_date' => is_string($payload['birth_date'] ?? null) ? $payload['birth_date'] : '',
+            // O sexo também é exigido no cadastro; vale a mesma regra.
+            'gender' => is_string($payload['gender'] ?? null) ? $payload['gender'] : '',
         ];
     }
 }

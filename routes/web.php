@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\CommissionController as AdminCommissionController
 use App\Http\Controllers\Admin\ConsultationController as AdminConsultationController;
 use App\Http\Controllers\Admin\ConsultationSafetyController as AdminConsultationSafetyController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
+use App\Http\Controllers\Admin\EmailCampaignController as AdminEmailCampaignController;
 use App\Http\Controllers\Admin\FinanceController as AdminFinanceController;
 use App\Http\Controllers\Admin\ModalityController as AdminModalityController;
 use App\Http\Controllers\Admin\PaymentController as AdminPaymentController;
@@ -409,6 +410,34 @@ Route::middleware('auth')->group(function () {
     Route::get('admin/pagamentos', [AdminPaymentController::class, 'index'])
         ->middleware('role:admin')
         ->name('admin.payments.index');
+
+    /**
+     * Disparo de e-mails: seleção de usuários, corpo padrão e histórico.
+     * O POST apenas cria a campanha e enfileira os envios.
+     *
+     * `modelo` é POST (e não PATCH) porque o botão "Salvar como corpo padrão"
+     * envia o mesmo editor do disparo via `formaction`: um formulário HTML não
+     * consegue trocar o método HTTP por botão, e duplicar o texto em dois
+     * formulários deixaria dois corpos na mesma tela.
+     */
+    Route::prefix('admin/emails')
+        ->name('admin.emails.')
+        ->middleware('role:admin')
+        ->group(function () {
+            Route::get('/', [AdminEmailCampaignController::class, 'index'])->name('index');
+            Route::post('/', [AdminEmailCampaignController::class, 'store'])
+                ->middleware('throttle:admin-bulk-email')
+                ->name('store');
+            Route::post('modelo', [AdminEmailCampaignController::class, 'updateTemplate'])
+                ->name('template.update');
+            Route::get('{campaign}', [AdminEmailCampaignController::class, 'show'])
+                ->whereNumber('campaign')
+                ->name('show');
+            Route::post('{campaign}/reenviar-falhas', [AdminEmailCampaignController::class, 'resend'])
+                ->whereNumber('campaign')
+                ->middleware('throttle:admin-bulk-email')
+                ->name('resend');
+        });
 
     Route::get('admin/auditoria', [AdminAuditLogController::class, 'index'])
         ->middleware('role:admin')

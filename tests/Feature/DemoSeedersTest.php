@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\AttendantAvailability;
+use App\Enums\AttendantRequestSound;
 use App\Enums\CommissionEntryType;
 use App\Enums\ConsultationEndReason;
 use App\Enums\ConsultationStatus;
@@ -57,7 +58,9 @@ class DemoSeedersTest extends TestCase
         $this->assertSame(3, User::query()->where('role', UserRole::Attendant->value)->count());
         $this->assertSame(5, User::query()->where('role', UserRole::Client->value)->count());
         $this->assertSame(3, AttendantProfile::query()->count());
-        $this->assertSame(3, AttendantProfile::query()->where('request_sound', 'siren')->count());
+        $this->assertSame(3, AttendantProfile::query()
+            ->where('request_sound', AttendantRequestSound::OlhaOGas->value)
+            ->count());
         $this->assertSame(4, AttendantApplication::query()->count());
         $this->assertSame(4, Setting::query()->count());
         $this->assertSame('100', Setting::query()->where('key', 'credit_unit_price_cents')->value('value'));

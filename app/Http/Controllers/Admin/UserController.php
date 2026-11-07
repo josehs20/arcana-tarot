@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Enums\ConsultationModality;
+use App\Enums\Gender;
 use App\Enums\LedgerEntryType;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
@@ -100,6 +101,7 @@ class UserController extends Controller
             'profile' => null,
             'wallet' => null,
             'modalities' => ConsultationModality::cases(),
+            'genders' => Gender::options(),
             'catalog' => $catalog,
             'ledgerTypes' => LedgerEntryType::cases(),
             'operationId' => (string) Str::uuid(),
@@ -164,6 +166,7 @@ class UserController extends Controller
             'profile' => $user->attendantProfile,
             'wallet' => $user->wallet,
             'modalities' => ConsultationModality::cases(),
+            'genders' => Gender::options(),
             'catalog' => $catalog,
             'ledgerTypes' => LedgerEntryType::cases(),
             'operationId' => (string) Str::uuid(),
@@ -318,6 +321,7 @@ class UserController extends Controller
                 'email' => $locked->email,
                 'phone' => $locked->phone,
                 'birth_date' => $locked->birth_date?->toDateString(),
+                'gender' => $locked->gender?->value,
             ];
 
             $locked->fill([
@@ -325,6 +329,7 @@ class UserController extends Controller
                 'email' => $validated['email'],
                 'phone' => $validated['phone'] ?? null,
                 'birth_date' => $validated['birth_date'] ?? null,
+                'gender' => $validated['gender'] ?? null,
             ]);
 
             $passwordChanged = filled($validated['password'] ?? null);
@@ -340,6 +345,7 @@ class UserController extends Controller
                 'email' => $locked->email,
                 'phone' => $locked->phone,
                 'birth_date' => $locked->birth_date?->toDateString(),
+                'gender' => $locked->gender?->value,
             ];
 
             if ($before === $after && ! $passwordChanged) {
