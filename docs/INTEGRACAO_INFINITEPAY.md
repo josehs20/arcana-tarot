@@ -204,13 +204,16 @@ docker compose exec app php artisan migrate
 
 ## 7. Testes
 
-`tests/Feature/InfinitePayCheckoutTest.php` (20 casos, HTTP fakeado):
+`tests/Feature/InfinitePayCheckoutTest.php` (27 casos, HTTP fakeado):
 
 - pedido pendente com valor calculado no servidor e payload correto em `/links`;
 - repetição do mesmo `operation_id` sem duplicar pedido/chamada;
 - pacote inexistente recusado antes de chamar o provedor;
 - `customer.email` omitido em domínio reservado (`*.local`) e enviado quando o
   domínio é público;
+- `customer.phone_number` sempre em E.164 com DDI (`+5511999999999`), inclusive
+  quando a base guardou o DDI junto do número, preservando o DDD 55 (RS), e
+  omitido quando o telefone não é um número brasileiro válido;
 - recusa de validação do provedor (HTTP 422) propagada com os detalhes no
   `InfinitePayException` e pedido marcado como `failed`/`provider_error`;
 - webhook aprovado com `payment_check` creditando uma única vez;
@@ -243,7 +246,7 @@ Logs (canal padrão da aplicação):
 | `infinitepay.return_reconcile_failed` | Retorno do navegador sem conciliação. |
 | `infinitepay.request_rejected` | HTTP de erro do provedor com `status` e `details` (mensagens de validação). |
 | `infinitepay.customer_email_ignored` | `customer.email` não enviado (formato ou TLD reservado). |
-| `infinitepay.customer_phone_ignored` | `customer.phone_number` não enviado (fora de 10–15 dígitos). |
+| `infinitepay.customer_phone_ignored` | `customer.phone_number` não enviado (não é telefone brasileiro válido: DDD + 10/11 dígitos). |
 
 ### Dados do cliente no `/links`
 
@@ -256,9 +259,20 @@ Por isso o gateway só envia o que o provedor aceita:
 - `email`: `FILTER_VALIDATE_EMAIL` + TLD obrigatório e fora da lista reservada
   (`local`, `localhost`, `test`, `invalid`, `example`, `internal`, `lan`,
   `home`, `corp`, `intranet`, `onion`, `localdomain`);
-- `phone_number`: dígitos normalizados para E.164 (`+5511999999999`), enviado
-  apenas com 10–15 dígitos;
+- `phone_number`: sempre em E.164 com DDI brasileiro (`+5511999999999`),
+  reconstruído com `PhoneNumber::toE164()` a partir do telefone persistido
+  (DDD + número, 10–11 dígitos) e enviado apenas quando esse telefone é válido;
 - `name`: sempre que preenchido.
+
+O DDI não é opcional no telefone: a InfinitePay escolhe o **país do comprador**
+a partir dele e o campo chega travado para edição no checkout. Um número só com
+DDD + assinante (`+11999999999`) é lido como DDI `+11` (outro país), e o
+checkout passa a recusar o telefone — o cliente não consegue corrigir na tela
+de pagamento. Como a plataforma só persiste telefones brasileiros, o gateway
+sempre envia `+55` e nunca reaproveita um DDI que já esteja gravado na base
+(bases antigas com 12/13 dígitos têm o DDI removido antes do envio). Quando o
+telefone está ausente ou inválido o campo é omitido, e o comprador informa o
+número no próprio checkout.
 
 Campos descartados vão para o log (`customer_email_ignored` /
 `customer_phone_ignored`) e não bloqueiam a cobrança.

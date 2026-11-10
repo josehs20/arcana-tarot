@@ -29,9 +29,6 @@ use App\Support\Payments\InfinitePay\InfinitePayGateway;
 use App\Support\Payments\PixSandboxProvider;
 use App\Support\Payments\UnavailablePixProvider;
 use App\Support\SiteContent;
-use App\Support\Sms\Contracts\SmsVerificationProvider;
-use App\Support\Sms\TwilioVerifyProvider;
-use App\Support\Sms\UnavailableSmsVerificationProvider;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Foundation\DevCommands;
 use Illuminate\Http\Request;
@@ -63,24 +60,6 @@ class AppServiceProvider extends ServiceProvider
         });
 
         $this->app->singleton(InfinitePayGateway::class, fn (): InfinitePayGateway => new InfinitePayGateway);
-
-        /*
-         * Provedor de SMS do cadastro. Sem credenciais (ou com SMS desligado) o
-         * binding devolve o adaptador neutro, que falha com mensagem amigável em
-         * vez de derrubar o cadastro com erro de configuração.
-         */
-        $this->app->bind(SmsVerificationProvider::class, function (): SmsVerificationProvider {
-            $provider = (string) config('authentication.sms.provider');
-
-            return match ($provider) {
-                TwilioVerifyProvider::NAME => TwilioVerifyProvider::fromConfig() ?? new UnavailableSmsVerificationProvider,
-                default => (bool) config('authentication.sms.enabled')
-                    ? throw new InvalidArgumentException(
-                        'Provedor de SMS não suportado. Implemente o contrato SmsVerificationProvider antes de alterar SMS_VERIFICATION_PROVIDER.',
-                    )
-                    : new UnavailableSmsVerificationProvider,
-            };
-        });
     }
 
     /**

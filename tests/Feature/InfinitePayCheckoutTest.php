@@ -205,6 +205,50 @@ class InfinitePayCheckoutTest extends TestCase
             && $request['customer']['email'] === 'cliente.arcana@gmail.com');
     }
 
+    public function test_checkout_link_sends_the_customer_phone_with_the_brazilian_country_code(): void
+    {
+        // O telefone é persistido só com DDD + assinante; a InfinitePay usa o
+        // DDI do `customer.phone_number` para escolher o país (campo travado no
+        // checkout), então o gateway precisa enviar `+5511999999999`.
+        $client = User::factory()->create(['phone' => '11999999999']);
+
+        $this->startCheckout($client);
+
+        Http::assertSent(fn (HttpRequest $request): bool => $request->url() === self::LINKS_URL
+            && $request['customer']['phone_number'] === '+5511999999999');
+    }
+
+    public function test_checkout_link_drops_a_stored_country_code_from_the_customer_phone(): void
+    {
+        // Bases antigas podem ter o DDI gravado junto do número.
+        $client = User::factory()->create(['phone' => '5511999999999']);
+
+        $this->startCheckout($client);
+
+        Http::assertSent(fn (HttpRequest $request): bool => $request->url() === self::LINKS_URL
+            && $request['customer']['phone_number'] === '+5511999999999');
+    }
+
+    public function test_checkout_link_keeps_the_area_code_55_in_the_customer_phone(): void
+    {
+        $client = User::factory()->create(['phone' => '55999999999']);
+
+        $this->startCheckout($client);
+
+        Http::assertSent(fn (HttpRequest $request): bool => $request->url() === self::LINKS_URL
+            && $request['customer']['phone_number'] === '+5555999999999');
+    }
+
+    public function test_checkout_link_omits_the_customer_phone_when_it_is_not_a_valid_brazilian_number(): void
+    {
+        $client = User::factory()->create(['phone' => '1199999']);
+
+        $this->startCheckout($client);
+
+        Http::assertSent(fn (HttpRequest $request): bool => $request->url() === self::LINKS_URL
+            && ! array_key_exists('phone_number', $request['customer']));
+    }
+
     public function test_checkout_link_skips_the_delivery_address_when_the_api_key_is_configured(): void
     {
         // Créditos são digitais: sem endereço de entrega no checkout.

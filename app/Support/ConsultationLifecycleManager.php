@@ -275,6 +275,7 @@ final class ConsultationLifecycleManager
             }
 
             $profile->markSeen();
+            $this->occupyAttendant($profile, $lockedAttendant->getKey());
 
             $locked->fill([
                 'status' => ConsultationStatus::Active->value,
@@ -467,10 +468,19 @@ final class ConsultationLifecycleManager
 
     /**
      * Encerramento administrativo/automático (ex.: saldo insuficiente).
+     *
+     * Repetir a chamada em estado final é no-op.
+     *
+     * @param  bool  $releaseAvailability  `false` quando quem sai é o próprio
+     *                                     atendente: o logout dele define o
+     *                                     offline logo depois.
      */
-    public function endBySystem(Consultation $consultation, ConsultationEndReason $reason): Consultation
-    {
-        return $this->commitAndBroadcastState($consultation, function () use ($consultation, $reason): Consultation {
+    public function endBySystem(
+        Consultation $consultation,
+        ConsultationEndReason $reason,
+        bool $releaseAvailability = true,
+    ): Consultation {
+        return $this->commitAndBroadcastState($consultation, function () use ($consultation, $reason, $releaseAvailability): Consultation {
             $locked = $this->lockConsultation($consultation);
 
             if ($locked->status?->isFinal()) {
@@ -504,7 +514,9 @@ final class ConsultationLifecycleManager
 
             $commission = $this->commissions->accrue($locked);
 
-            $this->releaseAttendantPresence($locked->attendant_id);
+            if ($releaseAvailability) {
+                $this->releaseAttendantPresence($locked->attendant_id);
+            }
 
             $this->activity->closeSessions($locked, $reason->value);
 
@@ -542,11 +554,13 @@ final class ConsultationLifecycleManager
             return null;
         }
 
-        $reason = $consultation->isAttendant($user)
+        $isAttendant = $consultation->isAttendant($user);
+
+        $reason = $isAttendant
             ? ConsultationEndReason::AttendantLoggedOut
             : ConsultationEndReason::ClientLoggedOut;
 
-        return $this->endBySystem($consultation, $reason);
+        return $this->endBySystem($consultation, $reason, releaseAvailability: ! $isAttendant);
     }
 
     /**
@@ -934,20 +948,81 @@ final class ConsultationLifecycleManager
     }
 
     /**
-     * Mantém online apenas quem deu sinal recente. A ausência de presença
-     * recente derruba para offline, sem encerrar cobrança automática.
+     * Congela a disponibilidade em "ocupado" enquanto a consulta durar.
+     */
+    private function occupyAttendant(AttendantProfile $profile, ?int $actorId = null): void
+    {
+        if ($profile->availability === AttendantAvailability::Busy) {
+            return;
+        }
+
+        $from = $profile->availability;
+
+        $profile->availability = AttendantAvailability::Busy;
+        $profile->saveQuietly();
+
+        AuditLog::query()->create([
+            'actor_id' => $actorId,
+            'action' => 'attendant.availability_changed',
+            'subject_type' => $profile->getMorphClass(),
+            'subject_id' => $profile->getKey(),
+            'metadata' => [
+                'from' => $from->value,
+                'to' => AttendantAvailability::Busy->value,
+                'reason' => 'consultation_started',
+            ],
+        ]);
+    }
+
+    /**
+     * Devolve o perfil ocupado ao estado online depois do encerramento.
+     */
+    private function restoreAvailability(AttendantProfile $profile): void
+    {
+        if ($profile->availability === AttendantAvailability::Online) {
+            return;
+        }
+
+        $from = $profile->availability;
+
+        $profile->availability = AttendantAvailability::Online;
+        $profile->saveQuietly();
+
+        AuditLog::query()->create([
+            'actor_id' => null,
+            'action' => 'attendant.availability_changed',
+            'subject_type' => $profile->getMorphClass(),
+            'subject_id' => $profile->getKey(),
+            'metadata' => [
+                'from' => $from->value,
+                'to' => AttendantAvailability::Online->value,
+                'reason' => 'consultation_finished',
+            ],
+        ]);
+    }
+
+    /**
+     * Libera a disponibilidade quando a consulta termina.
+     *
+     * O perfil sai de "ocupado" e volta a online apenas com sinal de presença
+     * recente (batimento da tela de atendimento); sem esse sinal cai para
+     * offline, para não receber solicitações que ninguém atenderia.
      */
     private function releaseAttendantPresence(int $attendantId): void
     {
         $profile = $this->lockProfile($attendantId);
 
-        if ($profile === null || $profile->availability !== AttendantAvailability::Online) {
+        if ($profile === null || $profile->availability === AttendantAvailability::Offline) {
             return;
         }
 
         if ($profile->hasRecentPresence()) {
+            $this->restoreAvailability($profile);
+
             return;
         }
+
+        $from = $profile->availability;
 
         $profile->availability = AttendantAvailability::Offline;
         $profile->saveQuietly();
@@ -958,7 +1033,7 @@ final class ConsultationLifecycleManager
             'subject_type' => $profile->getMorphClass(),
             'subject_id' => $profile->getKey(),
             'metadata' => [
-                'from' => AttendantAvailability::Online->value,
+                'from' => $from->value,
                 'to' => AttendantAvailability::Offline->value,
                 'reason' => 'stale_presence_after_consultation',
             ],

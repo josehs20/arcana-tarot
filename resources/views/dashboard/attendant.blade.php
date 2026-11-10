@@ -6,17 +6,26 @@
         <x-slot:actions>
             <x-ui.status-badge :status="$presence" />
             @if ($profile && ! $activeConsultation)
-                <form method="POST" action="{{ route('attendant.availability.update') }}" class="d-inline-flex">
+                <form
+                    method="POST"
+                    action="{{ route('attendant.availability.update') }}"
+                    class="d-inline-flex flex-wrap gap-2"
+                    aria-label="Alterar disponibilidade"
+                >
                     @csrf
                     @method('PATCH')
-                    <input
-                        type="hidden"
-                        name="availability"
-                        value="{{ $profile->availability === \App\Enums\AttendantAvailability::Online ? 'offline' : 'online' }}"
-                    >
-                    <x-ui.button type="submit" variant="ghost" size="sm">
-                        {{ $profile->availability === \App\Enums\AttendantAvailability::Online ? 'Ficar offline' : 'Ficar online' }}
-                    </x-ui.button>
+                    @foreach ([\App\Enums\AttendantAvailability::Online, \App\Enums\AttendantAvailability::Busy, \App\Enums\AttendantAvailability::Offline] as $option)
+                        <x-ui.button
+                            type="submit"
+                            size="sm"
+                            name="availability"
+                            value="{{ $option->value }}"
+                            :variant="$profile->availability === $option ? 'primary' : 'ghost'"
+                            :disabled="$profile->availability === $option"
+                        >
+                            {{ $option->label() }}
+                        </x-ui.button>
+                    @endforeach
                 </form>
             @endif
         </x-slot:actions>
@@ -45,7 +54,7 @@
             <div class="col-sm-6 col-xl-3">
                 <x-ui.stat-card
                     label="Status"
-                    :hint="$activeConsultation ? 'Disponibilidade congelada durante a consulta' : 'Alterne entre online e offline'"
+                    :hint="$activeConsultation ? 'Disponibilidade congelada durante a consulta' : 'Online recebe solicitações; ocupado pausa a fila'"
                     icon="activity"
                     :tone="$presence === 'online' ? 'success' : ($presence === 'busy' ? 'warning' : 'default')"
                 >

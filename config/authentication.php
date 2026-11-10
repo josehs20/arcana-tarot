@@ -21,34 +21,26 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Confirmação de celular por SMS
+    | Cadastro por e-mail e senha
     |--------------------------------------------------------------------------
     |
-    | Com a confirmação ativa, o cadastro por e-mail só é concluído depois que
-    | o cliente digita o código recebido por SMS. O código é enviado pelo
-    | provedor configurado (Twilio Verify) e nunca é gerado pela aplicação.
+    | Só estes provedores são aceitos no cadastro por formulário. A lista é
+    | aplicada pelo App\Rules\AllowedEmailDomain e aparece no texto de ajuda do
+    | formulário; a comparação é por domínio exato, sem subdomínios nem aliases.
+    |
+    | Contas criadas pelo Google não passam pela regra: o endereço já vem
+    | verificado pelo provedor e pode estar em qualquer domínio.
     |
     */
 
-    'sms' => [
-        'enabled' => (bool) env('SMS_VERIFICATION_ENABLED', false),
-        'provider' => env('SMS_VERIFICATION_PROVIDER', 'twilio_verify'),
-
-        // Código do país aplicado ao converter DDD + número para E.164.
-        'country_code' => env('SMS_VERIFICATION_COUNTRY_CODE', '55'),
-
-        // Quantidade de dígitos do código (o Twilio Verify usa 6 por padrão).
-        'code_length' => (int) env('SMS_VERIFICATION_CODE_LENGTH', 6),
-
-        // Validade local do código e tentativas antes de invalidar a verificação.
-        'ttl_minutes' => (int) env('SMS_VERIFICATION_TTL_MINUTES', 10),
-        'max_attempts' => (int) env('SMS_VERIFICATION_MAX_ATTEMPTS', 5),
-
-        // Intervalo mínimo entre envios (protege o custo por SMS).
-        'resend_cooldown_seconds' => (int) env('SMS_VERIFICATION_RESEND_COOLDOWN_SECONDS', 60),
-
-        // Chave de sessão que aponta para a verificação pendente.
-        'session_key' => 'auth.pending_phone_verification',
+    'registration' => [
+        'allowed_email_domains' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env(
+                'REGISTRATION_ALLOWED_EMAIL_DOMAINS',
+                'gmail.com,hotmail.com,outlook.com,ig.com.br',
+            )),
+        ))),
     ],
 
     /*

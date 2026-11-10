@@ -45,17 +45,4 @@ return [
         'redirect' => env('GOOGLE_REDIRECT_URI'),
     ],
 
-    /*
-    | Twilio Verify (SMS). Aceita autenticação por Auth Token
-    | (TWILIO_AUTH_TOKEN) ou por API Key (TWILIO_API_KEY_SID +
-    | TWILIO_API_KEY_SECRET), sempre com o Account SID informado.
-    */
-    'twilio' => [
-        'account_sid' => env('TWILIO_ACCOUNT_SID'),
-        'auth_token' => env('TWILIO_AUTH_TOKEN'),
-        'api_key_sid' => env('TWILIO_API_KEY_SID'),
-        'api_key_secret' => env('TWILIO_API_KEY_SECRET'),
-        'verify_service_sid' => env('TWILIO_VERIFY_SERVICE_SID'),
-    ],
-
 ];

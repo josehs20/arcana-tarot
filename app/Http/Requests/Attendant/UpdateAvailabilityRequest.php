@@ -15,8 +15,8 @@ class UpdateAvailabilityRequest extends FormRequest
     }
 
     /**
-     * Apenas online/offline são aceitos. "Ocupado" nunca é enviado pelo
-     * formulário: é derivado de consulta ativa no servidor.
+     * Os três estados declarados são aceitos. "Ocupado" também nasce do aceite
+     * de uma consulta, mas o atendente pode pausar a fila manualmente.
      *
      * @return array<string, mixed>
      */
@@ -34,7 +34,7 @@ class UpdateAvailabilityRequest extends FormRequest
     {
         return [
             'availability.required' => 'Informe a disponibilidade desejada.',
-            'availability.enum' => 'Disponibilidade inválida. Use online ou offline.',
+            'availability.enum' => 'Disponibilidade inválida. Use online, ocupado ou offline.',
         ];
     }
 }

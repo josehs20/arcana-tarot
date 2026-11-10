@@ -15,9 +15,10 @@ use Illuminate\Validation\ValidationException;
  * Alteração da disponibilidade declarada do atendente.
  *
  * Regras:
- * - apenas online/offline são persistidos; "ocupado" é derivado de consulta ativa;
+ * - online, ocupado e offline são persistidos; "ocupado" também nasce do
+ *   aceite de uma consulta, mas o atendente pode pausar a fila manualmente;
  * - com consulta ativa, a disponibilidade fica congelada até o encerramento;
- * - ficar online exige perfil publicado.
+ * - ficar online ou ocupado exige perfil publicado.
  */
 final class AttendantAvailabilityManager
 {
@@ -46,16 +47,16 @@ final class AttendantAvailabilityManager
                 ]);
             }
 
-            if ($availability === AttendantAvailability::Online && ! $profile->is_published) {
+            if ($availability !== AttendantAvailability::Offline && ! $profile->is_published) {
                 throw ValidationException::withMessages([
-                    'availability' => 'Publique seu perfil profissional para ficar online.',
+                    'availability' => 'Publique seu perfil profissional para ficar online ou ocupado.',
                 ]);
             }
 
             $from = $profile->availability;
 
             if ($from === $availability) {
-                if ($availability === AttendantAvailability::Online) {
+                if ($availability !== AttendantAvailability::Offline) {
                     $profile->markSeen();
                 }
 
@@ -65,7 +66,7 @@ final class AttendantAvailabilityManager
             $profile->availability = $availability;
             $profile->save();
 
-            if ($availability === AttendantAvailability::Online) {
+            if ($availability !== AttendantAvailability::Offline) {
                 $profile->markSeen();
             }
 
@@ -91,7 +92,8 @@ final class AttendantAvailabilityManager
      * publicado ou consulta ativa deixam a disponibilidade como está (a
      * consulta ativa congela o status até o encerramento). Quando o perfil já
      * está online, apenas a presença (`last_seen_at`) é renovada, sem gerar
-     * auditoria duplicada.
+     * auditoria duplicada. Um "ocupado" remanescente também volta a online,
+     * porque o estado manual não sobrevive ao fim da sessão.
      */
     public function signIn(User $attendant): ?AttendantProfile
     {
@@ -124,6 +126,8 @@ final class AttendantAvailabilityManager
                 return $profile;
             }
 
+            $from = $profile->availability;
+
             $profile->availability = AttendantAvailability::Online;
             $profile->save();
             $profile->markSeen();
@@ -134,7 +138,7 @@ final class AttendantAvailabilityManager
                 'subject_type' => $profile->getMorphClass(),
                 'subject_id' => $profile->getKey(),
                 'metadata' => [
-                    'from' => AttendantAvailability::Offline->value,
+                    'from' => $from->value,
                     'to' => AttendantAvailability::Online->value,
                     'reason' => 'login',
                 ],
@@ -145,12 +149,13 @@ final class AttendantAvailabilityManager
     }
 
     /**
-     * Encerra a presença online do atendente ao sair da conta.
+     * Encerra a presença do atendente ao sair da conta.
      *
      * O logout nunca é bloqueado: sem perfil ou com consulta ativa, nada muda.
      * A consulta ativa é encerrada antes, em AuthenticatedSessionController,
      * para que o perfil volte a offline e não fique congelado esperando o
-     * comando de inatividade.
+     * comando de inatividade. Um perfil ocupado também volta a offline: o
+     * "ocupado" manual é um estado de sessão.
      */
     public function signOut(User $attendant): ?AttendantProfile
     {
@@ -160,7 +165,7 @@ final class AttendantAvailabilityManager
                 ->lockForUpdate()
                 ->first();
 
-            if ($profile === null || $profile->availability !== AttendantAvailability::Online) {
+            if ($profile === null || $profile->availability === AttendantAvailability::Offline) {
                 return $profile;
             }
 
@@ -173,6 +178,8 @@ final class AttendantAvailabilityManager
                 return $profile;
             }
 
+            $from = $profile->availability;
+
             $profile->availability = AttendantAvailability::Offline;
             $profile->saveQuietly();
 
@@ -182,7 +189,7 @@ final class AttendantAvailabilityManager
                 'subject_type' => $profile->getMorphClass(),
                 'subject_id' => $profile->getKey(),
                 'metadata' => [
-                    'from' => AttendantAvailability::Online->value,
+                    'from' => $from->value,
                     'to' => AttendantAvailability::Offline->value,
                     'reason' => 'logout',
                 ],

@@ -1,7 +1,7 @@
 <x-layouts.panel variant="admin" title="Bônus de cadastro | Arcana Tarot">
     <x-layouts.page-header
         title="Bônus de primeiro acesso"
-        subtitle="Créditos presenteados uma única vez a cada cliente que conclui o cadastro por e-mail (com SMS confirmado) ou pelo Google."
+        subtitle="Créditos presenteados uma única vez a cada cliente que confirma o e-mail do cadastro ou entra pela primeira vez com o Google."
     >
         <x-slot name="actions">
             <a class="btn btn-ghost btn-sm" href="{{ route('admin.finance.index') }}">Voltar ao financeiro</a>

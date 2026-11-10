@@ -31,6 +31,17 @@ class AuthenticatedSessionController extends Controller
 
         $user = $request->user();
 
+        /*
+         * Conta criada mas com o e-mail ainda não confirmado: o painel está
+         * bloqueado pelo middleware `verified`, então o login termina na tela
+         * de aviso (onde o link pode ser reenviado).
+         */
+        if ($user !== null && ! $user->hasVerifiedEmail()) {
+            return redirect()
+                ->route('verification.notice')
+                ->with('status', 'Confirme seu e-mail para liberar o acesso ao painel.');
+        }
+
         if ($user !== null && $user->role === UserRole::Attendant) {
             $this->bringAttendantOnline($user, $availability);
         }

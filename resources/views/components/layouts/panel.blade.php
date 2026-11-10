@@ -40,6 +40,8 @@
 
     @vite(['resources/css/app.scss', 'resources/js/app.js'])
 
+    @include('layouts.partials.appearance')
+
     {{-- Aplica o estado da sidebar antes da primeira pintura para não piscar aberta. --}}
     <script>
         try {

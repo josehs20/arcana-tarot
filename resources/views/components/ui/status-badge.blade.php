@@ -3,7 +3,7 @@
 
     Uso:
         <x-ui.status-badge status="online" />
-        <x-ui.status-badge status="busy" label="Em consulta" />
+        <x-ui.status-badge status="busy" />
         <x-ui.status-badge status="under_review" />
 --}}
 @props([

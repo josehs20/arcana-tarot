@@ -10,6 +10,7 @@ use App\Support\Payments\InfinitePay\Data\CheckoutLinkRequest;
 use App\Support\Payments\InfinitePay\Data\PaymentCheck;
 use App\Support\Payments\InfinitePay\Data\PaymentCheckRequest;
 use App\Support\Payments\InfinitePay\Data\WebhookNotification;
+use App\Support\PhoneNumber;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -28,6 +29,13 @@ use Throwable;
 final class InfinitePayGateway
 {
     public const NAME = 'infinitepay';
+
+    /**
+     * DDI usado no `customer.phone_number`. O provedor é brasileiro e a
+     * plataforma só aceita telefones com DDD brasileiro, então o número
+     * persistido (DDD + assinante) é sempre enviado com este DDI.
+     */
+    private const CUSTOMER_COUNTRY_CODE = '55';
 
     /**
      * Domínios reservados (RFC 2606/6761) e nomes de rede privada são recusados
@@ -275,6 +283,14 @@ final class InfinitePayGateway
         return $acceptable ? $email : null;
     }
 
+    /**
+     * A InfinitePay escolhe o país do comprador a partir do DDI de
+     * `customer.phone_number` e o campo chega travado para edição no checkout.
+     * Um número só com DDD + assinante (`+11999999999`) é lido como `+11`, de
+     * outro país, e o checkout passa a recusar o telefone. Por isso o valor é
+     * sempre reconstruído em E.164 a partir do telefone brasileiro persistido
+     * (`+5511999999999`) e omitido quando não é um número nacional válido.
+     */
     private function acceptablePhone(?string $value): ?string
     {
         $raw = $this->cleanString($value);
@@ -283,17 +299,17 @@ final class InfinitePayGateway
             return null;
         }
 
-        $digits = (string) preg_replace('/\D+/', '', $raw);
+        $digits = PhoneNumber::normalize($raw);
 
-        if (strlen($digits) < 10 || strlen($digits) > 15) {
+        if (! PhoneNumber::isValid($digits)) {
             Log::warning('infinitepay.customer_phone_ignored', [
-                'reason' => 'invalid_format',
+                'reason' => 'invalid_brazilian_phone',
             ]);
 
             return null;
         }
 
-        return '+'.$digits;
+        return PhoneNumber::toE164($digits, self::CUSTOMER_COUNTRY_CODE);
     }
 
     private function cleanString(?string $value): ?string

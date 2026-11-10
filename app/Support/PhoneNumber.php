@@ -6,11 +6,16 @@ namespace App\Support;
  * Normalização e validação de telefones brasileiros.
  *
  * O número é sempre persistido apenas com DDD + número (10 ou 11 dígitos),
- * sem máscara nem código do país, para permitir comparação e, futuramente,
- * o envio de códigos de confirmação por SMS.
+ * sem máscara nem código do país, para permitir comparação entre cadastros e o
+ * envio do número ao checkout em E.164.
  */
 class PhoneNumber
 {
+    /**
+     * DDI padrão (Brasil) aplicado quando o chamador não informa outro.
+     */
+    private const DEFAULT_COUNTRY_CODE = '55';
+
     /**
      * Remove máscara e o código do país (+55), devolvendo apenas dígitos.
      */
@@ -39,19 +44,26 @@ class PhoneNumber
 
     /**
      * Converte o número persistido (DDD + número) para o formato E.164 usado
-     * pelos provedores de SMS, por exemplo `+5511999999999`.
+     * pelos provedores externos, por exemplo `+5511999999999`.
+     *
+     * O DDI só é removido quando o valor recebido realmente o contém, isto é,
+     * quando sobram 10 ou 11 dígitos nacionais depois dele. Sem essa conferência
+     * de tamanho, um número com DDD 55 — `(55) 99999-9999` — perderia os dois
+     * primeiros dígitos e chegaria no provedor como `+55999999999`.
      */
     public static function toE164(string $phone, ?string $countryCode = null): string
     {
         $digits = preg_replace('/\D+/', '', $phone) ?? '';
-        $countryCode = preg_replace('/\D+/', '', $countryCode ?? (string) config('authentication.sms.country_code', '55')) ?? '';
+        $countryCode = preg_replace('/\D+/', '', $countryCode ?? self::DEFAULT_COUNTRY_CODE) ?? '';
 
         if ($countryCode === '') {
             $countryCode = '55';
         }
 
-        if (str_starts_with($digits, $countryCode) && strlen($digits) > 10) {
-            $digits = substr($digits, strlen($countryCode));
+        $national = substr($digits, strlen($countryCode));
+
+        if (str_starts_with($digits, $countryCode) && in_array(strlen($national), [10, 11], true)) {
+            $digits = $national;
         }
 
         return '+'.$countryCode.$digits;

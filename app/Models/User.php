@@ -5,7 +5,9 @@ namespace App\Models;
 use App\Enums\Gender;
 use App\Enums\ThemePreference;
 use App\Enums\UserRole;
+use App\Notifications\Auth\VerifyEmailNotification;
 use Database\Factories\UserFactory;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -16,7 +18,7 @@ use Illuminate\Notifications\Notifiable;
 
 #[Fillable(['name', 'email', 'phone', 'phone_verified_at', 'birth_date', 'gender', 'email_verified_at', 'google_id', 'password', 'remember_token', 'role', 'is_active', 'theme_preference', 'chat_send_on_enter', 'chat_sound_enabled'])]
 #[Hidden(['password', 'remember_token'])]
-class User extends Authenticatable
+class User extends Authenticatable implements MustVerifyEmail
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
@@ -38,6 +40,15 @@ class User extends Authenticatable
             'chat_send_on_enter' => 'boolean',
             'chat_sound_enabled' => 'boolean',
         ];
+    }
+
+    /**
+     * Usa o template da aplicação no link de confirmação de e-mail, em vez do
+     * layout neutro do framework.
+     */
+    public function sendEmailVerificationNotification(): void
+    {
+        $this->notify(new VerifyEmailNotification);
     }
 
     public function attendantProfile(): HasOne

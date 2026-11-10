@@ -316,7 +316,8 @@ class AttendantProfile extends Model
     }
 
     /**
-     * Perfis que aceitam novas solicitações (online, mesmo que em consulta).
+     * Perfis que aceitam novas solicitações agora: publicados e online.
+     * Ocupado e offline ficam de fora.
      */
     public function scopeAvailable(Builder $query): Builder
     {
@@ -325,17 +326,20 @@ class AttendantProfile extends Model
     }
 
     /**
-     * Online primeiro; depois ordem alfabética do nome público.
+     * Online primeiro, ocupado depois; por fim ordem alfabética do nome público.
      */
     public function scopeOrderForDirectory(Builder $query): Builder
     {
         return $query
-            ->orderByRaw('case when availability = ? then 0 else 1 end', [AttendantAvailability::Online->value])
+            ->orderByRaw(
+                'case availability when ? then 0 when ? then 1 else 2 end',
+                [AttendantAvailability::Online->value, AttendantAvailability::Busy->value],
+            )
             ->orderBy('display_name');
     }
 
     /**
-     * Status público: online, busy (em consulta) ou offline.
+     * Status público: online, busy (ocupado ou em consulta) ou offline.
      */
     public function publicStatus(): string
     {
@@ -345,7 +349,7 @@ class AttendantProfile extends Model
             $busy = $this->activeConsultation !== null;
         }
 
-        if ($busy) {
+        if ($busy || $this->availability === AttendantAvailability::Busy) {
             return 'busy';
         }
 

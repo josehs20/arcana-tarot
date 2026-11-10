@@ -142,7 +142,7 @@ class ConsultationLifecycleTest extends TestCase
         );
     }
 
-    public function test_offline_or_unpublished_attendant_cannot_receive_requests(): void
+    public function test_unavailable_attendant_cannot_receive_requests(): void
     {
         $client = $this->client();
 
@@ -151,6 +151,9 @@ class ConsultationLifecycleTest extends TestCase
 
         $unpublished = User::factory()->attendant()->create();
         AttendantProfile::factory()->online()->for($unpublished)->create(['is_published' => false]);
+
+        $busy = User::factory()->attendant()->create();
+        AttendantProfile::factory()->busy()->for($busy)->create();
 
         $this->actingAs($client)
             ->from(route('attendants.index'))
@@ -161,6 +164,13 @@ class ConsultationLifecycleTest extends TestCase
         $this->actingAs($client)
             ->from(route('attendants.index'))
             ->post(route('client.consultations.store'), ['attendant_id' => $unpublished->id])
+            ->assertRedirect(route('attendants.index'))
+            ->assertSessionHasErrors('attendant_id');
+
+        // Ocupado pausa a fila: continua no diretório, mas não recebe pedidos.
+        $this->actingAs($client)
+            ->from(route('attendants.index'))
+            ->post(route('client.consultations.store'), ['attendant_id' => $busy->id])
             ->assertRedirect(route('attendants.index'))
             ->assertSessionHasErrors('attendant_id');
 
@@ -465,6 +475,38 @@ class ConsultationLifecycleTest extends TestCase
         $this->assertSame(ConsultationStatus::Ended, $consultation->status);
         $this->assertSame(ConsultationEndReason::ClientEnded, $consultation->ended_reason);
         $this->assertSame(AttendantAvailability::Offline, $profile->availability);
+    }
+
+    public function test_accepting_freezes_availability_as_busy_and_ending_returns_online(): void
+    {
+        $client = $this->client();
+        [$attendant, $profile] = $this->onlineAttendant();
+        $consultation = $this->requestConsultation($client, $attendant);
+
+        $this->assertSame(AttendantAvailability::Online, $profile->fresh()->availability);
+
+        $this->actingAs($attendant)
+            ->patch(route('attendant.consultations.accept', $consultation))
+            ->assertRedirect(route('consultations.workspace', $consultation));
+
+        $this->assertSame(AttendantAvailability::Busy, $profile->fresh()->availability);
+
+        // Durante a consulta o atendente ocupado não recebe novos pedidos.
+        $otherClient = $this->client();
+
+        $this->actingAs($otherClient)
+            ->from(route('attendants.index'))
+            ->post(route('client.consultations.store'), ['attendant_id' => $attendant->id])
+            ->assertRedirect(route('attendants.index'))
+            ->assertSessionHasErrors('attendant_id');
+
+        $this->actingAs($client)
+            ->patch(route('consultations.end', $consultation))
+            ->assertRedirect(route('consultations.show', $consultation))
+            ->assertSessionHas('success');
+
+        $this->assertSame(ConsultationStatus::Ended, $consultation->fresh()->status);
+        $this->assertSame(AttendantAvailability::Online, $profile->fresh()->availability);
     }
 
     public function test_inactive_client_cannot_request_a_consultation(): void

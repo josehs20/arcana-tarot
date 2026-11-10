@@ -38,4 +38,5 @@ import './credit-packages';
 import './bulk-email';
 import './panel-sidebar';
 import './theme';
+import './appearance-editor';
 import './auth-verification';

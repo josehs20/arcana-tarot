@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Auth;
 
 use App\Enums\Gender;
+use App\Rules\AllowedEmailDomain;
 use App\Support\PhoneNumber;
 use Closure;
 use Illuminate\Foundation\Http\FormRequest;
@@ -47,7 +48,14 @@ class RegisterRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'min:2', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
+            'email' => [
+                'required',
+                'string',
+                'email',
+                'max:255',
+                new AllowedEmailDomain,
+                'unique:users,email',
+            ],
             'phone' => [
                 'required',
                 'string',

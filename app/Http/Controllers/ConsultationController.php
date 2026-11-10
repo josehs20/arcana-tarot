@@ -185,6 +185,16 @@ class ConsultationController extends Controller
         /** @var User $user */
         $user = $request->user();
 
+        /*
+         * O batimento da tela também renova a presença do atendente: é o sinal
+         * usado para devolver o perfil ocupado a online quando a consulta
+         * termina. Vem antes da checagem de inatividade para que a presença
+         * esteja atualizada caso este mesmo batimento encerre o atendimento.
+         */
+        if ($consultation->isAttendant($user)) {
+            $user->attendantProfile?->markSeen();
+        }
+
         $consultation = $lifecycle->interruptIfInactive($consultation);
 
         /*

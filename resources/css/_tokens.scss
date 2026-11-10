@@ -33,8 +33,14 @@ $arcana-info:         #5b9bd5;
 $arcana-info-dark:    #3d6f9e;
 
 // ---- Tipografia ------------------------------------------------------
-$arcana-font-display: 'Cormorant Garamond', 'Cinzel', 'Times New Roman', serif;
-$arcana-font-body: 'Inter', 'Manrope', -apple-system, 'Segoe UI', Roboto, sans-serif;
+// As famílias reais ficam em variáveis CSS (`--arcana-font-*`) definidas em
+// `_base.scss` e sobrescritas em runtime pelo editor de aparência. O fallback
+// abaixo garante o mesmo resultado do design original quando nada foi mudado.
+$arcana-font-display-stack: 'Cormorant Garamond', 'Cinzel', 'Times New Roman', serif;
+$arcana-font-body-stack: 'Inter', 'Manrope', -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+$arcana-font-display: var(--arcana-font-display, #{$arcana-font-display-stack});
+$arcana-font-body: var(--arcana-font-body, #{$arcana-font-body-stack});
 
 // ---- Gradientes ------------------------------------------------------
 $arcana-gradient-gold: linear-gradient(135deg, #e2c874 0%, #c9a84c 55%, #8f7530 100%);

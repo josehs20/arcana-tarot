@@ -1,6 +1,9 @@
 <x-layouts.guest title="Criar conta | Arcana Tarot">
     <h1 class="h3 mb-1">Criar conta</h1>
-    <p class="auth-card__subtitle mb-4">Comece a explorar suas leituras em poucos passos.</p>
+    <p class="auth-card__subtitle mb-4">
+        Comece a explorar suas leituras em poucos passos. Enviaremos um link de
+        confirmação para o seu e-mail.
+    </p>
 
     @if ($errors->any())
         <x-ui.alert type="danger" :dismissible="false" class="mb-4">
@@ -28,8 +31,9 @@
             name="email"
             label="E-mail"
             type="email"
-            placeholder="voce@exemplo.com"
+            placeholder="voce@gmail.com"
             autocomplete="email"
+            :help="\App\Support\AllowedEmailDomains::message().' O link de confirmação será enviado para este endereço.'"
             required
         />
 
@@ -42,9 +46,7 @@
             inputmode="tel"
             maxlength="20"
             data-phone-mask
-            :help="\App\Support\AuthenticationSettings::smsEnabled()
-                ? 'Com DDD. Enviaremos um código por SMS para confirmar seu número.'
-                : 'Com DDD. Usado para contato das consultas.'"
+            help="Com DDD. Usado para contato das consultas."
             required
         />
 

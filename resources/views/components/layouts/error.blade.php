@@ -26,6 +26,8 @@
 
     @vite(['resources/css/app.scss', 'resources/js/app.js'])
 
+    @include('layouts.partials.appearance')
+
     <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
 </head>
 <body class="bg-body error-page arcana-stars">

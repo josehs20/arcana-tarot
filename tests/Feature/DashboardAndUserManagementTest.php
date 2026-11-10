@@ -24,6 +24,7 @@ class DashboardAndUserManagementTest extends TestCase
 
         AttendantProfile::factory()->online()->create(['display_name' => 'Atendente Disponível']);
         AttendantProfile::factory()->offline()->create(['display_name' => 'Atendente Offline']);
+        AttendantProfile::factory()->busy()->create(['display_name' => 'Atendente Ocupado']);
 
         $this->actingAs($client)
             ->get(route('client.dashboard'))
@@ -31,7 +32,8 @@ class DashboardAndUserManagementTest extends TestCase
             ->assertSee('Cliente do Painel')
             ->assertSee('R$ 125,00')
             ->assertSee('Atendente Disponível')
-            ->assertDontSee('Atendente Offline');
+            ->assertDontSee('Atendente Offline')
+            ->assertDontSee('Atendente Ocupado');
     }
 
     public function test_attendant_availability_can_be_toggled_and_is_audited(): void
@@ -85,7 +87,7 @@ class DashboardAndUserManagementTest extends TestCase
             ->get(route('attendant.dashboard'))
             ->assertOk()
             ->assertSee('Ocupado')
-            ->assertDontSee('Ficar online');
+            ->assertDontSee(route('attendant.availability.update'), false);
 
         $this->actingAs($attendant)
             ->from(route('attendant.dashboard'))
@@ -96,14 +98,34 @@ class DashboardAndUserManagementTest extends TestCase
         $this->assertSame(AttendantAvailability::Online, $profile->fresh()->availability);
     }
 
-    public function test_availability_rejects_values_other_than_online_or_offline(): void
+    public function test_attendant_can_pause_requests_by_going_busy(): void
+    {
+        $attendant = User::factory()->attendant()->create();
+        $profile = AttendantProfile::factory()->online()->for($attendant)->create();
+
+        $this->actingAs($attendant)
+            ->from(route('attendant.dashboard'))
+            ->patch(route('attendant.availability.update'), ['availability' => 'busy'])
+            ->assertRedirect(route('attendant.dashboard'))
+            ->assertSessionHas('success');
+
+        $this->assertSame(AttendantAvailability::Busy, $profile->fresh()->availability);
+        $this->assertNotNull($profile->fresh()->last_seen_at);
+
+        $audit = AuditLog::query()->where('action', 'attendant.availability_changed')->sole();
+
+        $this->assertSame('online', $audit->metadata['from']);
+        $this->assertSame('busy', $audit->metadata['to']);
+    }
+
+    public function test_availability_rejects_values_other_than_online_busy_or_offline(): void
     {
         $attendant = User::factory()->attendant()->create();
         AttendantProfile::factory()->for($attendant)->create();
 
         $this->actingAs($attendant)
             ->from(route('attendant.dashboard'))
-            ->patch(route('attendant.availability.update'), ['availability' => 'busy'])
+            ->patch(route('attendant.availability.update'), ['availability' => 'sleeping'])
             ->assertRedirect(route('attendant.dashboard'))
             ->assertSessionHasErrors('availability');
     }

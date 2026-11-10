@@ -25,7 +25,7 @@
 | [ADMIN_REPORTING.md](ADMIN_REPORTING.md) | Definição dos indicadores do dashboard, pagamentos, comissões e auditoria |
 | [ATTENDANT_ONBOARDING.md](ATTENDANT_ONBOARDING.md) | Fluxo Trabalhe conosco, estados da candidatura e ativação manual do atendente |
 | [SECURITY_PRIVACY.md](SECURITY_PRIVACY.md) | Revisão de segurança, controles, riscos residuais e proposta de retenção |
-| [AUTENTICACAO_GOOGLE_SMS_BONUS.md](AUTENTICACAO_GOOGLE_SMS_BONUS.md) | Login com Google, cadastro com código SMS (Twilio Verify) e bônus de primeiro acesso |
+| [AUTENTICACAO_GOOGLE_EMAIL_BONUS.md](AUTENTICACAO_GOOGLE_EMAIL_BONUS.md) | Login com Google, cadastro com confirmação de e-mail (link assinado) e bônus de primeiro acesso |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Runbook de implantação, Docker, migrations, backups, monitoramento e checklist |
 | [ARQUITETURA_PRODUCAO_HOSTOO.md](ARQUITETURA_PRODUCAO_HOSTOO.md) | Produção em hospedagem compartilhada: polling no lugar do Reverb, fila/cache no MySQL e crons obrigatórios |
 | [TESTE_LOCAL_MODO_HOSTOO.md](TESTE_LOCAL_MODO_HOSTOO.md) | Reproduzir localmente o modo Hostoo (sem Redis/Reverb), cron emulado, checklist de fumaça e limites do teste |

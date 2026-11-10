@@ -1,13 +1,10 @@
 /**
- * Cadastro com confirmação de celular.
+ * Máscara do telefone no cadastro.
  *
- * Três comportamentos, todos progressivos: sem JS o formulário continua
- * funcionando (o servidor normaliza o telefone e o código é validado no envio).
+ * Comportamento progressivo: sem JS o formulário continua funcionando, porque o
+ * servidor normaliza o número em App\Support\PhoneNumber antes de validar.
  *
- * - `[data-phone-mask]`: formata o número brasileiro enquanto o cliente digita;
- * - `[data-code-input]`: mantém apenas dígitos no campo do código;
- * - `[data-resend-button]`: trava o reenvio pelo tempo restante informado pelo
- *   servidor (cooldown do provedor), liberando com o rótulo original.
+ * - `[data-phone-mask]`: formata o número brasileiro enquanto o cliente digita.
  */
 
 function onlyDigits(value) {
@@ -53,57 +50,5 @@ document.addEventListener('DOMContentLoaded', () => {
 document.addEventListener('input', (event) => {
     if (event.target.matches('[data-phone-mask]')) {
         applyPhoneMask(event.target);
-
-        return;
     }
-
-    if (event.target.matches('[data-code-input]')) {
-        const digits = onlyDigits(event.target.value).slice(0, Number(event.target.dataset.codeLength || 6));
-
-        if (event.target.value !== digits) {
-            event.target.value = digits;
-        }
-    }
-});
-
-/**
- * Contagem regressiva do botão de reenvio. O botão fica desabilitado até zerar;
- * o servidor revalida o cooldown de qualquer forma, então um JS desatualizado
- * não permite burlar o intervalo mínimo entre SMS.
- */
-document.addEventListener('DOMContentLoaded', () => {
-    const button = document.querySelector('[data-resend-button]');
-
-    if (!button) {
-        return;
-    }
-
-    const label = button.dataset.resendLabel || button.textContent.trim();
-    let remaining = Number(button.dataset.resendSeconds || 0);
-
-    if (!Number.isFinite(remaining) || remaining < 1) {
-        return;
-    }
-
-    button.disabled = true;
-
-    const render = () => {
-        button.textContent = remaining > 0
-            ? `${label} em ${remaining}s`
-            : label;
-    };
-
-    render();
-
-    const timer = window.setInterval(() => {
-        remaining -= 1;
-        render();
-
-        if (remaining > 0) {
-            return;
-        }
-
-        window.clearInterval(timer);
-        button.disabled = false;
-    }, 1000);
 });

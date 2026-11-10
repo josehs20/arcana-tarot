@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateSiteIdentityRequest;
 use App\Http\Requests\Admin\UpdateSiteSectionRequest;
 use App\Models\SiteSection;
+use App\Support\Appearance;
 use App\Support\SiteContent;
 use App\Support\SiteContentManager;
 use Illuminate\Http\RedirectResponse;
@@ -14,7 +15,7 @@ use Illuminate\View\View;
 
 class SiteContentController extends Controller
 {
-    public function index(SiteContent $site): View
+    public function index(SiteContent $site, Appearance $appearance): View
     {
         Gate::authorize('access-admin-panel');
 
@@ -33,6 +34,9 @@ class SiteContentController extends Controller
             'sectionLabels' => (array) config('site.section_labels', []),
             'faqCount' => count($site->faqs()),
             'navigationCount' => count($site->navigation('primary')) + count($site->navigation('footer')),
+            'appearance' => [
+                'is_customized' => $appearance->isCustomized(),
+            ],
         ]);
     }
 
