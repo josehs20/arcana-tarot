@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Support\CreditWalletManager;
 use App\Support\FirstAccessBonus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\URL;
 use Tests\TestCase;
 
 /**
@@ -50,12 +51,26 @@ class FirstAccessBonusTest extends TestCase
     {
         return [
             'name' => 'Cliente Bônus',
-            'email' => 'cliente.bonus@example.com',
+            'email' => 'cliente.bonus@gmail.com',
             'phone' => '(11) 98888-7777',
             'birth_date' => '1990-08-14',
+            'gender' => 'female',
             'password' => 'senha-segura',
             'password_confirmation' => 'senha-segura',
         ];
+    }
+
+    /**
+     * Abre o link assinado de confirmação: é este passo — e não o cadastro —
+     * que concede o bônus.
+     */
+    private function confirmEmail(User $user): void
+    {
+        $this->get(URL::temporarySignedRoute(
+            'verification.verify',
+            now()->addMinutes(60),
+            ['id' => $user->getKey(), 'hash' => sha1($user->getEmailForVerification())],
+        ));
     }
 
     public function test_registration_without_the_bonus_keeps_the_wallet_empty(): void
@@ -63,9 +78,11 @@ class FirstAccessBonusTest extends TestCase
         config(['authentication.first_access_bonus.enabled' => false]);
 
         $this->post('/register', $this->registrationPayload())
-            ->assertRedirect(route('client.dashboard'));
+            ->assertRedirect(route('verification.notice'));
 
-        $user = User::query()->where('email', 'cliente.bonus@example.com')->sole();
+        $user = User::query()->where('email', 'cliente.bonus@gmail.com')->sole();
+
+        $this->confirmEmail($user);
 
         $this->assertSame(0, $user->wallet->fresh()->balance_cents);
         $this->assertSame(0, CreditLedgerEntry::query()->count());
@@ -77,9 +94,14 @@ class FirstAccessBonusTest extends TestCase
         $this->setCreditUnitPrice(120);
 
         $this->post('/register', $this->registrationPayload())
-            ->assertRedirect(route('client.dashboard'));
+            ->assertRedirect(route('verification.notice'));
 
-        $user = User::query()->where('email', 'cliente.bonus@example.com')->sole();
+        $user = User::query()->where('email', 'cliente.bonus@gmail.com')->sole();
+
+        $this->assertSame(0, $user->wallet->fresh()->balance_cents);
+        $this->assertSame(0, CreditLedgerEntry::query()->count());
+
+        $this->confirmEmail($user);
 
         $this->assertSame(600, $user->wallet->fresh()->balance_cents);
 
@@ -103,9 +125,11 @@ class FirstAccessBonusTest extends TestCase
         $this->enableBonus(3);
 
         $this->post('/register', $this->registrationPayload())
-            ->assertRedirect(route('client.dashboard'));
+            ->assertRedirect(route('verification.notice'));
 
-        $user = User::query()->where('email', 'cliente.bonus@example.com')->sole();
+        $user = User::query()->where('email', 'cliente.bonus@gmail.com')->sole();
+
+        $this->confirmEmail($user);
 
         $this->assertSame(0, $user->wallet->fresh()->balance_cents);
         $this->assertSame(0, CreditLedgerEntry::query()->count());

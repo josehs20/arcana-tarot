@@ -317,6 +317,58 @@ final class SiteContentManager
         });
     }
 
+    /**
+     * Persiste as cores e fontes do site (setting JSON `appearance`).
+     *
+     * @param  array{colors: array<string, array<string, string>>, fonts: array{display: string, body: string}}  $data
+     */
+    public function updateAppearance(User $actor, array $data): void
+    {
+        DB::transaction(function () use ($actor, $data): void {
+            $key = (string) config('appearance.settings_key', 'appearance');
+            $previous = Setting::query()->where('key', $key)->value('value');
+
+            $payload = [
+                'colors' => $data['colors'],
+                'fonts' => $data['fonts'],
+            ];
+
+            $encoded = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
+
+            $this->putSetting($key, $encoded);
+
+            if ($previous === $encoded) {
+                return;
+            }
+
+            $this->audit($actor, 'site.appearance_updated', null, [
+                'colors' => $data['colors'],
+                'fonts' => $data['fonts'],
+            ]);
+        });
+    }
+
+    /**
+     * Remove a personalização, voltando ao design padrão do tema.
+     */
+    public function resetAppearance(User $actor): void
+    {
+        DB::transaction(function () use ($actor): void {
+            $key = (string) config('appearance.settings_key', 'appearance');
+            $previous = Setting::query()->where('key', $key)->value('value');
+
+            Setting::query()->where('key', $key)->delete();
+
+            if ($previous === null || $previous === '') {
+                return;
+            }
+
+            $this->audit($actor, 'site.appearance_reset', null, [
+                'previous' => json_decode((string) $previous, true) ?: null,
+            ]);
+        });
+    }
+
     private function putSetting(string $key, ?string $value): void
     {
         Setting::query()->updateOrCreate(

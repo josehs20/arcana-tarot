@@ -19,5 +19,12 @@ document.addEventListener('click', (event) => {
     const select = document.getElementById(button.dataset.previewRequestSound);
     const sound = select?.value ?? 'siren';
 
-    previewRequestSound(sound, button.dataset.previewRequestSoundUrl || null);
+    /*
+     * Cada `<option>` carrega a URL do arquivo do toque, quando existe: o MP3 da
+     * plataforma (`olha-o-gas`) ou o enviado pela administração (`custom`). O
+     * atributo do botão cobre o toque ativo quando o `select` não está na tela.
+     */
+    const selectedOptionUrl = select?.selectedOptions?.[0]?.dataset.soundUrl || null;
+
+    previewRequestSound(sound, selectedOptionUrl || button.dataset.previewRequestSoundUrl || null);
 });

@@ -59,10 +59,7 @@
                                 <div>
                                     <p class="arcana-eyebrow mb-2">Atendente de tarô</p>
                                     <p class="profile-name mb-2">{{ $attendant->display_name }}</p>
-                                    <x-ui.status-badge
-                                        :status="$status"
-                                        :label="$status === 'busy' ? 'Em consulta' : null"
-                                    />
+                                    <x-ui.status-badge :status="$status" />
                                 </div>
                             </div>
 
@@ -179,7 +176,7 @@
                                 @if ($status === 'online')
                                     Disponível para novas solicitações.
                                 @elseif ($status === 'busy')
-                                    Em consulta neste momento.
+                                    Ocupado no momento: não está recebendo novas solicitações.
                                 @else
                                     Não está recebendo novas solicitações agora.
                                 @endif

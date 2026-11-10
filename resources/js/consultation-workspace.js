@@ -9,7 +9,15 @@
  * e outra apenas o contador de tempo restante é decrementado localmente. Quando
  * a consulta deixa de estar ativa, o usuário é levado para a tela de histórico
  * e recibo.
+ *
+ * O único alerta disparado por aqui é o de saldo baixo do cliente: o limite
+ * (`data-remaining-threshold-seconds`) e o valor comparado
+ * (`remaining_seconds`) vêm do servidor, então o navegador não decide nada.
  */
+import { Modal } from 'bootstrap';
+
+import { markIntentionalNavigation } from './navigation-intent';
+
 const WORKSPACE_STATUS = {
     requested: { dot: 'busy', text: 'status-text--busy', label: 'Solicitada' },
     active: { dot: 'online', text: 'status-text--online', label: 'Em andamento' },
@@ -29,6 +37,7 @@ const workspaceState = {
     refreshTimer: null,
     countdownTimer: null,
     countdownDeadline: 0,
+    lowBalanceShown: false,
 };
 
 function workspaceRoot() {
@@ -103,6 +112,43 @@ function renderCountdown() {
         element.textContent = formatCountdown(remaining);
         element.classList.toggle('is-empty', remaining === 0);
     });
+
+    maybeWarnLowBalance(remaining);
+}
+
+/*
+ * Aviso de saldo baixo, exclusivo do cliente.
+ *
+ * O limite chega do servidor em `data-remaining-threshold-seconds` e o valor
+ * comparado é o próprio `remaining_seconds` de `consultations.metrics`. O modal
+ * aparece uma vez por carregamento da tela — repetir o alerta a cada minuto
+ * atrapalharia a conversa — e o encerramento por saldo insuficiente continua
+ * sendo decidido no servidor
+ * (`ConsultationLifecycleManager::closeIfOutOfCredits`).
+ */
+function maybeWarnLowBalance(remainingSeconds) {
+    if (workspaceState.lowBalanceShown) {
+        return;
+    }
+
+    const modalElement = document.querySelector('[data-consultation-low-balance-warning]');
+
+    if (!modalElement) {
+        return;
+    }
+
+    const threshold = Number(modalElement.dataset.remainingThresholdSeconds);
+
+    if (!Number.isFinite(threshold) || threshold <= 0) {
+        return;
+    }
+
+    if (typeof remainingSeconds !== 'number' || !Number.isFinite(remainingSeconds) || remainingSeconds > threshold) {
+        return;
+    }
+
+    workspaceState.lowBalanceShown = true;
+    Modal.getOrCreateInstance(modalElement).show();
 }
 
 function startCountdown(seconds) {
@@ -144,6 +190,10 @@ function leaveWorkspace(root) {
     workspaceState.navigating = true;
     window.clearTimeout(workspaceState.refreshTimer);
     window.clearInterval(workspaceState.countdownTimer);
+
+    // O servidor confirmou o fim do atendimento: a saída é esperada e não deve
+    // abrir o aviso nativo de navegação.
+    markIntentionalNavigation();
     window.location.assign(root.dataset.showUrl);
 }
 

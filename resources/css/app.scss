@@ -8,11 +8,16 @@
 
 // 2. Fontes locais (self-hosted) — dispensam CDN externo.
 //    Importadas via SCSS para garantir que entrem no bundle principal de CSS.
-@import '../../node_modules/@fontsource/inter/400.css';
-@import '../../node_modules/@fontsource/inter/500.css';
-@import '../../node_modules/@fontsource/inter/600.css';
-@import '../../node_modules/@fontsource/cormorant-garamond/600.css';
-@import '../../node_modules/@fontsource/cormorant-garamond/700.css';
+//    Só o subconjunto `latin` (Basic Latin + Latin-1 + Latin Extended-A) é
+//    publicado: o português cabe nele. Cirílico, grego e vietnamita do pacote
+//    nunca eram baixados pelo navegador — só inflavam o CSS e o diretório de
+//    build, que no shared hosting também é enviado por FTP. Conteúdo em outros
+//    alfabetos latinos (polonês, romeno) cai na fonte de sistema do aparelho.
+@import '../../node_modules/@fontsource/inter/latin-400.css';
+@import '../../node_modules/@fontsource/inter/latin-500.css';
+@import '../../node_modules/@fontsource/inter/latin-600.css';
+@import '../../node_modules/@fontsource/cormorant-garamond/latin-600.css';
+@import '../../node_modules/@fontsource/cormorant-garamond/latin-700.css';
 
 // 3. Bootstrap 5.3 completo.
 @import 'bootstrap/scss/bootstrap';

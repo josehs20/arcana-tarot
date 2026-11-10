@@ -269,6 +269,11 @@ class ConsultationRealtimeTest extends TestCase
                 route('consultations.messages.image', [$consultation, $cardMessage]),
                 $message['image_url'],
             );
+            // O balão do chat usa a miniatura; o evento publica as duas rotas.
+            $this->assertSame(
+                route('consultations.messages.thumb', [$consultation, $cardMessage]),
+                $message['image_thumb_url'],
+            );
             $this->assertArrayNotHasKey('image_path', $message);
             $this->assertStringNotContainsString($cardMessage->image_path, json_encode($event->broadcastWith()));
 

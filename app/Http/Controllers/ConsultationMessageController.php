@@ -110,12 +110,38 @@ class ConsultationMessageController extends Controller
         ConsultationMessage $message,
         ConsultationCardImageStorage $images,
     ): StreamedResponse {
+        $this->authorizeCardMessage($consultation, $message);
+
+        return $images->response($message);
+    }
+
+    /**
+     * Miniatura da carta exibida no balão do chat.
+     *
+     * Mesma autorização da imagem cheia — participação na consulta e mensagem
+     * do tipo carta desta consulta —, mas entrega o WebP reduzido. A imagem
+     * original só é baixada quando o usuário abre o link.
+     */
+    public function imageThumbnail(
+        Consultation $consultation,
+        ConsultationMessage $message,
+        ConsultationCardImageStorage $images,
+    ): StreamedResponse {
+        $this->authorizeCardMessage($consultation, $message);
+
+        return $images->thumbnailResponse($message);
+    }
+
+    /**
+     * Portão comum das rotas de imagem: nunca aceita mensagem de outra consulta
+     * nem mensagem de texto.
+     */
+    private function authorizeCardMessage(Consultation $consultation, ConsultationMessage $message): void
+    {
         Gate::authorize('viewMessages', $consultation);
 
         abort_unless($message->consultation_id === $consultation->getKey(), 404);
         abort_unless($message->type === MessageType::TarotCard, 404);
-
-        return $images->response($message);
     }
 
     /**

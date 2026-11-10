@@ -63,12 +63,9 @@ exigir a data:
   (“É preciso ter 18 anos ou mais para se cadastrar.”);
 - a migration `2026_11_05_115933_add_birth_date_to_users_table` adiciona a coluna
   e `User::birthDateLabel()`/`ageLabel()` formatam a exibição;
-- no **cadastro com SMS em duas etapas**, a data viaja no payload guardado em
-  `phone_verifications` — `PhoneVerification::registrationPayload()` a devolve e
-  `PhoneVerificationController::complete()` grava na criação da conta. Sem isso a
-  conta nasceria com `birth_date` nulo e o cartão mostraria “Não informado”;
-- no cadastro em uma etapa (SMS desativado) o campo é gravado direto por
-  `RegisteredUserController::registerDirectly()`;
+- a data é gravada direto na criação da conta por
+  `RegisteredUserController::store()`, que também abre a carteira e autentica o
+  cliente (a confirmação do e-mail acontece depois, pelo link enviado);
 - o login com Google não passa pelo formulário, então a coluna permanece
   opcional no banco (`nullable`) e o presenter trata o vazio.
 
@@ -156,14 +153,18 @@ não passa por um clique: botão voltar do navegador, atalho de teclado, URL
 digitada e recarregamento da página.
 
 - `resources/js/consultation-presence.js` registra `beforeunload` e só bloqueia
-  quando a consulta está ativa e a saída não foi confirmada (`state.leaving`);
+  quando a consulta está ativa e a saída não foi declarada como intencional
+  (`state.leaving` ou a marca de `resources/js/navigation-intent.js`);
 - o texto exibido é o nativo do navegador — a página não pode personalizá-lo — e
   o aviso não encerra nada: a decisão sobre cobrança e encerramento continua no
   servidor;
-- saídas confirmadas nos modais, o redirecionamento para o histórico e o logout
-  marcam `leaving` antes de navegar, então não abrem o aviso;
+- saídas confirmadas nos modais e os redirecionamentos automáticos marcam
+  `leaving`/intenção antes de navegar, e os formulários que navegam de propósito
+  (**Encerrar consulta** e **Sair da conta**, em `panel-sidebar`,
+  `panel-navbar` e `navbar-public`) usam `data-allow-leave`, então não abrem o
+  aviso;
 - ao voltar pelo cache do navegador (`pageshow` com `event.persisted`) o estado é
-  limpo e a presença é reenviada.
+  limpo, a intenção é descartada e a presença é reenviada.
 
 ## 7. Mensagens claras de microfone/câmera nas chamadas
 

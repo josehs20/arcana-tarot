@@ -37,6 +37,8 @@
 
     @vite(['resources/css/app.scss', 'resources/js/app.js'])
 
+    @include('layouts.partials.appearance')
+
     <link rel="icon" type="{{ $faviconType }}" href="{{ $favicon }}">
 </head>
 <body class="bg-body d-flex flex-column min-vh-100">

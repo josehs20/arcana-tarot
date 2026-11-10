@@ -85,7 +85,13 @@ abrir `/up` (deve responder 200) e, depois, o próprio bootstrap da aplicação.
 O valor é publicado no HTML como `data-realtime-mode="socket|poll"` em dois
 pontos: `resources/views/consultations/partials/chat.blade.php` (chat e cartas)
 e `resources/views/layouts/partials/realtime-alerts.blade.php` (painel, modal de
-solicitação e sirene).
+solicitação e sirene). O layout do painel (`components/layouts/panel.blade.php`)
+publica ainda `<meta name="realtime-mode">`, que é o marcador lido por
+`resources/js/echo.js` antes de qualquer conexão: em `poll`, `window.initializeEcho()`
+devolve `null` sem tocar em `pusher-js`, e nenhuma tentativa de WebSocket sai do
+navegador (era isso que enchia o console de erros contra `wss://host:8080` numa
+hospedagem sem Reverb). Sem o marcador, o padrão é `socket`, para não tirar o
+tempo real de páginas antigas.
 
 Por que no servidor e não em `VITE_*`:
 
@@ -156,6 +162,10 @@ aditivas e desligadas por configuração.
 | `resources/js/user-channel.js` | usa o agendador; reconcilia fila e estado; abre modal e sirene |
 | `resources/views/**/chat.blade.php` | publica `data-realtime-mode` e `data-poll-*` |
 | `resources/views/layouts/partials/realtime-alerts.blade.php` | publica `data-events-url`, `data-realtime-mode` e `data-poll-*` |
+| `resources/views/components/layouts/panel.blade.php` | publica `<meta name="realtime-mode">` lido por `echo.js` |
+| `resources/js/echo.js` | em `poll`, `window.initializeEcho()` devolve `null` e nenhuma conexão WebSocket é aberta |
+| `resources/js/consultation-workspace.js` | aviso de saldo baixo do cliente (modal disparado por `remaining_seconds`) |
+| `resources/js/consultation-presence.js` | aviso de inatividade só quando o modal do atendente existe no DOM |
 
 ### 3.1 `createPoller` — o ritmo das leituras
 
@@ -266,7 +276,8 @@ Use [`.env.hostoo.example`](../.env.hostoo.example) como base. As variáveis que
 | `REVERB_*` / `VITE_REVERB_*` | preenchidos | **removidos** | sem servidor Reverb |
 
 Permanecem inalteradas: `APP_KEY`, `APP_URL`, limites de consulta, pagamentos,
-`CONSULTATION_ICE_SERVERS` e `VITE_APP_NAME`.
+`CONSULTATION_LOW_BALANCE_WARNING_MINUTES` (aviso de saldo baixo do cliente,
+padrão 5), `CONSULTATION_ICE_SERVERS` e `VITE_APP_NAME`.
 
 > **`TRUSTED_PROXIES` não funciona no `.env`.** O `bootstrap/app.php` resolve esse
 > valor com `env()` quando o kernel HTTP é construído — antes do bootstrap do
@@ -379,13 +390,34 @@ passou a valer também dentro da requisição
   e o outro lado o vê pelo polling.
 
 O que **continua** exclusivo do cron (e por isso as duas linhas do §6 seguem
-obrigatórias): cobrar o minuto *durante* a consulta
+obrigatórias): debitar o minuto *durante* a consulta
 (`consultations:charge-minutes` — o polling não escreve em dinheiro, invariante
 do §7), expirar solicitações e fechar chamadas sem resposta. Sem
-`charge-minutes`, o cliente não é interrompido por saldo insuficiente no meio da
-conversa; o encerramento cobra os minutos que o saldo cobre e os restantes ficam
-registrados como não pagos na auditoria (`consultation.interrupted`), sem saldo
-negativo.
+`charge-minutes` a carteira fica atrasada em relação ao relógio, mas a consulta
+não segue de graça: ver a rede de segurança do §6.2.
+
+### 6.2 Rede de segurança: o encerramento por saldo também não depende do cron
+
+A interrupção por inatividade tem companhia: `ConsultationLifecycleManager::closeIfOutOfCredits`
+roda nos mesmos dois pontos (batimento de presença e abertura da tela) e faz
+exatamente o teste do próximo `billDue`:
+
+- **quando dispara**: quando a carteira do cliente não cobre os minutos já
+  iniciados e ainda não debitados (`due_minutes - billed_minutes`);
+- **o que muda no banco**: status `ended`, motivo `out_of_credits`, minutos
+  vencidos liquidados uma vez (`billDue`, idempotente por minuto) e auditoria
+  `consultation.ended` com o motivo. O minuto que o saldo não cobre **não** é
+  debitado parcialmente e o saldo nunca fica negativo;
+- **o que a tela faz**: o contador do servidor (`remaining_seconds`, calculado em
+  dinheiro: `(billed_minutes + available_minutes) × 60 − elapsed_seconds`) chega a
+  `00:00` no mesmo instante em que a consulta é encerrada; o próximo `GET` do
+  workspace e o próximo batimento já respondem `ended`/`out_of_credits` e o JS
+  navega para o histórico;
+- **cliente avisado antes**: quando o contador cruza
+  `CONSULTATION_LOW_BALANCE_WARNING_MINUTES` (padrão 5), o cliente recebe o modal
+  `consultation-low-balance-warning` com o atalho para comprar créditos. O aviso
+  é só informativo; quem decide continua sendo o servidor. O modal de
+  inatividade ("Você ainda está no atendimento?") é exclusivo do atendente.
 
 A rede de segurança precisa de **um participante** voltando à tela: quem está
 com o chat aberto derruba a consulta vencida do outro lado, e quem reabre a tela
@@ -404,9 +436,13 @@ Três garantias sustentam a cobrança neste modo:
    polling escreve em `credit_ledger_entries`, `consultations.billed_minutes` ou
    `consultation_presence_sessions`. Só `consultations:charge-minutes` (cron), as
    ações explícitas do usuário e o **encerramento** alteram dinheiro — e o
-   encerramento por inatividade é uma transição de estado única, decidida pelo
-   servidor no batimento ou na abertura da tela (`interruptIfInactive`), que
-   liquida os minutos vencidos uma vez (`billDue` é idempotente por minuto).
+   encerramento é uma transição de estado única, decidida pelo servidor no
+   batimento ou na abertura da tela (`interruptIfInactive` para inatividade,
+   `closeIfOutOfCredits` para saldo insuficiente), que liquida os minutos vencidos
+   uma vez (`billDue` é idempotente por minuto). Quando a carteira não cobre o
+   minuto seguinte, o saldo **não** é debitado parcialmente nem fica negativo: a
+   consulta termina com `out_of_credits` e o minuto não pago fica registrado na
+   auditoria.
 2. **Cobrança é idempotente por janela.** `ConsultationBillingManager` roda em
    `DB::transaction`, trava a consulta com `lockForUpdate`, avança o cursor
    `billed_minutes` e grava cada débito com a chave

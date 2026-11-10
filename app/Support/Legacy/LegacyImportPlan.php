@@ -26,6 +26,13 @@ final class LegacyImportPlan
         public readonly ?LegacyDumpTable $creditsTable = null,
         public readonly ?string $creditsUserColumn = null,
         public readonly ?string $creditsBalanceColumn = null,
+        public readonly ?LegacyDumpTable $profileTable = null,
+        public readonly ?string $profileUserColumn = null,
+        public readonly ?string $profilePhoneColumn = null,
+        public readonly ?string $profileBirthDateColumn = null,
+        public readonly ?string $profileGenderColumn = null,
+        public readonly ?LegacyDumpTable $excludeTable = null,
+        public readonly ?string $excludeUserColumn = null,
         public readonly array $blockingIssues = [],
         public readonly array $notes = [],
         public readonly array $rejectedCandidates = [],
@@ -44,6 +51,49 @@ final class LegacyImportPlan
         return $this->creditsTable !== null
             && $this->creditsUserColumn !== null
             && $this->creditsBalanceColumn !== null;
+    }
+
+    /**
+     * Indica se existe uma tabela de dados complementares utilizável (no banco
+     * real, `eam_clientes`: telefone, nascimento e sexo).
+     */
+    public function hasProfile(): bool
+    {
+        return $this->profileTable !== null
+            && $this->profileUserColumn !== null
+            && ($this->profilePhoneColumn !== null
+                || $this->profileBirthDateColumn !== null
+                || $this->profileGenderColumn !== null);
+    }
+
+    /**
+     * Resumo textual da origem dos dados complementares, usado no relatório.
+     */
+    public function profileLabel(): string
+    {
+        if (! $this->hasProfile()) {
+            return 'nenhuma tabela de dados complementares identificada';
+        }
+
+        $fields = array_filter([
+            $this->profilePhoneColumn !== null ? 'telefone: '.$this->profilePhoneColumn : null,
+            $this->profileBirthDateColumn !== null ? 'nascimento: '.$this->profileBirthDateColumn : null,
+            $this->profileGenderColumn !== null ? 'sexo: '.$this->profileGenderColumn : null,
+        ]);
+
+        return $this->profileTable->name.' ('.implode(', ', $fields).'; vínculo: '.$this->profileUserColumn.')';
+    }
+
+    /**
+     * Resumo textual da exclusão de contas, usado no relatório.
+     */
+    public function exclusionLabel(): ?string
+    {
+        if ($this->excludeTable === null || $this->excludeUserColumn === null) {
+            return null;
+        }
+
+        return $this->excludeTable->name.' (vínculo: '.$this->excludeUserColumn.')';
     }
 
     /**

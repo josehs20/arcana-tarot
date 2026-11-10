@@ -15,6 +15,10 @@
 
     // Medidas de layout
     --arcana-navbar-height: 3.9rem;
+
+    // Tipografia (sobrescrita em runtime pelo editor de aparência)
+    --arcana-font-display: #{$arcana-font-display-stack};
+    --arcana-font-body: #{$arcana-font-body-stack};
 }
 
 // Cores, sombras e filtros são definidos por tema em `_theme.scss`.

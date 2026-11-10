@@ -7,11 +7,13 @@ use App\Http\Controllers\Admin\CommissionController as AdminCommissionController
 use App\Http\Controllers\Admin\ConsultationController as AdminConsultationController;
 use App\Http\Controllers\Admin\ConsultationSafetyController as AdminConsultationSafetyController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
+use App\Http\Controllers\Admin\EmailCampaignController as AdminEmailCampaignController;
 use App\Http\Controllers\Admin\FinanceController as AdminFinanceController;
 use App\Http\Controllers\Admin\ModalityController as AdminModalityController;
 use App\Http\Controllers\Admin\PaymentController as AdminPaymentController;
 use App\Http\Controllers\Admin\PaymentSettingsController as AdminPaymentSettingsController;
 use App\Http\Controllers\Admin\RegistrationBonusController as AdminRegistrationBonusController;
+use App\Http\Controllers\Admin\SiteAppearanceController as AdminSiteAppearanceController;
 use App\Http\Controllers\Admin\SiteContentController as AdminSiteContentController;
 use App\Http\Controllers\Admin\SiteFaqController as AdminSiteFaqController;
 use App\Http\Controllers\Admin\SiteNavigationController as AdminSiteNavigationController;
@@ -26,10 +28,10 @@ use App\Http\Controllers\Attendant\HistoryController as AttendantHistoryControll
 use App\Http\Controllers\AttendantApplicationController;
 use App\Http\Controllers\AttendantDirectoryController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
+use App\Http\Controllers\Auth\EmailVerificationController;
 use App\Http\Controllers\Auth\GoogleAuthenticationController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
-use App\Http\Controllers\Auth\PhoneVerificationController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\ChatPreferenceController;
 use App\Http\Controllers\Client\ConsultationController as ClientConsultationController;
@@ -91,21 +93,12 @@ Route::post('webhooks/infinitepay', InfinitePayWebhookController::class)
 
 Route::middleware('guest')->group(function () {
     Route::get('register', [RegisteredUserController::class, 'create'])->name('register');
-    Route::post('register', [RegisteredUserController::class, 'store']);
-
     /*
-     * Segunda etapa do cadastro: confirmação do celular por SMS. A conta só é
-     * criada no POST de confirmação, depois do código aprovado. O reenvio tem
-     * limite próprio e o cooldown é aplicado pelo PhoneVerificationService.
+     * O POST cria a conta e dispara o link de confirmação por e-mail. O limite
+     * por IP evita que o formulário vire vetor de abuso do SMTP.
      */
-    Route::get('register/confirmar-celular', [PhoneVerificationController::class, 'show'])
-        ->name('register.verify');
-    Route::post('register/confirmar-celular', [PhoneVerificationController::class, 'verify'])
-        ->middleware('throttle:10,10')
-        ->name('register.verify.store');
-    Route::post('register/confirmar-celular/reenviar', [PhoneVerificationController::class, 'resend'])
-        ->middleware('throttle:5,10')
-        ->name('register.verify.resend');
+    Route::post('register', [RegisteredUserController::class, 'store'])
+        ->middleware('throttle:10,10');
 
     /*
      * Login/cadastro com Google. As rotas existem sempre, mas os controllers
@@ -128,6 +121,11 @@ Route::middleware('guest')->group(function () {
     Route::post('reset-password', [NewPasswordController::class, 'store'])->name('password.store');
 });
 
+/*
+ * Sessão e preferências. Ficam fora do grupo `verified` de propósito: quem
+ * acabou de se cadastrar precisa poder sair ou ajustar o tema mesmo antes de
+ * confirmar o e-mail.
+ */
 Route::middleware('auth')->group(function () {
     Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
 
@@ -138,6 +136,27 @@ Route::middleware('auth')->group(function () {
      * não para uma consulta específica, por isso ficam fora das rotas do chat.
      */
     Route::patch('preferencias/chat', ChatPreferenceController::class)->name('preferences.chat.update');
+
+    /*
+     * Confirmação de e-mail do cadastro. O cadastro cria a conta na hora; o
+     * link assinado (validade em `auth.verification.expire`) é o que libera os
+     * painéis, bloqueados pelo middleware `verified` no grupo abaixo.
+     */
+    Route::get('email/verificar', [EmailVerificationController::class, 'notice'])
+        ->name('verification.notice');
+    Route::get('email/verificar/{id}/{hash}', [EmailVerificationController::class, 'verify'])
+        ->middleware(['signed', 'throttle:6,1'])
+        ->name('verification.verify');
+    Route::post('email/verification-notification', [EmailVerificationController::class, 'send'])
+        ->middleware('throttle:6,1')
+        ->name('verification.send');
+});
+
+/*
+ * Área autenticada: além da sessão, exige o e-mail confirmado. Quem ainda não
+ * abriu o link é levado para `verification.notice` pelo middleware `verified`.
+ */
+Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('admin', AdminDashboardController::class)->middleware('role:admin')->name('admin.dashboard');
     Route::get('attendant', AttendantDashboardController::class)->middleware('role:attendant')->name('attendant.dashboard');
@@ -245,6 +264,19 @@ Route::middleware('auth')->group(function () {
     Route::get('consultas/{consultation}/mensagens/{message}/imagem', [ConsultationMessageController::class, 'image'])
         ->whereNumber(['consultation', 'message'])
         ->name('consultations.messages.image');
+
+    /*
+     * Miniatura da carta no balão do chat.
+     *
+     * O balão exibe a imagem em ~150 px e a conversa recarrega a página inteira
+     * ao navegar pelo histórico. Servir o snapshot original custava dezenas de
+     * KB por carta a cada leitura; a rota entrega o WebP reduzido, gerado uma
+     * única vez no servidor. A imagem cheia continua em
+     * `consultations.messages.image`, aberta pelo link do balão.
+     */
+    Route::get('consultas/{consultation}/mensagens/{message}/imagem/miniatura', [ConsultationMessageController::class, 'imageThumbnail'])
+        ->whereNumber(['consultation', 'message'])
+        ->name('consultations.messages.thumb');
 
     Route::patch('consultas/{consultation}/encerrar', [ConsultationController::class, 'end'])
         ->whereNumber('consultation')
@@ -397,6 +429,34 @@ Route::middleware('auth')->group(function () {
         ->middleware('role:admin')
         ->name('admin.payments.index');
 
+    /**
+     * Disparo de e-mails: seleção de usuários, corpo padrão e histórico.
+     * O POST apenas cria a campanha e enfileira os envios.
+     *
+     * `modelo` é POST (e não PATCH) porque o botão "Salvar como corpo padrão"
+     * envia o mesmo editor do disparo via `formaction`: um formulário HTML não
+     * consegue trocar o método HTTP por botão, e duplicar o texto em dois
+     * formulários deixaria dois corpos na mesma tela.
+     */
+    Route::prefix('admin/emails')
+        ->name('admin.emails.')
+        ->middleware('role:admin')
+        ->group(function () {
+            Route::get('/', [AdminEmailCampaignController::class, 'index'])->name('index');
+            Route::post('/', [AdminEmailCampaignController::class, 'store'])
+                ->middleware('throttle:admin-bulk-email')
+                ->name('store');
+            Route::post('modelo', [AdminEmailCampaignController::class, 'updateTemplate'])
+                ->name('template.update');
+            Route::get('{campaign}', [AdminEmailCampaignController::class, 'show'])
+                ->whereNumber('campaign')
+                ->name('show');
+            Route::post('{campaign}/reenviar-falhas', [AdminEmailCampaignController::class, 'resend'])
+                ->whereNumber('campaign')
+                ->middleware('throttle:admin-bulk-email')
+                ->name('resend');
+        });
+
     Route::get('admin/auditoria', [AdminAuditLogController::class, 'index'])
         ->middleware('role:admin')
         ->name('admin.audit.index');
@@ -408,6 +468,12 @@ Route::middleware('auth')->group(function () {
             Route::get('/', [AdminSiteContentController::class, 'index'])->name('index');
             Route::patch('identidade', [AdminSiteContentController::class, 'updateIdentity'])
                 ->name('identity.update');
+            Route::get('aparencia', [AdminSiteAppearanceController::class, 'edit'])
+                ->name('appearance.edit');
+            Route::patch('aparencia', [AdminSiteAppearanceController::class, 'update'])
+                ->name('appearance.update');
+            Route::delete('aparencia', [AdminSiteAppearanceController::class, 'reset'])
+                ->name('appearance.reset');
             Route::get('secoes/{key}/editar', [AdminSiteContentController::class, 'editSection'])
                 ->where('key', '[a-z_]+')
                 ->name('sections.edit');

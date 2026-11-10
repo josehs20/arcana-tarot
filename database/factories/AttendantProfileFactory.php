@@ -55,6 +55,18 @@ class AttendantProfileFactory extends Factory
     }
 
     /**
+     * Atendente publicado que pausou a fila manualmente: recebe visitas no
+     * diretório, mas não novas solicitações.
+     */
+    public function busy(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'availability' => AttendantAvailability::Busy->value,
+            'last_seen_at' => now(),
+        ]);
+    }
+
+    /**
      * @param  array<int, string>  $modalities
      */
     public function offering(array $modalities): static

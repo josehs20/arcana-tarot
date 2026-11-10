@@ -22,7 +22,7 @@ final class LegacyUserRecordMapper
     /**
      * @return LegacyUserRecord|string registro normalizado ou motivo da recusa
      */
-    public function map(LegacyRow $row, int $externalBalanceCents = 0): LegacyUserRecord|string
+    public function map(LegacyRow $row, int $externalBalanceCents = 0, ?LegacyProfileRecord $profile = null): LegacyUserRecord|string
     {
         $email = Str::lower($row->text($this->plan->emailColumn));
 
@@ -58,8 +58,11 @@ final class LegacyUserRecordMapper
             name: mb_substr($name, 0, self::MAX_NAME_LENGTH),
             passwordValue: $password,
             passwordFormat: LegacyPasswordFormat::detect($password),
-            phone: $this->phone($row),
+            phone: $this->phone($row, $profile),
             balanceCents: $balance,
+            birthDate: $profile?->birthDate,
+            gender: $profile?->gender,
+            profileMatched: $profile !== null,
         );
     }
 
@@ -120,11 +123,21 @@ final class LegacyUserRecordMapper
         return $key === '' ? $email : $key;
     }
 
-    private function phone(LegacyRow $row): ?string
+    /**
+     * Telefone da tabela de usuários; quando ela não tem o dado, usa o da
+     * tabela de dados complementares. Só valores válidos com DDD passam.
+     */
+    private function phone(LegacyRow $row, ?LegacyProfileRecord $profile): ?string
     {
         $phone = PhoneNumber::normalize($row->get($this->plan->phoneColumn));
 
-        return PhoneNumber::isValid($phone) ? $phone : null;
+        if (PhoneNumber::isValid($phone)) {
+            return $phone;
+        }
+
+        $fallback = $profile?->phone;
+
+        return $fallback !== null && PhoneNumber::isValid($fallback) ? $fallback : null;
     }
 
     private function nameFromEmail(string $email): string

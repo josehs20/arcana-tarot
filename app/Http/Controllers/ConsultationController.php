@@ -88,6 +88,10 @@ class ConsultationController extends Controller
         // scheduler estiver parado, a consulta não fica presa em `active`.
         $consultation = $lifecycle->interruptIfInactive($consultation);
 
+        // Mesma rede de segurança para o dinheiro: sem o comando de cobrança, a
+        // consulta sem saldo é encerrada aqui em vez de seguir de graça.
+        $consultation = $lifecycle->closeIfOutOfCredits($consultation);
+
         /** @var User $user */
         $user = $request->user();
 
@@ -159,7 +163,9 @@ class ConsultationController extends Controller
      *
      * Antes de renovar a sessão, o prazo de inatividade é conferido: vencido o
      * limite, a consulta é interrompida aqui mesmo e a resposta já volta com o
-     * estado final, que leva a tela para o histórico.
+     * estado final, que leva a tela para o histórico. O mesmo acontece quando a
+     * carteira do cliente não cobre mais os minutos iniciados: a consulta é
+     * encerrada com `out_of_credits`, sem débito parcial e sem saldo negativo.
      */
     public function heartbeat(
         Request $request,
@@ -179,7 +185,26 @@ class ConsultationController extends Controller
         /** @var User $user */
         $user = $request->user();
 
+        /*
+         * O batimento da tela também renova a presença do atendente: é o sinal
+         * usado para devolver o perfil ocupado a online quando a consulta
+         * termina. Vem antes da checagem de inatividade para que a presença
+         * esteja atualizada caso este mesmo batimento encerre o atendimento.
+         */
+        if ($consultation->isAttendant($user)) {
+            $user->attendantProfile?->markSeen();
+        }
+
         $consultation = $lifecycle->interruptIfInactive($consultation);
+
+        /*
+         * Antes de renovar a sessão, o saldo é conferido: quando a carteira não
+         * cobre os minutos já iniciados, a consulta é encerrada aqui mesmo
+         * (`out_of_credits`) e a resposta volta com o estado final. É o que
+         * fecha o atendimento no Hostoo quando o cron de cobrança está parado
+         * ou atrasado — sem depender do navegador.
+         */
+        $consultation = $lifecycle->closeIfOutOfCredits($consultation);
 
         $session = $consultation->isActive()
             ? $tracker->heartbeat(

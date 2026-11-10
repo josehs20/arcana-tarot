@@ -28,6 +28,7 @@ final class ConsultationMessagePresenter
      *     card_name: string|null,
      *     deck_name: string|null,
      *     image_url: string|null,
+     *     image_thumb_url: string|null,
      *     created_at: string|null,
      *     created_at_label: string
      * }
@@ -62,6 +63,11 @@ final class ConsultationMessagePresenter
             'deck_name' => $isCard ? $message->deck_name : null,
             'image_url' => $isCard && filled($message->image_path)
                 ? route('consultations.messages.image', [$message->consultation_id, $message->getKey()])
+                : null,
+            // O balão do chat usa a miniatura (WebP reduzido, gerado uma vez no
+            // servidor); a imagem cheia é aberta no clique do link.
+            'image_thumb_url' => $isCard && filled($message->image_path)
+                ? route('consultations.messages.thumb', [$message->consultation_id, $message->getKey()])
                 : null,
             'created_at' => $message->created_at?->toIso8601String(),
             'created_at_label' => $message->created_at?->format('d/m/Y H:i') ?? '—',

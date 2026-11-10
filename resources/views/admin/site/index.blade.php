@@ -13,6 +13,7 @@
             <a class="btn btn-ghost btn-sm" href="{{ route('home') }}" target="_blank" rel="noopener">
                 Ver site público
             </a>
+            <a class="btn btn-ghost btn-sm" href="{{ route('admin.site.appearance.edit') }}">Cores e fontes</a>
             <a class="btn btn-ghost btn-sm" href="{{ route('admin.site.navigation.index') }}">Navegação</a>
             <a class="btn btn-primary btn-sm" href="{{ route('admin.site.faqs.index') }}">Perguntas frequentes</a>
         </x-slot>
@@ -103,6 +104,21 @@
                     </div>
                 @endforeach
             </div>
+        </x-ui.card-body>
+    </x-ui.card>
+
+    <x-ui.card class="mb-4" id="aparencia">
+        <x-ui.card-header class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <span>Cores e fontes</span>
+            <span class="badge {{ $appearance['is_customized'] ? 'badge-info' : 'badge-secondary' }}">
+                {{ $appearance['is_customized'] ? 'Personalizada' : 'Padrão do tema' }}
+            </span>
+        </x-ui.card-header>
+        <x-ui.card-body class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <p class="small text-body-secondary mb-0">
+                Ajuste a paleta e a tipografia dos temas claro e escuro. As alterações valem imediatamente para o site público.
+            </p>
+            <a class="btn btn-ghost btn-sm" href="{{ route('admin.site.appearance.edit') }}">Editar cores e fontes</a>
         </x-ui.card-body>
     </x-ui.card>
 

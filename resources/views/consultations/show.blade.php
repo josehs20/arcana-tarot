@@ -29,6 +29,35 @@
         </x-slot>
     </x-layouts.page-header>
 
+    {{--
+        Convite permanente para avaliar. O modal abre sozinho uma vez por sessão
+        (`data-testimonial-prompt`), mas se o cliente fechar o convite ele
+        reencontra a entrada aqui enquanto o depoimento não existir.
+    --}}
+    @if ($canLeaveTestimonial)
+        <x-ui.card id="testimonial-invite" class="card-gilded mb-4" data-testimonial-invite="true">
+            <x-ui.card-body class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <div>
+                    <span class="text-gold d-block" aria-hidden="true">★★★★★</span>
+                    <h2 class="h5 mb-1">Como foi a consulta?</h2>
+                    <p class="text-ivory-dim mb-0">
+                        Falta contar como foi seu atendimento com <strong>{{ $attendantName }}</strong>.
+                        Seu depoimento aparece no perfil público do atendente e ajuda outras pessoas
+                        a escolherem com quem conversar.
+                    </p>
+                </div>
+                <x-ui.button
+                    type="button"
+                    variant="primary"
+                    data-bs-toggle="modal"
+                    data-bs-target="#testimonial-modal-{{ $consultation->getKey() }}"
+                >
+                    Avaliar atendimento
+                </x-ui.button>
+            </x-ui.card-body>
+        </x-ui.card>
+    @endif
+
     <div class="row g-4">
         <div class="col-lg-8">
             {{--

@@ -500,6 +500,53 @@ class ConsultationSafetyTest extends TestCase
         $this->assertGreaterThan(0, DB::table('jobs')->count());
     }
 
+    /**
+     * Sem o comando de cobrança, o próprio batimento encerra a consulta.
+     *
+     * Era o buraco do perfil Hostoo: o `consultations:charge-minutes` é quem
+     * detecta o saldo esgotado, mas se o scheduler está parado a consulta
+     * seguia `active` com o contador zerado e o cliente conversava de graça.
+     * Agora o batimento de presença faz o mesmo teste do próximo `billDue` e
+     * encerra com `out_of_credits`, sem débito parcial e sem saldo negativo.
+     */
+    public function test_heartbeat_closes_the_consultation_when_the_wallet_cannot_pay_the_started_minutes(): void
+    {
+        config(['broadcasting.default' => 'log']);
+
+        Carbon::setTestNow('2026-11-04 10:00:00');
+
+        // R$ 3,00 pagaram o primeiro minuto; nada sobrou para o segundo.
+        $client = $this->client(0);
+        $attendant = $this->attendant();
+        $consultation = $this->activeConsultation($client, $attendant, [
+            'started_at' => now(),
+            'last_activity_at' => now(),
+            'billed_minutes' => 1,
+        ]);
+
+        Carbon::setTestNow('2026-11-04 10:01:30');
+
+        $this->heartbeat($client, $consultation)
+            ->assertOk()
+            ->assertJsonPath('status', ConsultationStatus::Ended->value)
+            ->assertJsonPath('ended_reason', ConsultationEndReason::OutOfCredits->value)
+            ->assertJsonPath('credits.balance_label', 'R$ 0,00');
+
+        $consultation->refresh();
+
+        $this->assertSame(ConsultationStatus::Ended, $consultation->status);
+        $this->assertSame(ConsultationEndReason::OutOfCredits, $consultation->ended_reason);
+        $this->assertSame(1, (int) $consultation->billed_minutes);
+        $this->assertSame(0, (int) Wallet::query()->where('user_id', $client->id)->value('balance_cents'));
+
+        // Repetir o batimento não reabre nem cobra o minuto pendente.
+        $this->heartbeat($client, $consultation)
+            ->assertOk()
+            ->assertJsonPath('status', ConsultationStatus::Ended->value);
+
+        $this->assertSame(1, (int) $consultation->fresh()->billed_minutes);
+    }
+
     public function test_admin_can_view_and_update_safety_thresholds_with_audit(): void
     {
         $admin = User::factory()->admin()->create();
@@ -599,6 +646,40 @@ class ConsultationSafetyTest extends TestCase
             ->assertOk()
             ->assertDontSee('data-consultation-credits-link', false)
             ->assertDontSee('Comprar créditos');
+    }
+
+    /**
+     * Cada parte recebe só o aviso que consegue resolver.
+     *
+     * O modal de inatividade ("Você ainda está no atendimento?") é do atendente:
+     * é ele quem precisa confirmar presença ou sair do chat. O cliente recebe o
+     * aviso de saldo baixo, com o limite calculado no servidor e o atalho para
+     * comprar créditos. Dois modais simultâneos só travariam a conversa.
+     */
+    public function test_workspace_shows_the_inactivity_warning_only_to_the_attendant_and_the_low_balance_warning_only_to_the_client(): void
+    {
+        $client = $this->client();
+        $attendant = $this->attendant();
+        $consultation = $this->activeConsultation($client, $attendant);
+        $creditsUrl = route('client.credits.index', ['return_consultation' => $consultation->id]);
+
+        $this->actingAs($client)
+            ->get(route('consultations.workspace', $consultation))
+            ->assertOk()
+            ->assertSee('data-consultation-low-balance-warning', false)
+            ->assertSee('data-remaining-threshold-seconds="300"', false)
+            ->assertSee('Seu saldo está acabando')
+            ->assertSee('href="'.$creditsUrl.'"', false)
+            ->assertDontSee('data-consultation-inactivity-warning', false)
+            ->assertDontSee('Você ainda está no atendimento?');
+
+        $this->actingAs($attendant)
+            ->get(route('consultations.workspace', $consultation))
+            ->assertOk()
+            ->assertSee('data-consultation-inactivity-warning', false)
+            ->assertSee('Você ainda está no atendimento?')
+            ->assertDontSee('data-consultation-low-balance-warning', false)
+            ->assertDontSee('Seu saldo está acabando');
     }
 
     public function test_credit_purchase_returns_to_the_active_consultation_until_it_ends(): void

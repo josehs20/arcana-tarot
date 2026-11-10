@@ -1,7 +1,7 @@
 <x-layouts.panel variant="admin" title="Atendentes | Arcana Tarot">
     <x-layouts.page-header
         title="Atendentes"
-        subtitle="Cadastro dos profissionais e preferências do atendimento, como o som que avisa quando um cliente está aguardando."
+        subtitle="Cadastro dos profissionais, preferências do atendimento (como o som que avisa quando um cliente está aguardando) e comissão de cada atendente."
     >
         <x-slot name="actions">
             <a class="btn btn-ghost btn-sm" href="{{ route('admin.modalities.index') }}">Modalidades</a>
@@ -11,7 +11,8 @@
 
     <x-ui.alert type="info" :dismissible="false" class="mb-4">
         O som de chamada é reproduzido no navegador do atendente quando um cliente entra na fila.
-        A sirene é o padrão; os demais toques são sintetizados no navegador e o MP3 personalizado
+        A sirene é o padrão da plataforma; os demais toques são sintetizados no navegador,
+        “Olha o gás” usa um MP3 da própria plataforma e o MP3 personalizado
         pode ser enviado por atendente. O toque escolhido não altera o aceite, a cobrança ou o funcionamento do chat.
     </x-ui.alert>
 
@@ -58,12 +59,13 @@
         @else
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
-                    <caption class="visually-hidden">Atendentes e sons de chamada configurados</caption>
+                    <caption class="visually-hidden">Atendentes, comissões e sons de chamada configurados</caption>
                     <thead>
                         <tr>
                             <th scope="col">Atendente</th>
                             <th scope="col">Presença</th>
                             <th scope="col">Conta</th>
+                            <th scope="col">Comissão</th>
                             <th scope="col">Som de chamada</th>
                         </tr>
                     </thead>
@@ -73,6 +75,7 @@
                                 $profile = $user->attendantProfile;
                                 $currentSound = $profile->effectiveRequestSound();
                                 $currentSoundUrl = $profile->requestSoundUrl();
+                                $previewSoundUrl = $profile->effectiveRequestSoundUrl();
                                 $fieldId = 'request_sound_'.$user->id;
                                 $fileFieldId = 'request_sound_file_'.$user->id;
                             @endphp
@@ -92,6 +95,14 @@
                                     @endif
                                 </td>
                                 <td>
+                                    <span class="fw-medium">{{ \App\Support\Rate::formatBps($profile->commission_rate_bps) }}</span>
+                                    <div class="form-text">Taxa aplicada a novas consultas</div>
+                                    <a
+                                        class="btn btn-ghost btn-sm mt-1"
+                                        href="{{ route('admin.commissions.attendant', $user) }}"
+                                    >Comissão</a>
+                                </td>
+                                <td>
                                     <form method="POST" action="{{ route('admin.attendants.sound.update', $user) }}">
                                         @csrf
                                         @method('PATCH')
@@ -107,13 +118,21 @@
                                                 required
                                             >
                                                 @foreach ($sounds as $sound)
-                                                    <option value="{{ $sound->value }}" @selected($currentSound === $sound)>
+                                                    <option
+                                                        value="{{ $sound->value }}"
+                                                        data-sound-url="{{ $sound->url() }}"
+                                                        @selected($currentSound === $sound)
+                                                    >
                                                         {{ $sound->label() }}
                                                     </option>
                                                 @endforeach
 
                                                 @if ($currentSoundUrl)
-                                                    <option value="{{ $customSound->value }}" @selected($currentSound === $customSound)>
+                                                    <option
+                                                        value="{{ $customSound->value }}"
+                                                        data-sound-url="{{ $currentSoundUrl }}"
+                                                        @selected($currentSound === $customSound)
+                                                    >
                                                         {{ $customSound->label() }}
                                                     </option>
                                                 @endif
@@ -123,7 +142,7 @@
                                                 type="button"
                                                 class="btn btn-ghost btn-sm"
                                                 data-preview-request-sound="{{ $fieldId }}"
-                                                data-preview-request-sound-url="{{ $currentSoundUrl }}"
+                                                data-preview-request-sound-url="{{ $previewSoundUrl }}"
                                             >
                                                 Ouvir
                                             </button>

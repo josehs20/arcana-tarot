@@ -3,12 +3,15 @@
 namespace Tests\Feature;
 
 use App\Enums\AttendantAvailability;
+use App\Enums\Gender;
 use App\Enums\UserRole;
 use App\Models\AttendantProfile;
 use App\Models\AuditLog;
 use App\Models\Consultation;
 use App\Models\User;
+use App\Notifications\Auth\VerifyEmailNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 class AuthTest extends TestCase
@@ -17,42 +20,75 @@ class AuthTest extends TestCase
 
     public function test_user_can_register_as_client(): void
     {
+        Notification::fake();
+
         $response = $this->post('/register', [
             'name' => 'Cliente Teste',
-            'email' => 'cliente@example.com',
+            'email' => 'cliente@gmail.com',
             'phone' => '(11) 99999-9999',
             'birth_date' => '1990-05-20',
+            'gender' => Gender::Female->value,
             'password' => 'senha-segura',
             'password_confirmation' => 'senha-segura',
         ]);
 
-        $response->assertRedirect(route('client.dashboard'));
+        // A conta e a sessão já valem, mas o painel só abre depois do link.
+        $response->assertRedirect(route('verification.notice'));
         $this->assertAuthenticated();
         $this->assertDatabaseHas('users', [
-            'email' => 'cliente@example.com',
+            'email' => 'cliente@gmail.com',
             'phone' => '11999999999',
             'phone_verified_at' => null,
+            'email_verified_at' => null,
             'role' => UserRole::Client->value,
+            'gender' => Gender::Female->value,
         ]);
 
-        $user = User::query()->where('email', 'cliente@example.com')->firstOrFail();
+        $user = User::query()->where('email', 'cliente@gmail.com')->firstOrFail();
         $this->assertSame('1990-05-20', $user->birth_date?->format('Y-m-d'));
+        $this->assertSame(Gender::Female, $user->gender);
+        $this->assertSame('Feminino', $user->genderLabel());
         $this->assertNotNull($user->wallet);
         $this->assertSame(0, $user->wallet->balance_cents);
+
+        Notification::assertSentTo($user, VerifyEmailNotification::class);
+
+        $this->get(route('client.dashboard'))
+            ->assertRedirect(route('verification.notice'));
+    }
+
+    public function test_registration_requires_a_gender(): void
+    {
+        $payload = [
+            'name' => 'Cliente Teste',
+            'email' => 'cliente@gmail.com',
+            'phone' => '(11) 99999-9999',
+            'birth_date' => '1990-05-20',
+            'password' => 'senha-segura',
+            'password_confirmation' => 'senha-segura',
+        ];
+
+        $this->post('/register', $payload)->assertSessionHasErrors('gender');
+
+        $this->post('/register', $payload + ['gender' => 'indefinido'])
+            ->assertSessionHasErrors('gender');
+
+        $this->assertGuest();
+        $this->assertDatabaseMissing('users', ['email' => 'cliente@gmail.com']);
     }
 
     public function test_registration_requires_a_birth_date(): void
     {
         $this->post('/register', [
             'name' => 'Cliente Teste',
-            'email' => 'cliente@example.com',
+            'email' => 'cliente@gmail.com',
             'phone' => '(11) 99999-9999',
             'password' => 'senha-segura',
             'password_confirmation' => 'senha-segura',
         ])->assertSessionHasErrors('birth_date');
 
         $this->assertGuest();
-        $this->assertDatabaseMissing('users', ['email' => 'cliente@example.com']);
+        $this->assertDatabaseMissing('users', ['email' => 'cliente@gmail.com']);
     }
 
     /**
@@ -63,7 +99,7 @@ class AuthTest extends TestCase
     {
         $payload = [
             'name' => 'Cliente Teste',
-            'email' => 'cliente@example.com',
+            'email' => 'cliente@gmail.com',
             'phone' => '(11) 99999-9999',
             'password' => 'senha-segura',
             'password_confirmation' => 'senha-segura',
@@ -78,24 +114,26 @@ class AuthTest extends TestCase
         ])->assertSessionHasErrors('birth_date');
 
         $this->assertGuest();
-        $this->assertDatabaseMissing('users', ['email' => 'cliente@example.com']);
+        $this->assertDatabaseMissing('users', ['email' => 'cliente@gmail.com']);
     }
 
     public function test_registration_normalizes_phone_and_email(): void
     {
         $this->post('/register', [
             'name' => '  Maria   da Silva  ',
-            'email' => '  MARIA@Example.COM ',
+            'email' => '  MARIA@Gmail.COM ',
             'phone' => '+55 (11) 98888-7777',
             'birth_date' => '1985-01-31',
+            'gender' => Gender::Other->value,
             'password' => 'senha-segura',
             'password_confirmation' => 'senha-segura',
-        ])->assertRedirect(route('client.dashboard'));
+        ])->assertRedirect(route('verification.notice'));
 
         $this->assertDatabaseHas('users', [
             'name' => 'Maria da Silva',
-            'email' => 'maria@example.com',
+            'email' => 'maria@gmail.com',
             'phone' => '11988887777',
+            'gender' => Gender::Other->value,
         ]);
     }
 
@@ -103,21 +141,21 @@ class AuthTest extends TestCase
     {
         $response = $this->post('/register', [
             'name' => 'Cliente Teste',
-            'email' => 'cliente@example.com',
+            'email' => 'cliente@gmail.com',
             'password' => 'senha-segura',
             'password_confirmation' => 'senha-segura',
         ]);
 
         $response->assertSessionHasErrors('phone');
         $this->assertGuest();
-        $this->assertDatabaseMissing('users', ['email' => 'cliente@example.com']);
+        $this->assertDatabaseMissing('users', ['email' => 'cliente@gmail.com']);
     }
 
     public function test_registration_rejects_invalid_phone(): void
     {
         $response = $this->post('/register', [
             'name' => 'Cliente Teste',
-            'email' => 'cliente@example.com',
+            'email' => 'cliente@gmail.com',
             'phone' => '1234',
             'password' => 'senha-segura',
             'password_confirmation' => 'senha-segura',
@@ -131,17 +169,18 @@ class AuthTest extends TestCase
     {
         $response = $this->post('/register', [
             'name' => 'Hacker',
-            'email' => 'hacker@example.com',
+            'email' => 'hacker@gmail.com',
             'phone' => '(11) 97777-6666',
             'birth_date' => '1992-03-10',
+            'gender' => Gender::Male->value,
             'password' => 'senha-segura',
             'password_confirmation' => 'senha-segura',
             'role' => UserRole::Admin->value,
         ]);
 
-        $response->assertRedirect(route('client.dashboard'));
+        $response->assertRedirect(route('verification.notice'));
         $this->assertDatabaseHas('users', [
-            'email' => 'hacker@example.com',
+            'email' => 'hacker@gmail.com',
             'role' => UserRole::Client->value,
         ]);
     }

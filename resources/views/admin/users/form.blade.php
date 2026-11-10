@@ -10,6 +10,7 @@
     );
     $phoneValue = old('phone', $user?->phone);
     $birthDateValue = old('birth_date', $user?->birth_date?->toDateString());
+    $genderValue = old('gender', $user?->gender?->value);
     $photoMaxKb = max(1, (int) config('attendant.photo_max_kb'));
 @endphp
 
@@ -102,6 +103,19 @@
                                     type="date"
                                     :value="$birthDateValue"
                                     help="Opcional. A conta exige 18 anos ou mais."
+                                />
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <x-ui.select
+                                    name="gender"
+                                    label="Sexo"
+                                    :options="$genders"
+                                    :value="$genderValue"
+                                    placeholder="Não informado"
+                                    help="Opcional. O cliente escolhe no cadastro; contas antigas e do Google podem ficar vazias."
                                 />
                             </div>
                         </div>

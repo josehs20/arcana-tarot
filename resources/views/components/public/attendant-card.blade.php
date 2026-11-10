@@ -20,7 +20,6 @@
 
 @php
     $status = $attendant->publicStatus();
-    $statusLabel = $status === 'busy' ? 'Em consulta' : null;
     $photoUrl = $attendant->photoUrl();
     $specialties = array_slice($attendant->specialties ?? [], 0, 3);
 @endphp
@@ -40,7 +39,7 @@
                 <a href="{{ route('attendants.show', $attendant) }}"
                    aria-label="Ver perfil de {{ $attendant->display_name }}">{{ $attendant->display_name }}</a>
             </h3>
-            <x-ui.status-badge :status="$status" :label="$statusLabel" />
+            <x-ui.status-badge :status="$status" />
         </div>
     </div>
 

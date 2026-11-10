@@ -7,32 +7,46 @@ use InvalidArgumentException;
 /**
  * Configuração de uma execução da importação de usuários legados.
  *
- * Os mapas de tabela/coluna existem para os casos em que a heurística do
- * `LegacySchemaInspector` não consegue decidir sozinha.
+ * O mapeamento do banco é fixo (`LegacySchemaPreset`); aqui ficam apenas as
+ * decisões da execução: arquivos, gravação, força e limite de registros.
  */
 final class LegacyImportOptions
 {
     /**
-     * @param  array<string, string|null>  $mapping  sobreposições de tabela/coluna
+     * Caminhos informados no comando: arquivos, diretório ou lista.
+     *
+     * @var array<int, string>
+     */
+    public readonly array $sourcePaths;
+
+    /**
+     * Caminho para exibição em relatório e auditoria.
+     */
+    public readonly string $dumpPath;
+
+    /**
+     * @param  string|array<int, string>  $dumpPath  arquivo, diretório ou lista
      */
     public function __construct(
-        public readonly string $dumpPath,
+        string|array $dumpPath,
         public readonly bool $execute = false,
         public readonly bool $force = false,
         public readonly ?int $limit = null,
-        public readonly array $mapping = [],
     ) {
-        if (trim($dumpPath) === '') {
-            throw new InvalidArgumentException('O caminho do dump legado é obrigatório.');
+        $paths = array_values(array_filter(
+            array_map(static fn (string|int|float|null $path): string => trim((string) $path), is_array($dumpPath) ? $dumpPath : [$dumpPath]),
+            static fn (string $path): bool => $path !== '',
+        ));
+
+        if ($paths === []) {
+            throw new InvalidArgumentException('O caminho do arquivo legado é obrigatório.');
         }
 
         if ($limit !== null && $limit < 1) {
             throw new InvalidArgumentException('O limite de registros deve ser maior que zero.');
         }
-    }
 
-    public function withLimit(?int $limit): self
-    {
-        return new self($this->dumpPath, $this->execute, $this->force, $limit, $this->mapping);
+        $this->sourcePaths = $paths;
+        $this->dumpPath = implode(', ', $paths);
     }
 }

@@ -190,11 +190,33 @@ class PublicSiteTest extends TestCase
         $this->get(route('home'))
             ->assertOk()
             ->assertSee('Atendente Ocupada')
-            ->assertSee('Em consulta');
+            ->assertSee('Ocupado');
 
         $this->get(route('attendants.show', $attendant))
             ->assertOk()
-            ->assertSee('Em consulta neste momento.')
+            ->assertSee('Ocupado no momento: não está recebendo novas solicitações.')
+            ->assertDontSee('Entrar para solicitar');
+    }
+
+    public function test_manually_busy_attendant_is_hidden_from_the_home_and_cannot_be_requested(): void
+    {
+        $attendant = $this->attendant([
+            'display_name' => 'Atendente Pausa',
+            'availability' => AttendantAvailability::Busy->value,
+        ]);
+
+        $this->get(route('home'))
+            ->assertOk()
+            ->assertDontSee('Atendente Pausa');
+
+        $this->get(route('attendants.index'))
+            ->assertOk()
+            ->assertSee('Atendente Pausa')
+            ->assertSee('Ocupado');
+
+        $this->get(route('attendants.show', $attendant))
+            ->assertOk()
+            ->assertSee('Ocupado no momento: não está recebendo novas solicitações.')
             ->assertDontSee('Entrar para solicitar');
     }
 

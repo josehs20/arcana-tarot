@@ -6,8 +6,9 @@
  *  - marca atividade apenas em interações reais (abrir a tela, digitar, clicar,
  *    enviar mensagem), nunca no batimento automático, para que uma aba ociosa
  *    não mantenha a consulta aberta indefinidamente;
- *  - avisa antes de sair ou depois de um período sem interação, e encerra a
- *    consulta quando o participante confirma a saída no aviso;
+ *  - avisa antes de sair e, apenas no lado do atendente, depois de um período
+ *    sem interação; quando o atendente confirma a saída no aviso, a consulta é
+ *    encerrada;
  *  - atualiza saldo e presença com os valores devolvidos pelo servidor.
  *
  * Ao navegar para a compra de créditos, o link é liberado sem aviso, mas a
@@ -17,6 +18,8 @@
  */
 
 import { Modal } from 'bootstrap';
+
+import { clearIntentionalNavigation, hasIntentionalNavigation, markIntentionalNavigation } from './navigation-intent';
 
 const ACTIVITY_FLUSH_MS = 5000;
 const PRESENCE_LABELS = {
@@ -236,7 +239,15 @@ async function heartbeat(activity = false) {
 function scheduleInactivityWarning() {
     window.clearTimeout(state.warningTimer);
 
-    if (!isActive() || state.leaving || document.visibilityState === 'hidden') {
+    /*
+     * O aviso de inatividade é só do atendente. O cliente recebe apenas o
+     * alerta de saldo baixo (`consultation-low-balance-warning`), disparado por
+     * `consultation-workspace.js`: cobrar atenção dos dois lados ao mesmo tempo
+     * travava a conversa sem que o cliente pudesse resolver nada. Sem o modal no
+     * DOM, nenhum temporizador é criado — o batimento de presença continua
+     * mantendo a sessão viva.
+     */
+    if (!state.inactivityModal || !isActive() || state.leaving || document.visibilityState === 'hidden') {
         return;
     }
 
@@ -265,6 +276,30 @@ function markActivity() {
 
 function isSamePage(url) {
     return url.origin === window.location.origin && url.pathname === window.location.pathname;
+}
+
+/**
+ * `true` quando o clique descarrega esta página na mesma aba.
+ *
+ * Os links isentos do modal de saída — `data-allow-leave`, histórico/recibo da
+ * própria consulta — continuam navegando na hora, mas precisam declarar a
+ * intenção para o guard não abrir o diálogo nativo no meio de uma ação
+ * planejada. Âncoras de mesma página não descarregam nada, então ficam de fora.
+ */
+function navigatesInSameTab(anchor) {
+    if (anchor.hasAttribute('download')
+        || anchor.target === '_blank'
+        || (anchor.dataset.bsToggle && anchor.dataset.bsToggle !== 'tab')) {
+        return false;
+    }
+
+    const url = new URL(anchor.href);
+
+    if (!['http:', 'https:'].includes(url.protocol) || url.origin !== window.location.origin) {
+        return false;
+    }
+
+    return !isSamePage(url);
 }
 
 function shouldWarnBeforeNavigation(anchor) {
@@ -302,10 +337,22 @@ function bindInteractions() {
         document.addEventListener(eventName, markActivity, { passive: true });
     });
 
-    document.addEventListener('submit', () => {
-        if (isActive()) {
-            heartbeat(true);
+    document.addEventListener('submit', (event) => {
+        if (!isActive()) {
+            return;
         }
+
+        /*
+         * Formulários que navegam de propósito (encerrar consulta, sair da
+         * conta) trazem `data-allow-leave`: a submissão recarrega a página e,
+         * sem a intenção declarada, o `beforeunload` abriria o diálogo nativo
+         * no meio de uma ação que a pessoa acabou de pedir.
+         */
+        if (event.target instanceof HTMLFormElement && event.target.hasAttribute('data-allow-leave')) {
+            markIntentionalNavigation();
+        }
+
+        heartbeat(true);
     });
 
     document.addEventListener('visibilitychange', () => {
@@ -333,6 +380,9 @@ function bindInteractions() {
             state.leaving = true;
             postPresence('leave', { keepalive: true });
         }
+
+        // A página saiu: a próxima não pode herdar a intenção desta aba.
+        clearIntentionalNavigation();
     });
 
     /*
@@ -342,11 +392,15 @@ function bindInteractions() {
      *
      * `leaveWithoutEnding` marca `leaving` antes de navegar, então a saída
      * confirmada nos modais e o redirecionamento para o histórico não abrem o
-     * aviso do navegador. O texto exibido é o nativo do navegador — a página não
-     * pode personalizá-lo — e a decisão sobre a cobrança continua no servidor.
+     * aviso do navegador. O mesmo vale para as ações que chamam
+     * `markIntentionalNavigation()` (encerrar consulta, sair da conta, compra de
+     * créditos e redirecionamentos automáticos): o diálogo nativo fica restrito
+     * às saídas que a página não consegue interceptar. O texto exibido é o
+     * nativo do navegador — a página não pode personalizá-lo — e a decisão sobre
+     * a cobrança continua no servidor.
      */
     window.addEventListener('beforeunload', (event) => {
-        if (!isActive() || state.leaving) {
+        if (!isActive() || state.leaving || hasIntentionalNavigation()) {
             return;
         }
 
@@ -355,7 +409,17 @@ function bindInteractions() {
     });
 
     window.addEventListener('pageshow', (event) => {
-        if (event.persisted && state.leaving) {
+        if (!event.persisted) {
+            return;
+        }
+
+        /*
+         * Voltou do bfcache: a intenção da navegação anterior já foi consumida
+         * e o aviso precisa ser rearmado junto com a presença.
+         */
+        clearIntentionalNavigation();
+
+        if (state.leaving) {
             state.leaving = false;
             state.token = window.sessionStorage.getItem(state.tokenKey);
             markActivity();
@@ -367,13 +431,26 @@ function bindInteractions() {
     document.addEventListener('click', (event) => {
         const anchor = event.target.closest('a[href]');
 
-        if (!shouldWarnBeforeNavigation(anchor)) {
+        if (!anchor || !isActive() || state.leaving) {
             return;
         }
 
-        event.preventDefault();
-        state.pendingNavigation = anchor.href;
-        state.navigationModal?.show();
+        if (shouldWarnBeforeNavigation(anchor)) {
+            event.preventDefault();
+            state.pendingNavigation = anchor.href;
+            state.navigationModal?.show();
+
+            return;
+        }
+
+        /*
+         * Links isentos do modal — `data-allow-leave` (compra de créditos) e a
+         * tela de histórico/recibo da consulta — seguem direto, mas declaram a
+         * intenção para o `beforeunload` não abrir o alerta nativo.
+         */
+        if (navigatesInSameTab(anchor)) {
+            markIntentionalNavigation();
+        }
     });
 }
 

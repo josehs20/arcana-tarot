@@ -6,6 +6,7 @@
  * sinais são sincronizados pelo canal privado da consulta (Reverb) e também
  * por polling autenticado, garantindo funcionamento mesmo sem WebSocket.
  */
+import { markIntentionalNavigation } from './navigation-intent';
 const callState = {
     section: null,
     role: null,
@@ -523,7 +524,13 @@ function handleEndedConsultation() {
     if (callState.consultationStatus !== 'active') {
         callState.endedHandled = true;
         stopMedia();
-        window.setTimeout(() => window.location.reload(), 2000);
+
+        // Fim confirmado pelo serviço de chamada: o recarregamento apenas
+        // atualiza a tela e não deve abrir o aviso nativo de navegação.
+        window.setTimeout(() => {
+            markIntentionalNavigation();
+            window.location.reload();
+        }, 2000);
     }
 }
 

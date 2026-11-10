@@ -131,4 +131,31 @@ class AdminAttendantSoundTest extends TestCase
             ->assertOk()
             ->assertDontSee('data-request-sound', false);
     }
+
+    /**
+     * O MP3 da plataforma (`olha-o-gas`) é versionado em `public/`, então o
+     * painel precisa receber a URL do arquivo mesmo sem upload — e a tela
+     * administrativa não deve tratá-lo como MP3 personalizado removível.
+     */
+    public function test_bundled_platform_mp3_is_delivered_to_the_panel_without_being_an_upload(): void
+    {
+        $admin = User::factory()->admin()->create();
+        [$attendant, $profile] = $this->attendant();
+        $profile->forceFill(['request_sound' => AttendantRequestSound::OlhaOGas->value])->save();
+
+        $this->actingAs($attendant)
+            ->get(route('attendant.dashboard'))
+            ->assertOk()
+            ->assertSee('data-request-sound="olha-o-gas"', false)
+            ->assertSee('data-request-sound-url="'.asset('olha-o-gas.mp3').'"', false);
+
+        $this->assertNull($profile->fresh()->requestSoundUrl());
+
+        $this->actingAs($admin)
+            ->get(route('admin.attendants.index'))
+            ->assertOk()
+            ->assertSee('Olha o gás (MP3)')
+            ->assertSee('data-preview-request-sound-url="'.asset('olha-o-gas.mp3').'"', false)
+            ->assertDontSee('Remover MP3');
+    }
 }

@@ -103,6 +103,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Email Verification
+    |--------------------------------------------------------------------------
+    |
+    | O cadastro por e-mail usa um link assinado. O prazo abaixo (em minutos)
+    | define por quanto tempo esse link continua válido; depois disso o cliente
+    | precisa pedir um novo link na tela de confirmação.
+    |
+    */
+
+    'verification' => [
+        'expire' => (int) env('EMAIL_VERIFICATION_EXPIRE_MINUTES', 60),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Password Confirmation Timeout
     |--------------------------------------------------------------------------
     |

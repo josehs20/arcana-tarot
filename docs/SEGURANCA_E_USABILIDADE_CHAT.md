@@ -156,6 +156,13 @@ Não há aviso para:
 - links externos, mesma página ou a tela de histórico/recibo da própria
   consulta.
 
+O aviso nativo de saída (`beforeunload`) segue a mesma lista: formulários marcados
+com `data-allow-leave` (**Encerrar consulta** e **Sair da conta**) e os
+redirecionamentos automáticos do painel declaram a intenção em
+`resources/js/navigation-intent.js`, então o diálogo do navegador fica restrito
+ao que a página não consegue interceptar — botão voltar, recarregar, fechar a aba
+e URL digitada.
+
 Se o servidor responder que a consulta não está mais ativa, o cliente para os
 batimentos e redireciona para a tela de histórico, onde o desfecho e o recibo
 ficam visíveis.

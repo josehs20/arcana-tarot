@@ -19,6 +19,11 @@
     $autoOpen = $autoOpen || $forceOpen;
     $ratingId = $modalId.'-rating';
     $messageId = $modalId.'-message';
+
+    // A nota só é reposta quando foi este o formulário que falhou: em
+    // `client/testimonials.blade.php` há um modal por consulta e `old('rating')`
+    // ligaria a mesma estrela em todos eles.
+    $selectedRating = $forceOpen ? (string) old('rating') : '';
 @endphp
 
 <div
@@ -49,20 +54,41 @@
                     </p>
 
                     <div class="mb-3">
-                        <label class="form-label" for="{{ $ratingId }}">Nota</label>
-                        <select
-                            class="form-select @error('rating') is-invalid @enderror"
-                            id="{{ $ratingId }}"
-                            name="rating"
-                            required
+                        <span class="form-label d-block" id="{{ $ratingId }}-label">Nota</span>
+                        {{--
+                            Estrelas clicáveis: os rádios nativos continuam sendo o
+                            campo enviado (`name="rating"`), então validação, teclado e
+                            leitores de tela funcionam sem depender do JS. O JS apenas
+                            acende as estrelas até a nota escolhida.
+                        --}}
+                        <div
+                            class="star-rating @error('rating') is-invalid @enderror"
+                            role="radiogroup"
+                            aria-labelledby="{{ $ratingId }}-label"
+                            data-star-rating
                         >
-                            <option value="">Escolha de 1 a 5 estrelas</option>
-                            @for ($stars = 5; $stars >= 1; $stars--)
-                                <option value="{{ $stars }}" @selected((string) old('rating') === (string) $stars)>
-                                    {{ str_repeat('★', $stars) }} — {{ $stars }} {{ $stars === 1 ? 'estrela' : 'estrelas' }}
-                                </option>
+                            @for ($stars = 1; $stars <= 5; $stars++)
+                                <input
+                                    class="star-rating__input visually-hidden"
+                                    type="radio"
+                                    id="{{ $ratingId }}-{{ $stars }}"
+                                    name="rating"
+                                    value="{{ $stars }}"
+                                    autocomplete="off"
+                                    required
+                                    @checked($selectedRating === (string) $stars)
+                                >
+                                <label
+                                    class="star-rating__star"
+                                    for="{{ $ratingId }}-{{ $stars }}"
+                                    data-star-rating-star="{{ $stars }}"
+                                >
+                                    <x-ui.icon name="star" width="30" height="30" />
+                                    <span class="visually-hidden">{{ $stars }} {{ $stars === 1 ? 'estrela' : 'estrelas' }}</span>
+                                </label>
                             @endfor
-                        </select>
+                            <span class="star-rating__value" data-star-rating-value aria-hidden="true">Escolha de 1 a 5 estrelas</span>
+                        </div>
                         @error('rating')
                             <div class="invalid-feedback">{{ $message }}</div>
                         @enderror

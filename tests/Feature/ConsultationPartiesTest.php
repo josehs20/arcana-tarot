@@ -7,6 +7,7 @@ use App\Models\Consultation;
 use App\Models\User;
 use App\Models\Wallet;
 use App\Support\ConsultationPartyPresenter;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -157,7 +158,15 @@ class ConsultationPartiesTest extends TestCase
 
     public function test_attendant_workspace_shows_the_client_card_with_the_remaining_balance(): void
     {
+        Carbon::setTestNow('2026-01-10 12:00:00');
+
         [$client, $attendant, $consultation] = $this->conversation();
+
+        // Dois minutos cobrados só existem depois de dois minutos de relógio. O
+        // contador é calculado em dinheiro — (minutos pagos + minutos que o
+        // saldo ainda paga) × 60 − tempo percorrido —, então a fixture precisa
+        // ser coerente: 2 + 3 minutos comprados, 2 já percorridos = 180 s.
+        $consultation->forceFill(['started_at' => now()->subMinutes(2)])->save();
 
         $this->actingAs($attendant)
             ->get(route('consultations.workspace', $consultation))

@@ -33,6 +33,7 @@
         [
             'label' => 'Sistema',
             'links' => [
+                ['route' => 'admin.emails.index', 'pattern' => 'admin.emails.*', 'label' => 'Disparo de e-mails', 'icon' => 'mail'],
                 ['route' => 'admin.audit.index', 'pattern' => 'admin.audit.*', 'label' => 'Auditoria', 'icon' => 'shield'],
             ],
         ],

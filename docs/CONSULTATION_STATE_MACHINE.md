@@ -140,32 +140,44 @@ e um atendente não acessa o cancelamento do cliente.
 
 ---
 
-## 6. Presença do atendente
+## 6. Disponibilidade do atendente
 
-- `attendant_profiles.availability` persiste somente `online`/`offline`;
-  `busy` é sempre derivado de consulta `active` e nunca gravado.
+- `attendant_profiles.availability` persiste `online`, `busy` ("Ocupado") e
+  `offline`. `busy` é um estado declarado: o atendente pode pausar a fila
+  manualmente no painel e o aceite de uma consulta também o coloca nesse estado
+  até o encerramento.
+- Somente perfis **publicados e `online`** recebem novas solicitações
+  (`AttendantProfile::scopeAvailable`). `busy` e `offline` são recusados no
+  pedido e no aceite; o perfil `busy` continua listado no diretório e no perfil
+  público, com o status textual "Ocupado".
+- Com consulta `active` a disponibilidade fica **congelada**: qualquer tentativa
+  de troca responde erro de validação e o perfil permanece `busy`.
 - No **login** (senha ou Google) de um usuário com papel `attendant`,
   `AttendantAvailabilityManager::signIn()` coloca o perfil em `online`
   (auditoria `attendant.availability_changed` com motivo `login`) e renova
   `last_seen_at`. Perfil ausente, perfil não publicado ou consulta `active`
   mantêm a disponibilidade como está — o login nunca falha por causa do
   status. Perfil que já está `online` apenas renova a presença, sem auditoria
-  duplicada.
+  duplicada; um `busy` remanescente (sessão encerrada sem logout) volta a
+  `online`.
 - `attendant_profiles.last_seen_at` é atualizado por `markSeen()` quando o
-  atendente fica online, abre o painel, visualiza a consulta ou aceita a
-  solicitação. A escrita é limitada por `last_seen_touch_seconds` para evitar
-  update em cada requisição.
-- Ao encerrar/interromper, `releaseAttendantPresence()` mantém o atendente
-  `online` somente se houver presença recente
-  (`presence_timeout_minutes`); caso contrário, volta para `offline` e registra
-  auditoria `attendant.availability_changed` com motivo
+  atendente fica online/ocupado, abre o painel, visualiza a consulta, aceita a
+  solicitação ou envia batimento de presença pela tela de atendimento. A escrita
+  é limitada por `last_seen_touch_seconds` para evitar update em cada requisição.
+- No **aceite**, `occupyAttendant()` grava `online → busy` com auditoria
+  `attendant.availability_changed` e motivo `consultation_started`.
+- Ao encerrar/interromper, `releaseAttendantPresence()` devolve o perfil `busy`
+  para `online` (auditoria `consultation_finished`) somente se houver presença
+  recente (`presence_timeout_minutes`); caso contrário, volta para `offline` e
+  registra auditoria `attendant.availability_changed` com motivo
   `stale_presence_after_consultation`.
 - No **logout** de um usuário com papel `attendant`,
-  `AttendantAvailabilityManager::signOut()` coloca o perfil em `offline`
-  (auditoria `attendant.availability_changed` com motivo `logout`). O logout
-  nunca falha por causa disso: sem perfil, já `offline` ou com consulta `active`
-  nada muda — a disponibilidade continua congelada para que a rotina de
-  presença possa interromper a sessão órfã.
+  `AttendantAvailabilityManager::signOut()` coloca um perfil `online` ou `busy`
+  em `offline` (auditoria `attendant.availability_changed` com motivo
+  `logout`). O logout nunca falha por causa disso: sem perfil ou já `offline`
+  nada muda. Para não duplicar auditoria, o encerramento da consulta ativa no
+  logout usa `endBySystem(..., releaseAvailability: false)` e deixa o `offline`
+  com o `signOut()`.
 - A presença do **navegador** é registrada em `consultation_presence_sessions`
   por batimentos HTTP. Cada aba tem um token opaco; o estado exibido é
   `online`, `reconnecting` ou `offline` por papel. Batimento não conta como

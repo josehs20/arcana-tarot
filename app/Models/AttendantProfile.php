@@ -268,6 +268,10 @@ class AttendantProfile extends Model
 
     /**
      * URL pública do MP3 personalizado, quando o arquivo existe no disco.
+     *
+     * Refere-se apenas ao upload feito pela administração: o toque predefinido
+     * `olha-o-gas` é um arquivo versionado e não aparece nesta checagem (a tela
+     * administrativa usa este método para decidir se oferece "Remover MP3").
      */
     public function requestSoundUrl(): ?string
     {
@@ -278,6 +282,20 @@ class AttendantProfile extends Model
         $disk = Storage::disk('public');
 
         return $disk->exists($this->request_sound_path) ? $disk->url($this->request_sound_path) : null;
+    }
+
+    /**
+     * URL pública do arquivo do toque efetivamente reproduzido.
+     *
+     * Cobre os dois toques que dependem de download: o MP3 versionado da
+     * plataforma (`olha-o-gas`) e o MP3 enviado pela administração (`custom`).
+     * Nos toques sintetizados o retorno é `null` e o navegador gera o som.
+     */
+    public function effectiveRequestSoundUrl(): ?string
+    {
+        $sound = $this->effectiveRequestSound();
+
+        return $sound->isCustom() ? $this->requestSoundUrl() : $sound->url();
     }
 
     /**
@@ -298,7 +316,8 @@ class AttendantProfile extends Model
     }
 
     /**
-     * Perfis que aceitam novas solicitações (online, mesmo que em consulta).
+     * Perfis que aceitam novas solicitações agora: publicados e online.
+     * Ocupado e offline ficam de fora.
      */
     public function scopeAvailable(Builder $query): Builder
     {
@@ -307,17 +326,20 @@ class AttendantProfile extends Model
     }
 
     /**
-     * Online primeiro; depois ordem alfabética do nome público.
+     * Online primeiro, ocupado depois; por fim ordem alfabética do nome público.
      */
     public function scopeOrderForDirectory(Builder $query): Builder
     {
         return $query
-            ->orderByRaw('case when availability = ? then 0 else 1 end', [AttendantAvailability::Online->value])
+            ->orderByRaw(
+                'case availability when ? then 0 when ? then 1 else 2 end',
+                [AttendantAvailability::Online->value, AttendantAvailability::Busy->value],
+            )
             ->orderBy('display_name');
     }
 
     /**
-     * Status público: online, busy (em consulta) ou offline.
+     * Status público: online, busy (ocupado ou em consulta) ou offline.
      */
     public function publicStatus(): string
     {
@@ -327,7 +349,7 @@ class AttendantProfile extends Model
             $busy = $this->activeConsultation !== null;
         }
 
-        if ($busy) {
+        if ($busy || $this->availability === AttendantAvailability::Busy) {
             return 'busy';
         }
 

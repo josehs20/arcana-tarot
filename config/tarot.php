@@ -64,6 +64,25 @@ return [
         'quality' => (int) env('TAROT_THUMBNAIL_QUALITY', 76),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Miniatura das cartas do chat
+    |--------------------------------------------------------------------------
+    |
+    | O balão da conversa desenha a carta em no máximo 104 px de largura
+    | (`.chat-card`), mas o histórico é recarregado por inteiro a cada página.
+    | Servir o snapshot original custava 30–60 KB por carta; a 180 px o WebP
+    | fica em torno de 15 KB sem perda perceptível nesse tamanho. A imagem cheia
+    | continua disponível no link do balão. O snapshot nunca é alterado, então a
+    | miniatura é gerada uma única vez e reaproveitada nas próximas leituras.
+    |
+    */
+
+    'snapshot_thumbnail' => [
+        'width' => (int) env('TAROT_SNAPSHOT_THUMBNAIL_WIDTH', 180),
+        'quality' => (int) env('TAROT_SNAPSHOT_THUMBNAIL_QUALITY', 72),
+    ],
+
     /** @var array<string, string> MIME real => extensão usada no nome aleatório. */
     'allowed_image_mimes' => [
         'image/jpeg' => 'jpg',

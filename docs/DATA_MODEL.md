@@ -47,14 +47,16 @@ polimórficas:
 |---|---|---|
 | `id` | bigint PK | |
 | `name` | string | |
-| `email` | string unique | |
-| `email_verified_at` | timestamp nullable | |
+| `email` | string unique | cadastro por formulário limitado a gmail/hotmail/outlook/ig.com.br |
+| `email_verified_at` | timestamp nullable | preenchido ao abrir o link de confirmação (Google grava na criação); backfill marca contas antigas |
 | `password` | string | |
 | `remember_token` | string nullable | |
 | `role` | string(20) | enum `UserRole`: `admin`, `attendant`, `client` |
 | `is_active` | boolean | desativação administrativa |
 | `phone` | string(20) nullable | índice; obrigatório na validação do cadastro |
-| `phone_verified_at` | timestamp nullable | reservado para verificação por SMS |
+| `phone_verified_at` | timestamp nullable | histórico das contas confirmadas por SMS; nada novo grava aqui |
+| `birth_date` | date nullable | obrigatório no cadastro por e-mail; nulo em contas antigas e do Google |
+| `gender` | string(16) nullable | enum `Gender`: `female`, `male`, `other`; obrigatório no cadastro por e-mail |
 | `theme_preference` | string(16) | enum `ThemePreference`; padrão `light` |
 | `chat_send_on_enter` | boolean | padrão `true`; Enter envia e Shift+Enter quebra linha |
 | `chat_sound_enabled` | boolean | padrão `true`; aviso sonoro de mensagem recebida |
@@ -76,17 +78,22 @@ polimórficas:
 | `request_sound_path` | string nullable | MP3 personalizado no disco `public` (`attendant-sounds/`), usado quando `request_sound = custom` |
 | `commission_rate_bps` | unsignedInteger | comissão individual em **basis points** (0–10000) |
 | `is_published` | boolean | status de publicação |
-| `availability` | string(20) | `offline`/`online`; `busy` é derivado de consulta ativa |
+| `availability` | string(20) | `offline`/`online`/`busy`; `busy` é persistido (pausa manual ou consulta ativa) |
 | `last_seen_at` | timestamp nullable | sinal de presença para heartbeat/encerramento (Prompt 10) |
 | `timestamps` | | |
 
 > `photo_path` e `availability` foram adicionados no Prompt 06 para o site
-> público. O toggle manual online/offline no painel e as transições de estado são
-> implementados no Prompt 08; `busy` nunca é persistido. `last_seen_at` foi
+> público. O toggle manual de disponibilidade no painel e as transições de estado
+> são implementados no Prompt 08. `busy` é um estado persistido: o atendente pode
+> pausar a fila manualmente e o aceite de uma consulta também o coloca nesse
+> estado até o encerramento; perfis ocupados continuam no diretório, mas não
+> recebem novas solicitações (`AttendantProfile::scopeAvailable` exige `online`).
+> `last_seen_at` foi
 > adicionado no Prompt 10 e sustenta a política de presença descrita em
 > `docs/CONSULTATION_STATE_MACHINE.md`. `request_sound` aceita `siren`
-> (padrão), `bell`, `chime`, `pulse` e `custom`; os quatro primeiros são
-> sintetizados no navegador e `custom` usa o MP3 apontado por
+> (padrão), `bell`, `chime`, `pulse`, `olha-o-gas` e `custom`; sirene, campainha,
+> sino e bip são sintetizados no navegador, `olha-o-gas` usa o MP3 versionado em
+> `public/olha-o-gas.mp3` e `custom` usa o MP3 apontado por
 > `request_sound_path` (até 5 segundos e 1 MB, no disco `public`). Se o arquivo
 > personalizado faltar, o painel volta a tocar a sirene. O som só altera o aviso
 > de nova solicitação, nunca o aceite ou a cobrança.

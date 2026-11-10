@@ -759,6 +759,68 @@ class ConsultationChatTest extends TestCase
     }
 
     /**
+     * O balão do chat usa a miniatura WebP do snapshot.
+     *
+     * A página de atendimento recarrega inteira a cada navegação do histórico e
+     * o balão desenha a carta em ~150 px: servir o snapshot original custava
+     * dezenas de KB por carta. O link do balão continua apontando para a imagem
+     * cheia, e a autorização é a mesma nas duas rotas.
+     */
+    public function test_chat_card_bubble_uses_snapshot_thumbnail_and_keeps_the_full_image_link(): void
+    {
+        [$client, $attendant, $consultation] = $this->conversation();
+        [$card] = $this->card();
+
+        $this->actingAs($attendant)
+            ->post(route('consultations.cards.store', $consultation), ['tarot_card_id' => $card->id])
+            ->assertRedirect();
+
+        $cardMessage = ConsultationMessage::query()->sole();
+        $textMessage = ConsultationMessage::factory()->create([
+            'consultation_id' => $consultation->id,
+            'sender_id' => $client->id,
+            'type' => MessageType::Text->value,
+        ]);
+
+        $this->actingAs($client)
+            ->get(route('consultations.show', $consultation))
+            ->assertOk()
+            ->assertSee('src="'.route('consultations.messages.thumb', [$consultation, $cardMessage]).'"', false)
+            ->assertSee('href="'.route('consultations.messages.image', [$consultation, $cardMessage]).'"', false);
+
+        $this->actingAs($client)
+            ->get(route('consultations.messages.thumb', [$consultation, $cardMessage]))
+            ->assertOk()
+            ->assertHeader('Content-Type', 'image/webp')
+            // A imagem do chat continua fora de qualquer cache: o conteúdo é
+            // privado e a rota revalida a participação a cada leitura.
+            ->assertHeader('Cache-Control', 'no-store, private')
+            ->assertHeader('X-Content-Type-Options', 'nosniff');
+
+        // O WebP é gravado dentro do diretório da consulta: a próxima abertura
+        // do histórico não repete a redução.
+        $this->assertTrue(
+            Storage::disk('tarot_private')->exists(
+                'consultation-cards/'.$consultation->getKey().'/thumbnails/'
+                .pathinfo((string) $cardMessage->image_path, PATHINFO_FILENAME).'.webp',
+            ),
+        );
+
+        // A autorização é a mesma da imagem cheia.
+        $this->actingAs(User::factory()->create())
+            ->get(route('consultations.messages.thumb', [$consultation, $cardMessage]))
+            ->assertForbidden();
+
+        $this->actingAs(User::factory()->admin()->create())
+            ->get(route('consultations.messages.thumb', [$consultation, $cardMessage]))
+            ->assertForbidden();
+
+        $this->actingAs($attendant)
+            ->get(route('consultations.messages.thumb', [$consultation, $textMessage]))
+            ->assertNotFound();
+    }
+
+    /**
      * Emoji no compositor: o seletor aparece para os dois participantes e uma
      * mensagem só de emoji é aceita e gravada como qualquer texto.
      */

@@ -12,8 +12,8 @@ use Illuminate\Support\Facades\DB;
  * Bônus de créditos no primeiro acesso do cliente.
  *
  * A concessão é opcional e configurável em /admin/financeiro/bonus. Quando
- * ativa, todo cliente que conclui o primeiro cadastro (e-mail com SMS
- * confirmado ou Google) recebe os créditos uma única vez: a chave de
+ * ativa, todo cliente que conclui o primeiro cadastro — confirmando o e-mail ou
+ * entrando pelo Google — recebe os créditos uma única vez: a chave de
  * idempotência `first_access_bonus:user:{id}` garante que reenviar o cadastro,
  * repetir o login social ou reprocessar a rotina não credite duas vezes.
  *

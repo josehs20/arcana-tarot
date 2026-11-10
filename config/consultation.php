@@ -66,6 +66,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Aviso de saldo baixo
+    |--------------------------------------------------------------------------
+    |
+    | Quando o contador regressivo do servidor chega a este limite, o cliente
+    | recebe um aviso na tela de atendimento com o caminho para comprar
+    | créditos. É só um alerta de interface: a cobrança e o encerramento por
+    | saldo insuficiente continuam decididos no servidor.
+    |
+    */
+
+    'low_balance_warning_minutes' => max(1, (int) env('CONSULTATION_LOW_BALANCE_WARNING_MINUTES', 5)),
+
+    /*
+    |--------------------------------------------------------------------------
     | Chat persistente
     |--------------------------------------------------------------------------
     |

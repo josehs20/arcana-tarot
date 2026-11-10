@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\Gender;
 use App\Enums\LedgerEntryType;
 use App\Enums\UserRole;
 use App\Models\AuditLog;
@@ -75,12 +76,12 @@ class LegacyUserImportTest extends TestCase
         $this->assertSame(LedgerEntryType::Credit, $entry->type);
         $this->assertSame(15075, $entry->amount_cents);
         $this->assertSame(15075, $entry->balance_after_cents);
-        $this->assertSame('legacy-import:usuarios:7', $entry->idempotency_key);
+        $this->assertSame('legacy-import:eam_usuarios:7', $entry->idempotency_key);
 
         $audit = AuditLog::query()->where('action', 'user.imported_from_legacy')->sole();
 
         $this->assertSame($user->getKey(), $audit->subject_id);
-        $this->assertSame('usuarios', $audit->metadata['source_table']);
+        $this->assertSame('eam_usuarios', $audit->metadata['source_table']);
         $this->assertSame('7', $audit->metadata['legacy_key']);
         $this->assertSame('bcrypt', $audit->metadata['password_format']);
         $this->assertTrue($audit->metadata['password_reused']);
@@ -117,7 +118,7 @@ class LegacyUserImportTest extends TestCase
     public function test_credits_from_separate_table_use_last_balance_of_each_user(): void
     {
         $dump = $this->createUsersTable()
-            .$this->insert('usuarios', ['id', 'nome', 'email', 'senha', 'telefone'], [
+            .$this->insert('eam_usuarios', ['id', 'nome', 'email', 'senha', 'telefone'], [
                 [1, 'Maria', 'maria@example.com', 'segredo123', null],
                 [2, 'João', 'joao@example.com', 'segredo123', null],
             ])
@@ -186,7 +187,7 @@ SQL
         $this->assertSame(2, AuditLog::query()->where('action', 'user.import_batch_from_legacy')->count());
     }
 
-    public function test_dump_without_credentials_is_blocked(): void
+    public function test_dump_without_the_legacy_users_table_is_blocked(): void
     {
         $path = $this->write(<<<'SQL'
 CREATE TABLE `batata` (
@@ -199,8 +200,8 @@ INSERT INTO `batata` (`id`, `usuario`, `senha`) VALUES (1, 'jakson', '123');
 SQL);
 
         $this->artisan('arcana:import-legacy-users', ['file' => $path, '--execute' => true])
-            ->expectsOutputToContain('batata')
-            ->expectsOutputToContain('Nenhuma tabela com e-mail e senha')
+            ->expectsOutputToContain('eam_usuarios')
+            ->expectsOutputToContain('não existe no dump')
             ->expectsOutputToContain('Importação bloqueada')
             ->assertExitCode(1);
 
@@ -244,13 +245,13 @@ SQL);
     public function test_malformed_insert_aborts_with_error_and_keeps_previous_rows(): void
     {
         $path = $this->write(<<<'SQL'
-CREATE TABLE `usuarios` (
+CREATE TABLE `eam_usuarios` (
   `id` int(11) NOT NULL,
   `email` varchar(120) NOT NULL,
   `senha` varchar(255) NOT NULL
 );
-INSERT INTO `usuarios` (`id`, `email`, `senha`) VALUES (1, 'maria@example.com', 'segredo123');
-INSERT INTO `usuarios` (`id`, `email` VALUES (2, 'joao@example.com', 'segredo123');
+INSERT INTO `eam_usuarios` (`id`, `email`, `senha`) VALUES (1, 'maria@example.com', 'segredo123');
+INSERT INTO `eam_usuarios` (`id`, `email` VALUES (2, 'joao@example.com', 'segredo123');
 
 SQL);
 
@@ -278,44 +279,185 @@ SQL);
         $this->assertSame(0, CreditLedgerEntry::query()->count());
     }
 
-    public function test_limit_and_table_overrides_control_the_import(): void
+    public function test_limit_controls_how_many_records_are_read(): void
     {
-        $dump = <<<'SQL'
-CREATE TABLE `tb_acesso` (
-  `codigo` int(11) NOT NULL,
-  `contato` varchar(120) NOT NULL,
-  `segredo` varchar(255) NOT NULL,
-  `apelido` varchar(120) DEFAULT NULL,
-  `celular` varchar(20) DEFAULT NULL
-);
-INSERT INTO `tb_acesso` (`codigo`, `contato`, `segredo`, `apelido`, `celular`) VALUES
-(11, 'primeira@example.com', 'segredo123', 'Primeira', '11999999999'),
-(12, 'segunda@example.com', 'segredo123', 'Segunda', NULL);
+        $path = $this->write($this->usersDump([
+            [11, 'Primeira', 'primeira@example.com', 'segredo123', '11999999999'],
+            [12, 'Segunda', 'segunda@example.com', 'segredo123', null],
+        ]));
 
-SQL;
-
-        $path = $this->write($dump);
-
-        $this->artisan('arcana:import-legacy-users', ['file' => $path])
-            ->expectsOutputToContain('Nenhuma tabela com e-mail e senha')
-            ->assertExitCode(1);
-
-        $this->artisan('arcana:import-legacy-users', [
-            'file' => $path,
-            '--execute' => true,
-            '--users-table' => 'tb_acesso',
-            '--email-column' => 'contato',
-            '--password-column' => 'segredo',
-            '--name-column' => 'apelido',
-            '--phone-column' => 'celular',
-            '--user-key-column' => 'codigo',
-            '--credits-table' => 'none',
-            '--limit' => 1,
-        ])->assertExitCode(0);
+        $this->artisan('arcana:import-legacy-users', ['file' => $path, '--execute' => true, '--limit' => 1])
+            ->expectsOutputToContain('Registros lidos: 1')
+            ->assertExitCode(0);
 
         $this->assertSame(1, User::query()->count());
         $this->assertSame('Primeira', User::query()->sole()->name);
         $this->assertSame(0, Wallet::query()->sole()->balance_cents);
+    }
+
+    public function test_execute_imports_complementary_data_from_the_clients_table(): void
+    {
+        $path = $this->write($this->profileDump(
+            [[7, 'Maria Silva', 'maria@example.com', 'segredo123']],
+            [[1, 7, 'maria@example.com', '(11) 98888-7777', '1985-01-31', 'Feminino']],
+        ));
+
+        $this->artisan('arcana:import-legacy-users', ['file' => $path, '--execute' => true])
+            ->expectsOutputToContain('Dados complementares: eam_clientes')
+            ->expectsOutputToContain('nasc. 31/01/1985')
+            ->assertExitCode(0);
+
+        $user = User::query()->where('email', 'maria@example.com')->sole();
+
+        $this->assertSame('11988887777', $user->phone);
+        $this->assertSame('1985-01-31', $user->birth_date?->format('Y-m-d'));
+        $this->assertSame(Gender::Female, $user->gender);
+        $this->assertSame(UserRole::Client, $user->role);
+
+        $audit = AuditLog::query()->where('action', 'user.imported_from_legacy')->sole();
+
+        $this->assertSame('1985-01-31', $audit->metadata['birth_date']);
+        $this->assertSame('female', $audit->metadata['gender']);
+        $this->assertTrue($audit->metadata['profile_matched']);
+
+        $batch = AuditLog::query()->where('action', 'user.import_batch_from_legacy')->sole();
+
+        $this->assertSame('eam_clientes', $batch->metadata['profile_source']);
+        $this->assertSame('eam_usuarios', $batch->metadata['source_table']);
+    }
+
+    /**
+     * Sexo, nascimento e telefone são opcionais: o legado pode não ter a linha
+     * complementar, trazer `0000-00-00` ou um valor desconhecido. Nesses casos o
+     * campo fica vazio — nunca um palpite.
+     */
+    public function test_profile_data_is_optional_and_unusable_values_are_left_empty(): void
+    {
+        $path = $this->write($this->profileDump(
+            [
+                [1, 'Sem Perfil', 'sem.perfil@example.com', 'segredo123'],
+                [2, 'Data Zerada', 'zerada@example.com', 'segredo123'],
+            ],
+            [[1, 2, 'zerada@example.com', '1234', '0000-00-00', 'X']],
+        ));
+
+        $this->artisan('arcana:import-legacy-users', ['file' => $path, '--execute' => true])
+            ->expectsOutputToContain('sem dados complementares em eam_clientes')
+            ->assertExitCode(0);
+
+        $semPerfil = User::query()->where('email', 'sem.perfil@example.com')->sole();
+        $zerada = User::query()->where('email', 'zerada@example.com')->sole();
+
+        $this->assertNull($semPerfil->phone);
+        $this->assertNull($semPerfil->birth_date);
+        $this->assertNull($semPerfil->gender);
+
+        $this->assertNull($zerada->phone);
+        $this->assertNull($zerada->birth_date);
+        $this->assertNull($zerada->gender);
+    }
+
+    public function test_profile_can_be_linked_by_email_when_the_clients_table_has_no_user_id(): void
+    {
+        $dump = $this->createUsersTable()
+            .$this->insert('eam_usuarios', ['id', 'nome', 'email', 'senha', 'telefone'], [
+                [5, 'João Souza', 'joao@example.com', 'segredo123', null],
+            ])
+            .<<<'SQL'
+CREATE TABLE `eam_clientes` (
+  `id` int(11) NOT NULL,
+  `email` varchar(120) NOT NULL,
+  `fone` varchar(20) DEFAULT NULL,
+  `nascimento` varchar(20) DEFAULT NULL,
+  `sexo` varchar(20) DEFAULT NULL
+);
+
+SQL
+            .$this->insert('eam_clientes', ['id', 'email', 'fone', 'nascimento', 'sexo'], [
+                [1, 'JOAO@example.com', '21977776666', '31/01/1990', 'masculino'],
+            ]);
+
+        $path = $this->write($dump);
+
+        $this->artisan('arcana:import-legacy-users', ['file' => $path, '--execute' => true])
+            ->expectsOutputToContain('Dados complementares: eam_clientes (telefone: fone, nascimento: nascimento, sexo: sexo; vínculo: email)')
+            ->assertExitCode(0);
+
+        $user = User::query()->where('email', 'joao@example.com')->sole();
+
+        $this->assertSame('21977776666', $user->phone);
+        $this->assertSame('1990-01-31', $user->birth_date?->format('Y-m-d'));
+        $this->assertSame(Gender::Male, $user->gender);
+    }
+
+    public function test_users_listed_in_the_exclusion_table_are_not_imported(): void
+    {
+        $dump = $this->createUsersTable()
+            .$this->insert('eam_usuarios', ['id', 'nome', 'email', 'senha', 'telefone'], [
+                [1, 'Cliente', 'cliente@example.com', 'segredo123', null],
+                [2, 'Atendente', 'atendente@example.com', 'segredo123', null],
+            ])
+            .<<<'SQL'
+CREATE TABLE `eam_atendentes` (
+  `id` int(11) NOT NULL,
+  `usuario_id` int(11) NOT NULL,
+  `nome_exibicao` varchar(120) DEFAULT NULL
+);
+
+SQL
+            .$this->insert('eam_atendentes', ['id', 'usuario_id', 'nome_exibicao'], [
+                [1, 2, 'Atendente'],
+            ]);
+
+        $path = $this->write($dump);
+
+        $this->artisan('arcana:import-legacy-users', ['file' => $path, '--execute' => true])
+            ->expectsOutputToContain('Contas fora da importação: eam_atendentes')
+            ->expectsOutputToContain('importar pelo fluxo próprio dessa origem')
+            ->assertExitCode(0);
+
+        $this->assertSame(1, User::query()->count());
+        $this->assertTrue(User::query()->where('email', 'cliente@example.com')->exists());
+        $this->assertFalse(User::query()->where('email', 'atendente@example.com')->exists());
+    }
+
+    /**
+     * Dump com a tabela de credenciais e a tabela de dados complementares,
+     * como no banco real (`eam_usuarios` + `eam_clientes`).
+     *
+     * @param  array<int, array<int, string|int|null>>  $users
+     * @param  array<int, array<int, string|int|null>>  $profiles
+     */
+    private function profileDump(array $users, array $profiles): string
+    {
+        return <<<'SQL'
+CREATE TABLE `eam_usuarios` (
+  `id` int(11) NOT NULL,
+  `nome` varchar(120) DEFAULT NULL,
+  `email` varchar(120) NOT NULL,
+  `senha` varchar(255) NOT NULL,
+  PRIMARY KEY (`id`)
+);
+
+SQL
+            .$this->insert('eam_usuarios', ['id', 'nome', 'email', 'senha'], $users)
+            .<<<'SQL'
+CREATE TABLE `eam_clientes` (
+  `id` int(11) NOT NULL,
+  `usuario_id` int(11) DEFAULT NULL,
+  `email` varchar(120) DEFAULT NULL,
+  `telefone` varchar(20) DEFAULT NULL,
+  `data_nascimento` varchar(20) DEFAULT NULL,
+  `sexo` varchar(20) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+);
+
+SQL
+            .$this->insert(
+                'eam_clientes',
+                ['id', 'usuario_id', 'email', 'telefone', 'data_nascimento', 'sexo'],
+                $profiles,
+            );
     }
 
     private function write(string $sql): string
@@ -332,7 +474,7 @@ SQL;
         return $path;
     }
 
-    private function createUsersTable(string $table = 'usuarios', bool $withBalance = false): string
+    private function createUsersTable(string $table = 'eam_usuarios', bool $withBalance = false): string
     {
         $definition = <<<'SQL'
 CREATE TABLE `__TABLE__` (
@@ -368,7 +510,7 @@ SQL;
         }
 
         return $this->createUsersTable(withBalance: $withBalance)
-            .$this->insert('usuarios', $columns, $rows);
+            .$this->insert('eam_usuarios', $columns, $rows);
     }
 
     /**
