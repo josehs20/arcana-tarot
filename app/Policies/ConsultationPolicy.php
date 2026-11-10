@@ -130,7 +130,7 @@ class ConsultationPolicy
     {
         return $this->isActiveAttendantOf($user, $consultation)
             && $consultation->allowsMessaging()
-            && ($consultation->modality?->allowsChat() ?? true);
+            && ($consultation->modality?->allowsTarotCards() ?? true);
     }
 
     /**
@@ -145,14 +145,15 @@ class ConsultationPolicy
     }
 
     /**
-     * Chamada de audio/video: os participantes continuam autorizados a ler o
-     * estado depois do encerramento para que a interface exiba o resultado.
-     * O manager revalida papel e estado em cada transicao.
+     * Chamada de video: os participantes continuam autorizados a ler o estado
+     * depois do encerramento para que a interface exiba o resultado. O
+     * atendimento por audio nao tem chamada. O manager revalida papel e estado
+     * em cada transicao.
      */
     public function call(User $user, Consultation $consultation): bool
     {
         return $this->hasActiveParticipant($user, $consultation)
-            && ($consultation->modality?->requiresMedia() ?? false);
+            && ($consultation->modality?->requiresCall() ?? false);
     }
 
     private function isActiveAttendantOf(User $user, Consultation $consultation): bool

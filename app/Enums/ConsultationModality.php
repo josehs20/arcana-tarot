@@ -6,9 +6,10 @@ namespace App\Enums;
  * Modalidade do atendimento.
  *
  * A modalidade é escolhida pelo cliente antes da solicitação e congela o
- * preço aplicado no aceite. O chat com cartas pertence ao atendimento por
- * texto; o atendimento por áudio usa a chamada WebRTC e compartilha o mesmo
- * chat com mensagens de voz gravadas no navegador. O vídeo fica só na chamada.
+ * preço aplicado no aceite. Texto e áudio compartilham o mesmo chat: no texto
+ * entram cartas do tarô e mensagens digitadas; no áudio, mensagens digitadas e
+ * áudios gravados no navegador. O vídeo não tem conversa persistida — acontece
+ * inteiro dentro da chamada WebRTC.
  */
 enum ConsultationModality: string
 {
@@ -29,7 +30,7 @@ enum ConsultationModality: string
     {
         return match ($this) {
             self::Text => 'Mensagens em tempo real com envio de cartas de Tarot pelo chat.',
-            self::Audio => 'Chamada de voz entre cliente e atendente, sem vídeo.',
+            self::Audio => 'Conversa por mensagens com áudios gravados e enviados pelo chat.',
             self::Video => 'Chamada de áudio e vídeo entre cliente e atendente.',
         };
     }
@@ -38,14 +39,14 @@ enum ConsultationModality: string
     {
         return match ($this) {
             self::Text => 'message-circle',
-            self::Audio => 'phone',
+            self::Audio => 'mic',
             self::Video => 'video',
         };
     }
 
     /**
-     * Áudio e vídeo dependem de captura de mídia no navegador e de
-     * infraestrutura WebRTC (STUN/TURN).
+     * Áudio e vídeo dependem de captura de mídia no navegador: o microfone do
+     * áudio grava a mensagem de voz e o vídeo negocia a chamada WebRTC.
      */
     public function requiresMedia(): bool
     {
@@ -57,14 +58,35 @@ enum ConsultationModality: string
         return $this === self::Video;
     }
 
+    /**
+     * Chamada ao vivo (WebRTC). O atendimento por áudio não liga: a voz circula
+     * pelo chat como mensagem gravada.
+     */
+    public function requiresCall(): bool
+    {
+        return $this === self::Video;
+    }
+
+    /**
+     * Conversa digitada. O atendimento por áudio mantém o campo de texto no
+     * chat, ao lado do botão de gravar.
+     */
     public function allowsChat(): bool
+    {
+        return $this !== self::Video;
+    }
+
+    /**
+     * Cartas do tarô são exclusivas do atendimento por texto.
+     */
+    public function allowsTarotCards(): bool
     {
         return $this === self::Text;
     }
 
     /**
      * Mensagens de voz gravadas no navegador são exclusivas do atendimento por
-     * áudio: é o mesmo chat do texto, sem cartas e sem digitação de texto.
+     * áudio e entram no mesmo chat do texto.
      */
     public function allowsVoiceMessages(): bool
     {

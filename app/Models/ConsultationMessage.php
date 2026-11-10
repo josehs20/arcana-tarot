@@ -44,7 +44,7 @@ class ConsultationMessage extends Model
                     throw new DomainException('Apenas o atendente pode enviar cartas do tarô.');
                 }
 
-                if (! ($consultation->modality?->allowsChat() ?? true)) {
+                if (! ($consultation->modality?->allowsTarotCards() ?? true)) {
                     throw new DomainException('Cartas do tarô são exclusivas do atendimento por texto.');
                 }
             }

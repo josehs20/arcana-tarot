@@ -866,10 +866,13 @@ final class ConsultationLifecycleManager
      * Fecha a chamada de midia quando a consulta termina por qualquer via
      * (chat, sistema, saldo insuficiente ou desconexao), evitando sessoes
      * WebRTC orfas consumindo creditos sem consulta correspondente.
+     *
+     * A varredura ignora a modalidade de proposito: chamadas antigas do
+     * atendimento por audio tambem precisam ser encerradas.
      */
     private function closeOpenCall(Consultation $consultation): void
     {
-        if (! $consultation->requiresCall() || ! $consultation->exists) {
+        if (! $consultation->exists) {
             return;
         }
 

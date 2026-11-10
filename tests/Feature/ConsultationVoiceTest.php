@@ -276,7 +276,11 @@ class ConsultationVoiceTest extends TestCase
         $this->assertSame([], Storage::disk('tarot_private')->allFiles());
     }
 
-    public function test_audio_consultation_renders_the_voice_composer_and_rejects_text(): void
+    /**
+     * O compositor do áudio é o mesmo do chat: o botão de gravar fica ao lado
+     * do envio e o texto digitado continua disponível.
+     */
+    public function test_audio_consultation_renders_the_voice_button_beside_the_send_button(): void
     {
         [$client, $attendant, $consultation] = $this->conversation();
 
@@ -286,11 +290,11 @@ class ConsultationVoiceTest extends TestCase
             ->get(route('consultations.show', $consultation))
             ->assertOk()
             ->assertSee('data-chat-voice-form', false)
-            ->assertSee('action="'.route('consultations.messages.audio.store', $consultation).'"', false)
+            ->assertSee('data-voice-url="'.route('consultations.messages.audio.store', $consultation).'"', false)
             ->assertSee('data-max-seconds="'.$voiceMax.'"', false)
             ->assertSee('Gravar áudio')
-            ->assertDontSee('data-chat-form="text"', false)
-            ->assertDontSee('name="body"', false);
+            ->assertSee('data-chat-submit-label', false)
+            ->assertSee('Enviar mensagem');
 
         $this->actingAs($attendant)
             ->get(route('consultations.show', $consultation))
@@ -299,10 +303,10 @@ class ConsultationVoiceTest extends TestCase
 
         $this->actingAs($client)
             ->post(route('consultations.messages.store', $consultation), [
-                'body' => 'Texto não faz parte do atendimento por áudio.',
+                'body' => 'Texto enviado pelo chat do atendimento por áudio.',
             ])
-            ->assertForbidden();
+            ->assertRedirect();
 
-        $this->assertSame(0, ConsultationMessage::query()->count());
+        $this->assertSame(1, ConsultationMessage::query()->count());
     }
 }

@@ -930,9 +930,9 @@
     resize: vertical;
 }
 
-// Compositor de voz: os controles (gravar, descartar, enviar) ficam em uma
-// linha que quebra em telas estreitas, sempre abaixo do rótulo do campo.
-.chat-voice__controls {
+// Compositor da conversa: os botões (gravar e enviar) dividem uma linha que
+// quebra em telas estreitas, sempre à direita, ao lado do envio.
+.chat-form__buttons {
     align-items: center;
     display: flex;
     flex-wrap: wrap;
@@ -959,6 +959,10 @@
             width: .5rem;
         }
     }
+}
+
+.chat-voice__status {
+    color: var(--arcana-ivory-muted);
 }
 
 .chat-voice__preview {

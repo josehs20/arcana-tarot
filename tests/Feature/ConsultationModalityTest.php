@@ -112,7 +112,7 @@ class ConsultationModalityTest extends TestCase
         $this->get(route('attendants.show', $attendant->attendantProfile))
             ->assertOk()
             ->assertSee('Modalidades e preços')
-            ->assertSee('Chamada de voz entre cliente e atendente')
+            ->assertSee('Conversa por mensagens com áudios gravados e enviados pelo chat')
             ->assertSee('R$ 2,00')
             ->assertSee('R$ 4,00');
     }
@@ -455,7 +455,11 @@ class ConsultationModalityTest extends TestCase
         ])->save();
     }
 
-    public function test_audio_consultations_expose_the_voice_chat_but_reject_text_messages(): void
+    /**
+     * O áudio é um chat: texto digitado e áudio gravado no mesmo compositor,
+     * sem chamada ao vivo. Cartas continuam exclusivas do atendimento por texto.
+     */
+    public function test_audio_consultations_expose_the_chat_with_the_voice_recorder(): void
     {
         Carbon::setTestNow('2026-02-05 11:00:00');
 
@@ -470,28 +474,31 @@ class ConsultationModalityTest extends TestCase
         $this->actingAs($client)
             ->get(route('consultations.show', $consultation))
             ->assertOk()
-            ->assertSee('Chamada de áudio')
-            ->assertSee('data-call-request', false)
-            ->assertSee('data-call-hangup', false)
-            ->assertSee('data-signal-url', false)
-            // A chamada convive com o mural de voz: só o texto e as cartas saem.
             ->assertSee('data-chat-voice-form', false)
             ->assertSee(route('consultations.messages.audio.store', $consultation))
-            ->assertDontSee('data-chat-form="text"', false)
+            ->assertSee('Gravar áudio')
+            ->assertSee('name="body"', false)
+            ->assertDontSee('data-call-request', false)
+            ->assertDontSee('data-call-hangup', false)
+            ->assertDontSee('data-signal-url', false)
             ->assertDontSee('Enviar uma carta');
 
         $this->actingAs($attendant)
             ->get(route('consultations.show', $consultation))
             ->assertOk()
-            ->assertSee('data-call-accept', false)
-            ->assertSee('data-call-reject', false)
-            ->assertSee('data-chat-voice-form', false);
+            ->assertSee('data-chat-voice-form', false)
+            ->assertSee('Gravar áudio')
+            ->assertDontSee('data-call-accept', false)
+            ->assertDontSee('data-call-reject', false);
 
+        // Texto digitado faz parte da conversa por áudio.
         $this->actingAs($client)
             ->post(route('consultations.messages.store', $consultation), [
-                'body' => 'Mensagem indevida para uma consulta de áudio.',
+                'body' => 'Mensagem escrita no atendimento por áudio.',
             ])
-            ->assertForbidden();
+            ->assertRedirect();
+
+        $this->assertSame(1, $consultation->messages()->count());
     }
 
     public function test_client_without_any_balance_cannot_even_request_a_consultation(): void

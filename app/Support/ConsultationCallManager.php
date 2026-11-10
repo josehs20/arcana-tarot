@@ -424,9 +424,11 @@ final class ConsultationCallManager
 
         $modality = $consultation->modality;
 
-        if ($modality === null || ! $modality->requiresMedia()) {
+        if ($modality === null || ! $modality->requiresCall()) {
             throw ValidationException::withMessages([
-                'call' => 'Esta consulta é por texto e não possui chamada de voz ou vídeo.',
+                'call' => 'Esta consulta não possui chamada: '.(($modality?->allowsVoiceMessages() ?? false)
+                    ? 'no atendimento por áudio a voz é enviada pelo chat.'
+                    : 'somente o atendimento por vídeo abre chamada.'),
             ]);
         }
 

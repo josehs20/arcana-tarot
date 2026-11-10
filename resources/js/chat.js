@@ -687,7 +687,8 @@ function voiceFields(form) {
         toggle: form.querySelector('[data-chat-voice-toggle]'),
         toggleLabel: form.querySelector('[data-chat-voice-toggle-label]'),
         discard: form.querySelector('[data-chat-voice-discard]'),
-        send: form.querySelector('[data-chat-voice-send]'),
+        submit: form.querySelector('[type="submit"]'),
+        submitLabel: form.querySelector('[data-chat-submit-label]'),
         preview: form.querySelector('[data-chat-voice-preview]'),
         status: form.querySelector('[data-chat-voice-status]'),
         duration: form.querySelector('[data-chat-voice-duration]'),
@@ -697,6 +698,10 @@ function voiceFields(form) {
 
 function voiceMaxSeconds(form) {
     return Number(form?.dataset.maxSeconds ?? 120) || 120;
+}
+
+function voiceIdleStatus(form) {
+    return `Grave até ${formatVoiceSeconds(voiceMaxSeconds(form))} segundos de áudio por mensagem.`;
 }
 
 function setVoiceStatus(form, message) {
@@ -715,6 +720,11 @@ function showVoiceElement(element) {
     element?.classList.remove('d-none');
 }
 
+/*
+ * Gravar e enviar compartilham o mesmo botão de envio: durante a gravação ele
+ * desaparece (nada de postar meia gravação) e, com a prévia pronta, o rótulo
+ * passa a "Enviar áudio" — o áudio sai pelo chat como qualquer mensagem.
+ */
 function updateVoiceUi(form) {
     const fields = voiceFields(form);
     const recording = voiceState.recorder !== null;
@@ -735,22 +745,27 @@ function updateVoiceUi(form) {
         fields.mime.value = recorded ? voiceState.mimeType : '';
     }
 
+    if (fields.submitLabel) {
+        fields.submitLabel.textContent = recorded ? 'Enviar áudio' : 'Enviar mensagem';
+    }
+
     if (recording) {
-        hideVoiceElement(fields.send);
+        hideVoiceElement(fields.submit);
+        hideVoiceElement(fields.discard);
         hideVoiceElement(fields.preview);
 
         return;
     }
 
+    showVoiceElement(fields.submit);
+
     if (recorded) {
-        showVoiceElement(fields.send);
         showVoiceElement(fields.discard);
         showVoiceElement(fields.preview);
 
         return;
     }
 
-    hideVoiceElement(fields.send);
     hideVoiceElement(fields.discard);
     hideVoiceElement(fields.preview);
 }
@@ -958,7 +973,7 @@ function discardVoice(form) {
 
     clearVoiceCapture(form);
     setFormError(form, '');
-    setVoiceStatus(form, `Grave até ${formatVoiceSeconds(voiceMaxSeconds(form))} segundos de áudio por mensagem.`);
+    setVoiceStatus(form, voiceIdleStatus(form));
 }
 
 /*
@@ -998,6 +1013,11 @@ function abandonVoiceCapture() {
 function voiceFormData(form) {
     const data = new FormData(form);
 
+    /*
+     * O compositor é o mesmo do texto: o rascunho digitado fica no campo, mas
+     * não viaja junto com a gravação — a mensagem enviada é a voz.
+     */
+    data.delete('body');
     data.set('duration', String(voiceState.seconds));
     data.set('mime_type', voiceState.mimeType);
     data.set('audio', voiceState.blob, `audio.${voiceExtensionFor(voiceState.mimeType)}`);
@@ -1736,19 +1756,29 @@ async function submitChatForm(form) {
 
     const body = form.querySelector('textarea[name="body"]');
     const isCardForm = form.dataset.chatForm === 'card';
-    const isVoiceForm = form.dataset.chatForm === 'voice';
+    const isVoiceForm = form.hasAttribute('data-chat-voice-form');
+    const sendingVoice = isVoiceForm && voiceState.blob !== null;
     const maxCards = Number(form.dataset.maxCards ?? 1) || 1;
     const cards = isCardForm ? selectedCardInputs(form) : [];
 
-    if (isVoiceForm && !voiceState.blob) {
+    if (isVoiceForm && !voiceState.blob && !body) {
         setFormError(form, 'Grave um áudio antes de enviar.');
         voiceFields(form).toggle?.focus();
 
         return;
     }
 
-    if (body && !body.value.trim()) {
-        setFormError(form, 'Escreva uma mensagem antes de enviar.');
+    /*
+     * Com uma gravação pronta a mensagem é a voz; o texto digitado fica no
+     * campo para o próximo envio. Sem gravação vale a mensagem escrita.
+     */
+    if (!sendingVoice && body && !body.value.trim()) {
+        setFormError(
+            form,
+            isVoiceForm
+                ? 'Escreva uma mensagem ou grave um áudio antes de enviar.'
+                : 'Escreva uma mensagem antes de enviar.',
+        );
         body.focus();
 
         return;
@@ -1767,7 +1797,7 @@ async function submitChatForm(form) {
         return;
     }
 
-    if (body && !confirmSensitiveSend(form, body.value)) {
+    if (!sendingVoice && body && !confirmSensitiveSend(form, body.value)) {
         body.classList.add('is-invalid');
         body.focus();
 
@@ -1779,7 +1809,7 @@ async function submitChatForm(form) {
     setFormBusy(form, true);
 
     try {
-        const response = await fetch(form.action, {
+        const response = await fetch(sendingVoice ? (form.dataset.voiceUrl || form.action) : form.action, {
             method: 'POST',
             credentials: 'same-origin',
             headers: {
@@ -1787,7 +1817,7 @@ async function submitChatForm(form) {
                 'X-CSRF-TOKEN': csrfToken(),
                 'X-Requested-With': 'XMLHttpRequest',
             },
-            body: isVoiceForm ? voiceFormData(form) : new FormData(form),
+            body: sendingVoice ? voiceFormData(form) : new FormData(form),
         });
 
         if (response.status === 419) {
@@ -1837,6 +1867,8 @@ async function submitChatForm(form) {
 
         sent.forEach((message) => insertMessage(current, message));
 
+        const draft = body?.value ?? '';
+
         /*
          * `form.reset()` não serve para os cartões: as caixas marcadas no HTML
          * voltam ao estado renderizado pelo servidor. A seleção é limpa à parte
@@ -1845,15 +1877,26 @@ async function submitChatForm(form) {
         form.reset();
         resetCardPicker(form);
 
-        if (isVoiceForm) {
+        if (sendingVoice) {
+            /*
+             * Devolve o rótulo do botão antes de atualizar o compositor: o
+             * estado de envio troca o conteúdo do botão e o compositor precisa
+             * dos elementos já restaurados.
+             */
+            setFormBusy(form, false);
             clearVoiceCapture(form);
-            setVoiceStatus(form, `Grave até ${formatVoiceSeconds(voiceMaxSeconds(form))} segundos de áudio por mensagem.`);
+            setVoiceStatus(form, voiceIdleStatus(form));
+
+            // Texto digitado durante a gravação continua no campo.
+            if (body && draft !== '') {
+                body.value = draft;
+            }
         }
 
         setNotice(current, payload.notice ?? 'Mensagem enviada.');
         window.setTimeout(() => setNotice(currentChat(), ''), 4000);
 
-        (form.querySelector('textarea[name="body"]') ?? form.querySelector('[data-chat-card-input]'))?.focus();
+        (body ?? form.querySelector('[data-chat-card-input]'))?.focus();
     } catch {
         setFormError(form, 'Não foi possível enviar agora. Verifique a conexão e tente novamente.');
     } finally {

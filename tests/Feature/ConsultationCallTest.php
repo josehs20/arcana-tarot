@@ -22,11 +22,12 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
- * Chamadas reais de audio e video (WebRTC).
+ * Chamadas reais de video (WebRTC).
  *
  * A sinalizacao e transportada pelo servidor e a midia e negociada entre os
  * navegadores. Os testes cobrem solicitacao, aceite, troca de sinais,
- * conexao, recusa, desligamento, expiracao e permissoes.
+ * conexao, recusa, desligamento, expiracao e permissoes. O atendimento por
+ * audio nao abre chamada: a voz circula como mensagem de voz no chat.
  */
 class ConsultationCallTest extends TestCase
 {
@@ -70,7 +71,7 @@ class ConsultationCallTest extends TestCase
         return [$user, $profile];
     }
 
-    private function activeConsultation(User $client, User $attendant, string $modality = 'audio'): Consultation
+    private function activeConsultation(User $client, User $attendant, string $modality = 'video'): Consultation
     {
         $lifecycle = app(ConsultationLifecycleManager::class);
 
@@ -79,25 +80,25 @@ class ConsultationCallTest extends TestCase
         return $lifecycle->accept($attendant, $consultation);
     }
 
-    public function test_client_requests_audio_call_and_attendant_accepts_then_signals_connect(): void
+    public function test_client_requests_video_call_and_attendant_accepts_then_signals_connect(): void
     {
         $client = $this->client();
         [$attendant] = $this->attendant();
-        $consultation = $this->activeConsultation($client, $attendant, 'audio');
+        $consultation = $this->activeConsultation($client, $attendant, 'video');
 
         $this->actingAs($client)
             ->getJson(route('consultations.call.state', $consultation))
             ->assertOk()
             ->assertJsonPath('call', null)
             ->assertJsonPath('role', 'client')
-            ->assertJsonPath('consultation.modality', 'audio')
+            ->assertJsonPath('consultation.modality', 'video')
             ->assertJsonPath('ice_servers.0.urls', (string) config('consultation.web_rtc.ice_servers.0.urls'));
 
         $response = $this->actingAs($client)
             ->postJson(route('consultations.call.store', $consultation))
             ->assertOk()
             ->assertJsonPath('call.status', 'ringing')
-            ->assertJsonPath('call.modality', 'audio');
+            ->assertJsonPath('call.modality', 'video');
 
         $callId = $response->json('call.id');
 
@@ -209,12 +210,38 @@ class ConsultationCallTest extends TestCase
             ->assertJsonValidationErrors('call');
     }
 
+    /**
+     * O atendimento por áudio é conversa: texto digitado e áudio gravado saem
+     * pelo chat, sem chamada ao vivo.
+     */
+    public function test_audio_consultation_has_no_call_only_the_voice_chat(): void
+    {
+        $client = $this->client();
+        [$attendant] = $this->attendant();
+        $consultation = $this->activeConsultation($client, $attendant, 'audio');
+
+        $this->actingAs($client)
+            ->postJson(route('consultations.call.store', $consultation))
+            ->assertForbidden();
+
+        $this->assertSame(0, ConsultationCall::query()->count());
+
+        $this->actingAs($client)
+            ->get(route('consultations.show', $consultation))
+            ->assertOk()
+            ->assertDontSee('data-call-request', false)
+            ->assertDontSee('data-signal-url', false)
+            ->assertSee('data-chat-voice-form', false)
+            ->assertSee('Gravar áudio')
+            ->assertSee('name="body"', false);
+    }
+
     public function test_non_participants_cannot_read_or_signal_a_call(): void
     {
         $client = $this->client();
         [$attendant] = $this->attendant();
         $outsider = User::factory()->create();
-        $consultation = $this->activeConsultation($client, $attendant, 'audio');
+        $consultation = $this->activeConsultation($client, $attendant, 'video');
 
         $this->actingAs($client)
             ->postJson(route('consultations.call.store', $consultation))
@@ -240,7 +267,7 @@ class ConsultationCallTest extends TestCase
     {
         $client = $this->client();
         [$attendant] = $this->attendant();
-        $consultation = $this->activeConsultation($client, $attendant, 'audio');
+        $consultation = $this->activeConsultation($client, $attendant, 'video');
 
         $this->actingAs($client)
             ->postJson(route('consultations.call.store', $consultation))
@@ -259,7 +286,7 @@ class ConsultationCallTest extends TestCase
     {
         $client = $this->client();
         [$attendant] = $this->attendant();
-        $consultation = $this->activeConsultation($client, $attendant, 'audio');
+        $consultation = $this->activeConsultation($client, $attendant, 'video');
 
         $this->actingAs($client)
             ->postJson(route('consultations.call.store', $consultation))
@@ -280,7 +307,7 @@ class ConsultationCallTest extends TestCase
     {
         $client = $this->client();
         [$attendant] = $this->attendant();
-        $consultation = $this->activeConsultation($client, $attendant, 'audio');
+        $consultation = $this->activeConsultation($client, $attendant, 'video');
 
         $this->actingAs($client)
             ->postJson(route('consultations.call.store', $consultation))
@@ -317,7 +344,7 @@ class ConsultationCallTest extends TestCase
     {
         $client = $this->client();
         [$attendant] = $this->attendant();
-        $consultation = $this->activeConsultation($client, $attendant, 'audio');
+        $consultation = $this->activeConsultation($client, $attendant, 'video');
 
         $this->actingAs($client)
             ->postJson(route('consultations.call.store', $consultation))
@@ -350,12 +377,12 @@ class ConsultationCallTest extends TestCase
     {
         $client = $this->client();
         [$attendant] = $this->attendant();
-        $consultation = $this->activeConsultation($client, $attendant, 'audio');
+        $consultation = $this->activeConsultation($client, $attendant, 'video');
 
         $call = ConsultationCall::query()->create([
             'consultation_id' => $consultation->getKey(),
             'requested_by_id' => $client->getKey(),
-            'modality' => 'audio',
+            'modality' => 'video',
             'status' => CallStatus::Accepted->value,
             'accepted_at' => now()->subMinutes(5),
         ]);

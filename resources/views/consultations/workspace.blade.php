@@ -108,10 +108,9 @@
         <div class="row g-4">
             <div class="col-lg-8">
                 {{--
-                    Chamada e conversa convivem no atendimento por áudio: a
-                    chamada WebRTC entrega a voz ao vivo e o chat guarda as
-                    mensagens de voz. Texto aparece só com o chat; vídeo, só
-                    com a chamada.
+                    Cada modalidade tem uma interface: texto e áudio usam o chat
+                    (no áudio com o botão de gravar ao lado do envio) e o vídeo
+                    usa a chamada WebRTC.
                 --}}
                 @if ($consultation->requiresCall())
                     @include('consultations.partials.call')

@@ -188,8 +188,8 @@ class Consultation extends Model
     }
 
     /**
-     * Chat e cartas pertencem ao atendimento por texto. Chamadas de áudio e
-     * vídeo usam a interface de chamada e o histórico de sinais.
+     * Histórico da conversa: texto e áudio usam o mesmo mural de mensagens. A
+     * chamada de vídeo não tem conversa persistida.
      */
     public function allowsMessaging(): bool
     {
@@ -206,9 +206,13 @@ class Consultation extends Model
             && $this->allowsMessaging();
     }
 
+    /**
+     * Somente o vídeo abre chamada WebRTC; o atendimento por áudio usa as
+     * mensagens de voz do chat.
+     */
     public function requiresCall(): bool
     {
-        return $this->modality?->requiresMedia() ?? false;
+        return $this->modality?->requiresCall() ?? false;
     }
 
     /**

@@ -14,13 +14,15 @@
     $chatPollIntervals = config('consultation.realtime.poll');
 
     /*
-     * Compositor desta modalidade. O texto pertence ao atendimento por texto e
-     * o áudio ao atendimento por áudio; a política repete a checagem que o
+     * Compositor desta modalidade. Texto e áudio dividem o mesmo campo de
+     * envio: o botão de gravar só aparece no atendimento por áudio e as cartas
+     * só no atendimento por texto. A política repete a checagem que o
      * controller faz no envio, então o formulário nunca aparece para quem o
      * servidor recusaria.
      */
     $chatAllowsText = Gate::allows('sendMessage', $consultation);
     $chatAllowsVoice = Gate::allows('sendVoice', $consultation);
+    $chatAllowsCards = Gate::allows('sendCard', $consultation);
     $chatVoiceMaxSeconds = (int) config('consultation.voice.max_seconds');
 @endphp
 
@@ -276,143 +278,89 @@
                 <div class="mt-3">{{ $messages->links() }}</div>
             @endif
 
-            @if ($chatStatus === \App\Enums\ConsultationStatus::Active && $chatAllowsText)
-                <form
-                    method="POST"
-                    action="{{ route('consultations.messages.store', $consultation) }}"
-                    class="chat-form mt-4"
-                    data-chat-form="text"
-                >
-                    @csrf
-                    <label class="form-label" for="chat-body">Nova mensagem</label>
-                    <textarea
-                        class="form-control @error('body') is-invalid @enderror"
-                        id="chat-body"
-                        name="body"
-                        rows="3"
-                        maxlength="{{ $messageMaxLength }}"
-                        required
-                        placeholder="Escreva sua mensagem para {{ $isClient ? 'o atendente' : 'o cliente' }}."
-                    >{{ old('body') }}</textarea>
-                    @error('body')
-                        <div class="invalid-feedback">{{ $message }}</div>
-                    @enderror
-
-                    {{--
-                        Seletor de emoji do compositor.
-
-                        O painel é montado pelo `chat.js` a partir de uma lista
-                        própria — nenhuma dependência nova entra no bundle — e
-                        insere o caractere na posição do cursor, respeitando o
-                        limite de caracteres do campo. Sem JavaScript o botão
-                        simplesmente não abre, e digitar o emoji pelo teclado do
-                        aparelho continua funcionando.
-                    --}}
-                    <div class="chat-emoji" data-chat-emoji>
-                        <button
-                            type="button"
-                            class="chat-emoji__trigger"
-                            data-chat-emoji-trigger
-                            aria-expanded="false"
-                            aria-controls="chat-emoji-panel"
-                            aria-label="Inserir emoji na mensagem"
-                            title="Inserir emoji"
-                        >
-                            <x-ui.icon name="smile" width="16" height="16" />
-                            <span class="chat-emoji__trigger-text">Emoji</span>
-                        </button>
-
-                        <div
-                            class="chat-emoji__panel d-none"
-                            id="chat-emoji-panel"
-                            data-chat-emoji-panel
-                            role="group"
-                            aria-label="Escolher emoji"
-                        ></div>
-                    </div>
-
-                    <div class="invalid-feedback d-block d-none" data-chat-error role="alert"></div>
-                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-2">
-                        <span class="form-text mt-0" data-chat-send-hint>
-                            <span data-chat-send-mode>
-                                @if ($chatSendOnEnter)
-                                    Enter envia · Shift+Enter quebra linha.
-                                @else
-                                    Enter quebra linha · Ctrl+Enter envia.
-                                @endif
-                            </span>
-                            Máximo de {{ $messageMaxLength }} caracteres.
-                        </span>
-                        <x-ui.button type="submit" variant="primary" size="sm">Enviar mensagem</x-ui.button>
-                    </div>
-                    <p class="form-text mb-0" data-chat-privacy-hint>
-                        Não envie CPF, CNPJ, e-mail, telefone ou links externos: o servidor bloqueia a
-                        mensagem e registra a tentativa para auditoria.
-                    </p>
-                </form>
-            @endif
-
-            @if ($chatStatus === \App\Enums\ConsultationStatus::Active && $chatAllowsVoice)
+            @if ($chatStatus === \App\Enums\ConsultationStatus::Active && ($chatAllowsText || $chatAllowsVoice))
                 {{--
-                    Compositor de voz do atendimento por áudio.
+                    Compositor único da conversa.
 
-                    A gravação acontece no navegador (`MediaRecorder`) e o
-                    arquivo só sobe depois de o participante confirmar o envio:
-                    descartar a prévia não gera upload nem mensagem. O `duration`
-                    é preenchido pelo JS; sem JavaScript, o formulário não é
-                    utilizável e a mensagem de voz pode ser enviada pelo app.
+                    No atendimento por texto o envio é só de texto. No
+                    atendimento por áudio o mesmo formulário ganha o botão de
+                    gravar ao lado do envio: a gravação acontece no navegador
+                    (`MediaRecorder`) e o arquivo só sobe depois da confirmação
+                    do participante — descartar a prévia não gera upload nem
+                    mensagem. O JS troca a rota e o corpo do envio quando existe
+                    uma gravação pronta; sem JavaScript o formulário continua
+                    enviando texto.
                 --}}
                 <form
                     method="POST"
-                    action="{{ route('consultations.messages.audio.store', $consultation) }}"
-                    enctype="multipart/form-data"
-                    class="chat-form chat-voice mt-4"
-                    data-chat-form="voice"
-                    data-chat-voice-form
-                    data-max-seconds="{{ $chatVoiceMaxSeconds }}"
+                    action="{{ $chatAllowsText
+                        ? route('consultations.messages.store', $consultation)
+                        : route('consultations.messages.audio.store', $consultation) }}"
+                    class="chat-form mt-4"
+                    data-chat-form="text"
+                    @if ($chatAllowsVoice)
+                        data-chat-voice-form
+                        enctype="multipart/form-data"
+                        novalidate
+                        data-voice-url="{{ route('consultations.messages.audio.store', $consultation) }}"
+                        data-max-seconds="{{ $chatVoiceMaxSeconds }}"
+                    @endif
                 >
                     @csrf
-                    <input type="hidden" name="duration" value="" data-chat-voice-duration>
-                    <input type="hidden" name="mime_type" value="" data-chat-voice-mime>
 
-                    <label class="form-label" for="chat-voice-toggle">Mensagem de voz</label>
+                    @if ($chatAllowsVoice)
+                        <input type="hidden" name="duration" value="" data-chat-voice-duration>
+                        <input type="hidden" name="mime_type" value="" data-chat-voice-mime>
+                    @endif
 
-                    <div class="chat-voice__controls">
-                        <button
-                            type="button"
-                            class="btn btn-ghost btn-sm chat-voice__record"
-                            id="chat-voice-toggle"
-                            data-chat-voice-toggle
-                            aria-describedby="chat-voice-status"
-                        >
-                            <x-ui.icon name="mic" width="16" height="16" />
-                            <span data-chat-voice-toggle-label>Gravar áudio</span>
-                        </button>
+                    @if ($chatAllowsText)
+                        <label class="form-label" for="chat-body">Nova mensagem</label>
+                        <textarea
+                            class="form-control @error('body') is-invalid @enderror"
+                            id="chat-body"
+                            name="body"
+                            rows="3"
+                            maxlength="{{ $messageMaxLength }}"
+                            required
+                            placeholder="Escreva sua mensagem para {{ $isClient ? 'o atendente' : 'o cliente' }}."
+                        >{{ old('body') }}</textarea>
+                        @error('body')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
 
-                        <button
-                            type="button"
-                            class="btn btn-ghost btn-sm d-none"
-                            data-chat-voice-discard
-                        >
-                            <x-ui.icon name="x" width="16" height="16" />
-                            Descartar
-                        </button>
+                        {{--
+                            Seletor de emoji do compositor.
 
-                        <x-ui.button type="submit" variant="primary" size="sm" class="d-none" data-chat-voice-send>
-                            Enviar áudio
-                        </x-ui.button>
-                    </div>
+                            O painel é montado pelo `chat.js` a partir de uma lista
+                            própria — nenhuma dependência nova entra no bundle — e
+                            insere o caractere na posição do cursor, respeitando o
+                            limite de caracteres do campo. Sem JavaScript o botão
+                            simplesmente não abre, e digitar o emoji pelo teclado do
+                            aparelho continua funcionando.
+                        --}}
+                        <div class="chat-emoji" data-chat-emoji>
+                            <button
+                                type="button"
+                                class="chat-emoji__trigger"
+                                data-chat-emoji-trigger
+                                aria-expanded="false"
+                                aria-controls="chat-emoji-panel"
+                                aria-label="Inserir emoji na mensagem"
+                                title="Inserir emoji"
+                            >
+                                <x-ui.icon name="smile" width="16" height="16" />
+                                <span class="chat-emoji__trigger-text">Emoji</span>
+                            </button>
 
-                    <p class="form-text mb-0 mt-2" id="chat-voice-status" data-chat-voice-status aria-live="polite">
-                        Grave até {{ $chatVoiceMaxSeconds }} segundos de áudio por mensagem.
-                    </p>
-
-                    <audio
-                        class="chat-voice__preview d-none mt-2"
-                        controls
-                        preload="metadata"
-                        data-chat-voice-preview
-                    ></audio>
+                            <div
+                                class="chat-emoji__panel d-none"
+                                id="chat-emoji-panel"
+                                data-chat-emoji-panel
+                                role="group"
+                                aria-label="Escolher emoji"
+                            ></div>
+                        </div>
+                    @endif
 
                     <div class="invalid-feedback d-block d-none" data-chat-error role="alert"></div>
                     @error('audio')
@@ -421,6 +369,77 @@
                     @error('duration')
                         <div class="invalid-feedback d-block">{{ $message }}</div>
                     @enderror
+
+                    @if ($chatAllowsVoice)
+                        <audio
+                            class="chat-voice__preview d-none mt-2"
+                            controls
+                            preload="metadata"
+                            data-chat-voice-preview
+                        ></audio>
+
+                        <p
+                            class="form-text chat-voice__status mb-0 mt-2"
+                            id="chat-voice-status"
+                            data-chat-voice-status
+                            aria-live="polite"
+                        >
+                            Grave até {{ $chatVoiceMaxSeconds }} segundos de áudio por mensagem.
+                        </p>
+                    @endif
+
+                    <div class="chat-form__actions d-flex flex-wrap align-items-center justify-content-between gap-2 mt-2">
+                        <span class="form-text mt-0" data-chat-send-hint>
+                            @if ($chatAllowsText)
+                                <span data-chat-send-mode>
+                                    @if ($chatSendOnEnter)
+                                        Enter envia · Shift+Enter quebra linha.
+                                    @else
+                                        Enter quebra linha · Ctrl+Enter envia.
+                                    @endif
+                                </span>
+                                Máximo de {{ $messageMaxLength }} caracteres.
+                            @else
+                                Grave um áudio antes de enviar.
+                            @endif
+                        </span>
+
+                        {{-- Gravar e enviar dividem a mesma linha: a voz sai pelo chat como qualquer mensagem. --}}
+                        <div class="chat-form__buttons">
+                            @if ($chatAllowsVoice)
+                                <button
+                                    type="button"
+                                    class="btn btn-ghost btn-sm chat-voice__record"
+                                    id="chat-voice-toggle"
+                                    data-chat-voice-toggle
+                                    aria-pressed="false"
+                                    aria-describedby="chat-voice-status"
+                                >
+                                    <x-ui.icon name="mic" width="16" height="16" />
+                                    <span data-chat-voice-toggle-label>Gravar áudio</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    class="btn btn-ghost btn-sm d-none"
+                                    data-chat-voice-discard
+                                >
+                                    <x-ui.icon name="x" width="16" height="16" />
+                                    Descartar
+                                </button>
+                            @endif
+
+                            <x-ui.button type="submit" variant="primary" size="sm">
+                                <span data-chat-submit-label>Enviar mensagem</span>
+                            </x-ui.button>
+                        </div>
+                    </div>
+
+                    @if ($chatAllowsText)
+                        <p class="form-text mb-0" data-chat-privacy-hint>
+                            Não envie CPF, CNPJ, e-mail, telefone ou links externos: o servidor bloqueia a
+                            mensagem e registra a tentativa para auditoria.
+                        </p>
+                    @endif
                 </form>
             @endif
 
@@ -434,7 +453,7 @@
                 </p>
             @endif
 
-            @if ($isAttendant && $chatStatus === \App\Enums\ConsultationStatus::Active && $chatAllowsText)
+            @if ($isAttendant && $chatStatus === \App\Enums\ConsultationStatus::Active && $chatAllowsCards)
                 <div class="chat-card-sender mt-4">
                     @if ($cardDecks->isEmpty())
                         <p class="form-text mb-0">
