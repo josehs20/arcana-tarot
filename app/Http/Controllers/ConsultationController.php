@@ -114,6 +114,7 @@ class ConsultationController extends Controller
             'consultation' => $consultation,
             'isClient' => $isClient,
             'isAttendant' => $consultation->isAttendant($user),
+            'isAdmin' => $user->isAdmin(),
             'canViewMessages' => $chat['canViewMessages'],
             'messages' => $chat['messages'],
             'unreadMessagesCount' => $chat['unreadMessagesCount'],
@@ -310,11 +311,11 @@ class ConsultationController extends Controller
     private function chatData(Consultation $consultation, User $user): array
     {
         /*
-         * O chat e as cartas pertencem ao atendimento por texto. Consultas de
-         * audio/video usam a interface de chamada e nunca exibem o chat.
+         * Texto e áudio compartilham o histórico da conversa. Chamadas de vídeo
+         * usam somente a interface de chamada e nunca exibem o chat.
          */
         $canViewMessages = Gate::allows('viewMessages', $consultation)
-            && ($consultation->modality?->allowsChat() ?? true);
+            && ($consultation->modality?->allowsMessageFeed() ?? true);
         $messages = null;
         $unreadMessagesCount = 0;
 

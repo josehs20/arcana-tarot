@@ -33,9 +33,54 @@ final class ConsultationMessageManager
 
     public function __construct(
         private readonly ConsultationCardImageStorage $images,
+        private readonly ConsultationVoiceStorage $voices,
         private readonly ConsultationActivityTracker $activity,
         private readonly ConsultationPrivacyGuard $privacy,
     ) {}
+
+    /**
+     * Grava a mensagem de voz. O arquivo já está validado e persistido pelo
+     * {@see ConsultationVoiceStorage}; se a transação falhar, o áudio recém
+     * criado é descartado para não deixar órfãos no disco privado.
+     */
+    public function sendVoice(
+        Consultation $consultation,
+        User $sender,
+        string $audioPath,
+        ?int $durationSeconds = null,
+    ): ConsultationMessage {
+        try {
+            $message = DB::transaction(function () use ($consultation, $sender, $audioPath, $durationSeconds): ConsultationMessage {
+                $locked = $this->lockMessagingConsultation($consultation, 'audio');
+
+                if (! $locked->allowsVoiceMessages()) {
+                    throw ValidationException::withMessages([
+                        'audio' => 'Mensagens de voz são exclusivas do atendimento por áudio.',
+                    ]);
+                }
+
+                $this->ensureParticipant($locked, $sender);
+                $this->activity->touchActivity($locked, $sender);
+
+                return ConsultationMessage::query()->create([
+                    'consultation_id' => $locked->getKey(),
+                    'sender_id' => $sender->getKey(),
+                    'type' => MessageType::Voice,
+                    'body' => null,
+                    'audio_path' => $audioPath,
+                    'audio_duration_seconds' => $durationSeconds,
+                ]);
+            });
+        } catch (Throwable $exception) {
+            $this->voices->discardNewFile($audioPath);
+
+            throw $exception;
+        }
+
+        $this->announce($message);
+
+        return $message;
+    }
 
     public function sendText(Consultation $consultation, User $sender, string $body): ConsultationMessage
     {

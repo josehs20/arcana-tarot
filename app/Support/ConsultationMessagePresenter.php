@@ -8,8 +8,9 @@ use App\Models\ConsultationMessage;
 /**
  * Representação pública de uma mensagem para eventos Reverb e histórico HTTP.
  *
- * Nunca expõe o caminho físico do snapshot da carta. A imagem é referenciada
- * pela rota autorizada, que revalida a participação na consulta.
+ * Nunca expõe o caminho físico do snapshot da carta nem da gravação de voz.
+ * Ambos são referenciados pela rota autorizada, que revalida a participação na
+ * consulta a cada requisição.
  */
 final class ConsultationMessagePresenter
 {
@@ -29,6 +30,9 @@ final class ConsultationMessagePresenter
      *     deck_name: string|null,
      *     image_url: string|null,
      *     image_thumb_url: string|null,
+     *     audio_url: string|null,
+     *     audio_duration_seconds: int|null,
+     *     audio_duration_label: string|null,
      *     created_at: string|null,
      *     created_at_label: string
      * }
@@ -41,6 +45,7 @@ final class ConsultationMessagePresenter
         $sender = $message->sender;
         $isAttendant = $consultation !== null && $sender !== null && $consultation->isAttendant($sender);
         $isCard = $message->type === MessageType::TarotCard;
+        $isVoice = $message->type === MessageType::Voice;
 
         $senderName = $isAttendant
             ? ($consultation->attendant->attendantProfile?->display_name ?? $sender->name)
@@ -57,7 +62,7 @@ final class ConsultationMessagePresenter
             // Lote de cartas enviadas juntas: o chat usa o mesmo identificador
             // para desenhar as imagens de um envio em um único bloco.
             'batch_id' => $message->batch_id,
-            'body' => $isCard ? null : $message->body,
+            'body' => $isCard || $isVoice ? null : $message->body,
             'tarot_card_id' => $message->tarot_card_id,
             'card_name' => $isCard ? $message->card_name : null,
             'deck_name' => $isCard ? $message->deck_name : null,
@@ -69,6 +74,13 @@ final class ConsultationMessagePresenter
             'image_thumb_url' => $isCard && filled($message->image_path)
                 ? route('consultations.messages.thumb', [$message->consultation_id, $message->getKey()])
                 : null,
+            // O player do balão aponta para a rota autorizada: o disco privado
+            // nunca é exposto e a participação é revalidada a cada requisição.
+            'audio_url' => $isVoice && filled($message->audio_path)
+                ? route('consultations.messages.audio', [$message->consultation_id, $message->getKey()])
+                : null,
+            'audio_duration_seconds' => $isVoice ? $message->audio_duration_seconds : null,
+            'audio_duration_label' => $isVoice ? $message->audioDurationLabel() : null,
             'created_at' => $message->created_at?->toIso8601String(),
             'created_at_label' => $message->created_at?->format('d/m/Y H:i') ?? '—',
         ];

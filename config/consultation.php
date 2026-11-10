@@ -96,6 +96,38 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Mensagens de voz
+    |--------------------------------------------------------------------------
+    |
+    | Gravações feitas no navegador durante o atendimento por áudio. O arquivo
+    | é gravado no disco privado e servido somente pela rota autorizada; o
+    | navegador nunca escolhe caminho, mime ou nome de arquivo. A duração é
+    | informada pelo próprio navegador e usada apenas como metadado de exibição.
+    |
+    */
+
+    'voice' => [
+        'disk' => 'tarot_private',
+        'directory' => 'consultation-voice',
+        'max_kb' => max(64, (int) env('CONSULTATION_VOICE_MAX_KB', 4096)),
+        'max_seconds' => max(5, (int) env('CONSULTATION_VOICE_MAX_SECONDS', 120)),
+        'rate_per_minute' => max(1, (int) env('CONSULTATION_VOICE_RATE_PER_MINUTE', 15)),
+
+        /*
+         * Formatos aceitos. A chave é a extensão gravada no disco e o valor traz
+         * os mimes que o navegador pode declarar para ela — o MediaRecorder
+         * varia entre Chrome (webm/opus), Safari (mp4) e Firefox (ogg).
+         */
+        'formats' => [
+            'webm' => ['mime' => 'audio/webm', 'accepts' => ['audio/webm', 'video/webm']],
+            'ogg' => ['mime' => 'audio/ogg', 'accepts' => ['audio/ogg']],
+            'm4a' => ['mime' => 'audio/mp4', 'accepts' => ['audio/mp4', 'audio/m4a', 'audio/x-m4a']],
+            'mp3' => ['mime' => 'audio/mpeg', 'accepts' => ['audio/mpeg', 'audio/mp3']],
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Modalidades do atendimento
     |--------------------------------------------------------------------------
     |

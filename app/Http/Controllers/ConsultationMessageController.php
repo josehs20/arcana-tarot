@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\MessageType;
 use App\Http\Requests\StoreConsultationCardRequest;
 use App\Http\Requests\StoreConsultationMessageRequest;
+use App\Http\Requests\StoreConsultationVoiceRequest;
 use App\Models\Consultation;
 use App\Models\ConsultationMessage;
 use App\Models\User;
@@ -12,12 +13,14 @@ use App\Support\ConsultationCardImageStorage;
 use App\Support\ConsultationMessageManager;
 use App\Support\ConsultationMessagePresenter;
 use App\Support\ConsultationStatePresenter;
+use App\Support\ConsultationVoiceStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ConsultationMessageController extends Controller
@@ -103,6 +106,58 @@ class ConsultationMessageController extends Controller
             : $sent->count().' cartas enviadas.';
 
         return $this->respondWithMessages($consultation, $sent, $notice);
+    }
+
+    /**
+     * Envio de uma gravação de voz no atendimento por áudio.
+     *
+     * O arquivo é gravado no disco privado antes da transação; se a mensagem
+     * não puder ser criada, o áudio recém-gravado é descartado. O caminho e a
+     * extensão nunca vêm do navegador.
+     */
+    public function storeVoice(
+        StoreConsultationVoiceRequest $request,
+        Consultation $consultation,
+        ConsultationMessageManager $messages,
+        ConsultationVoiceStorage $voices,
+    ): RedirectResponse|JsonResponse {
+        Gate::authorize('sendVoice', $consultation);
+
+        /** @var User $user */
+        $user = $request->user();
+
+        $extension = $request->extension();
+
+        if ($extension === null) {
+            throw ValidationException::withMessages([
+                'audio' => 'O formato da gravação não é suportado.',
+            ]);
+        }
+
+        $path = $voices->store($consultation, $request->audioFile(), $extension);
+
+        $message = $messages->sendVoice($consultation, $user, $path, $request->durationSeconds());
+
+        return $this->respondWithMessage($consultation, $message, 'Áudio enviado.');
+    }
+
+    /**
+     * Entrega a gravação de voz guardada no disco privado.
+     *
+     * O player do chat aponta para esta rota; a participação na consulta é
+     * revalidada a cada requisição, como nas imagens das cartas.
+     */
+    public function audio(
+        Consultation $consultation,
+        ConsultationMessage $message,
+        ConsultationVoiceStorage $voices,
+    ): StreamedResponse {
+        Gate::authorize('viewMessages', $consultation);
+
+        abort_unless($message->consultation_id === $consultation->getKey(), 404);
+        abort_unless($message->type === MessageType::Voice, 404);
+
+        return $voices->response($message);
     }
 
     public function image(

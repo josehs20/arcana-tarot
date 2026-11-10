@@ -94,6 +94,15 @@ class AppServiceProvider extends ServiceProvider
                 ->by($this->consultationRateKey($request));
         });
 
+        /*
+         * Gravações de voz: limite próprio, mais baixo que o texto, porque cada
+         * envio carrega um arquivo de até alguns MB para o disco privado.
+         */
+        RateLimiter::for('consultation-voice', function (Request $request): Limit {
+            return Limit::perMinute((int) config('consultation.voice.rate_per_minute'))
+                ->by($this->consultationRateKey($request));
+        });
+
         RateLimiter::for('consultation-calls', function (Request $request): Limit {
             return Limit::perMinute(120)
                 ->by($this->consultationRateKey($request));

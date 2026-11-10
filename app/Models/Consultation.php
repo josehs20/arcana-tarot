@@ -193,8 +193,17 @@ class Consultation extends Model
      */
     public function allowsMessaging(): bool
     {
-        return ($this->modality?->allowsChat() ?? true)
+        return ($this->modality?->allowsMessageFeed() ?? true)
             && ($this->status?->allowsMessaging() ?? false);
+    }
+
+    /**
+     * Envio de áudio: só no atendimento por áudio e só durante a consulta.
+     */
+    public function allowsVoiceMessages(): bool
+    {
+        return ($this->modality?->allowsVoiceMessages() ?? false)
+            && $this->allowsMessaging();
     }
 
     public function requiresCall(): bool

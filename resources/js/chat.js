@@ -620,6 +620,468 @@ function createCardFigure(message) {
 }
 
 /*
+ * Mensagens de voz do atendimento por áudio.
+ *
+ * A gravação acontece no navegador (`MediaRecorder`) e só sobe ao servidor
+ * depois da confirmação do participante: descartar a prévia não gera upload.
+ * O binário vira o campo `audio` de um envio multipart junto com a duração e o
+ * mime detectados aqui — o servidor revalida formato, tamanho e duração e é
+ * quem decide o caminho e a extensão do arquivo.
+ */
+const VOICE_MIME_CANDIDATES = [
+    { mime: 'audio/webm;codecs=opus', extension: 'webm' },
+    { mime: 'audio/webm', extension: 'webm' },
+    { mime: 'audio/ogg;codecs=opus', extension: 'ogg' },
+    { mime: 'audio/mp4', extension: 'm4a' },
+];
+
+const voiceState = {
+    recorder: null,
+    stream: null,
+    chunks: [],
+    blob: null,
+    mimeType: '',
+    seconds: 0,
+    startedAt: 0,
+    ticker: null,
+    previewUrl: null,
+    abandoned: false,
+};
+
+function voiceSupported() {
+    return (
+        typeof MediaRecorder !== 'undefined'
+        && typeof navigator !== 'undefined'
+        && typeof navigator.mediaDevices?.getUserMedia === 'function'
+    );
+}
+
+/*
+ * Safari grava em mp4, Chrome/Firefox em webm ou ogg. O primeiro formato
+ * suportado é usado; sem nenhum, o navegador escolhe e a extensão é derivada
+ * do mime gravado.
+ */
+function voicePreferredFormat() {
+    if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') {
+        return null;
+    }
+
+    return VOICE_MIME_CANDIDATES.find((format) => MediaRecorder.isTypeSupported(format.mime)) ?? null;
+}
+
+function voiceExtensionFor(mimeType) {
+    const normalized = String(mimeType ?? '').toLowerCase();
+    const match = VOICE_MIME_CANDIDATES.find((format) => normalized.startsWith(format.mime.split(';')[0]));
+
+    return match?.extension ?? 'webm';
+}
+
+function formatVoiceSeconds(total) {
+    const safe = Math.max(0, Math.floor(total));
+
+    return `${Math.floor(safe / 60)}:${String(safe % 60).padStart(2, '0')}`;
+}
+
+function voiceFields(form) {
+    return {
+        toggle: form.querySelector('[data-chat-voice-toggle]'),
+        toggleLabel: form.querySelector('[data-chat-voice-toggle-label]'),
+        discard: form.querySelector('[data-chat-voice-discard]'),
+        send: form.querySelector('[data-chat-voice-send]'),
+        preview: form.querySelector('[data-chat-voice-preview]'),
+        status: form.querySelector('[data-chat-voice-status]'),
+        duration: form.querySelector('[data-chat-voice-duration]'),
+        mime: form.querySelector('[data-chat-voice-mime]'),
+    };
+}
+
+function voiceMaxSeconds(form) {
+    return Number(form?.dataset.maxSeconds ?? 120) || 120;
+}
+
+function setVoiceStatus(form, message) {
+    const { status } = voiceFields(form);
+
+    if (status) {
+        status.textContent = message ?? '';
+    }
+}
+
+function hideVoiceElement(element) {
+    element?.classList.add('d-none');
+}
+
+function showVoiceElement(element) {
+    element?.classList.remove('d-none');
+}
+
+function updateVoiceUi(form) {
+    const fields = voiceFields(form);
+    const recording = voiceState.recorder !== null;
+    const recorded = voiceState.blob !== null;
+
+    if (fields.toggleLabel) {
+        fields.toggleLabel.textContent = recording ? 'Parar gravação' : recorded ? 'Gravar novamente' : 'Gravar áudio';
+    }
+
+    fields.toggle?.classList.toggle('is-recording', recording);
+    fields.toggle?.setAttribute('aria-pressed', recording ? 'true' : 'false');
+
+    if (fields.duration) {
+        fields.duration.value = recorded ? String(voiceState.seconds) : '';
+    }
+
+    if (fields.mime) {
+        fields.mime.value = recorded ? voiceState.mimeType : '';
+    }
+
+    if (recording) {
+        hideVoiceElement(fields.send);
+        hideVoiceElement(fields.preview);
+
+        return;
+    }
+
+    if (recorded) {
+        showVoiceElement(fields.send);
+        showVoiceElement(fields.discard);
+        showVoiceElement(fields.preview);
+
+        return;
+    }
+
+    hideVoiceElement(fields.send);
+    hideVoiceElement(fields.discard);
+    hideVoiceElement(fields.preview);
+}
+
+function stopVoiceTicker() {
+    if (voiceState.ticker !== null) {
+        window.clearInterval(voiceState.ticker);
+        voiceState.ticker = null;
+    }
+}
+
+function startVoiceTicker(form) {
+    stopVoiceTicker();
+
+    voiceState.ticker = window.setInterval(() => {
+        voiceState.seconds = Math.round((Date.now() - voiceState.startedAt) / 1000);
+
+        if (voiceState.seconds >= voiceMaxSeconds(form)) {
+            setVoiceStatus(form, `Limite de ${formatVoiceSeconds(voiceMaxSeconds(form))} atingido. Envie ou descarte a gravação.`);
+            stopVoiceRecording(form);
+
+            return;
+        }
+
+        setVoiceStatus(
+            form,
+            `Gravando… ${formatVoiceSeconds(voiceState.seconds)} de ${formatVoiceSeconds(voiceMaxSeconds(form))}. Toque em "Parar gravação" para revisar.`,
+        );
+    }, 500);
+}
+
+function releaseVoiceStream() {
+    voiceState.stream?.getTracks().forEach((track) => track.stop());
+    voiceState.stream = null;
+}
+
+function setVoicePreview(form, blob) {
+    const { preview } = voiceFields(form);
+
+    if (voiceState.previewUrl) {
+        URL.revokeObjectURL(voiceState.previewUrl);
+        voiceState.previewUrl = null;
+    }
+
+    if (!preview) {
+        return;
+    }
+
+    if (!blob) {
+        preview.removeAttribute('src');
+        preview.load();
+
+        return;
+    }
+
+    voiceState.previewUrl = URL.createObjectURL(blob);
+    preview.src = voiceState.previewUrl;
+}
+
+function clearVoiceCapture(form) {
+    stopVoiceTicker();
+    releaseVoiceStream();
+
+    voiceState.recorder = null;
+    voiceState.chunks = [];
+    voiceState.blob = null;
+    voiceState.mimeType = '';
+    voiceState.seconds = 0;
+    voiceState.startedAt = 0;
+
+    setVoicePreview(form, null);
+
+    if (form) {
+        updateVoiceUi(form);
+    }
+}
+
+function finalizeVoiceRecording(form) {
+    stopVoiceTicker();
+    releaseVoiceStream();
+
+    if (voiceState.abandoned) {
+        voiceState.abandoned = false;
+        voiceState.recorder = null;
+        voiceState.chunks = [];
+        voiceState.blob = null;
+        voiceState.mimeType = '';
+        voiceState.seconds = 0;
+
+        return;
+    }
+
+    const mimeType = voiceState.mimeType;
+
+    voiceState.recorder = null;
+
+    const blob = new Blob(voiceState.chunks, { type: mimeType || 'audio/webm' });
+    voiceState.chunks = [];
+    voiceState.seconds = Math.max(1, Math.round((Date.now() - voiceState.startedAt) / 1000));
+
+    if (blob.size === 0) {
+        voiceState.blob = null;
+        setVoiceStatus(form, 'A gravação ficou vazia. Tente novamente.');
+        updateVoiceUi(form);
+
+        return;
+    }
+
+    voiceState.blob = blob;
+    setVoicePreview(form, blob);
+    setVoiceStatus(
+        form,
+        `Gravação pronta (${formatVoiceSeconds(voiceState.seconds)}). Ouça antes de enviar ou descarte para gravar de novo.`,
+    );
+    updateVoiceUi(form);
+}
+
+async function startVoiceRecording(form) {
+    if (voiceState.recorder) {
+        return;
+    }
+
+    if (!voiceSupported()) {
+        setVoiceStatus(form, 'Este navegador não permite gravar áudio.');
+        setFormError(form, 'Grave o áudio em outro navegador ou envie a mensagem por texto.');
+
+        return;
+    }
+
+    setFormError(form, '');
+    setVoiceStatus(form, 'Pedindo permissão para o microfone…');
+
+    try {
+        voiceState.stream = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        });
+    } catch {
+        setVoiceStatus(form, 'Sem acesso ao microfone.');
+        setFormError(form, 'Não foi possível acessar o microfone. Autorize o uso no navegador e tente novamente.');
+
+        return;
+    }
+
+    const format = voicePreferredFormat();
+    let recorder;
+
+    try {
+        recorder = format
+            ? new MediaRecorder(voiceState.stream, { mimeType: format.mime })
+            : new MediaRecorder(voiceState.stream);
+    } catch {
+        releaseVoiceStream();
+        setVoiceStatus(form, 'Não foi possível iniciar a gravação.');
+        setFormError(form, 'Não foi possível iniciar a gravação neste navegador.');
+
+        return;
+    }
+
+    voiceState.recorder = recorder;
+    voiceState.chunks = [];
+    voiceState.blob = null;
+    voiceState.mimeType = recorder.mimeType || format?.mime || 'audio/webm';
+    voiceState.startedAt = Date.now();
+    voiceState.seconds = 0;
+    voiceState.abandoned = false;
+
+    setVoicePreview(form, null);
+
+    recorder.addEventListener('dataavailable', (event) => {
+        if (event.data && event.data.size > 0) {
+            voiceState.chunks.push(event.data);
+        }
+    });
+
+    recorder.addEventListener('stop', () => finalizeVoiceRecording(form));
+
+    recorder.start();
+    startVoiceTicker(form);
+    updateVoiceUi(form);
+    setVoiceStatus(form, 'Gravando… 0:00. Toque em "Parar gravação" para revisar.');
+}
+
+function stopVoiceRecording(form) {
+    const recorder = voiceState.recorder;
+
+    if (!recorder) {
+        return;
+    }
+
+    /*
+     * `stop()` ainda entrega o último bloco em `dataavailable`; o estado é
+     * limpo no listener de `stop` para não perder o fim da gravação.
+     */
+    if (recorder.state !== 'inactive') {
+        recorder.stop();
+    }
+
+    stopVoiceTicker();
+}
+
+function discardVoice(form) {
+    if (voiceState.recorder) {
+        stopVoiceRecording(form);
+    }
+
+    clearVoiceCapture(form);
+    setFormError(form, '');
+    setVoiceStatus(form, `Grave até ${formatVoiceSeconds(voiceMaxSeconds(form))} segundos de áudio por mensagem.`);
+}
+
+/*
+ * A atualização do bloco do chat substitui o formulário; uma captura em
+ * andamento é encerrada sem enviar nada para não deixar o microfone aberto.
+ */
+function abandonVoiceCapture() {
+    if (voiceState.recorder) {
+        /*
+         * `stop()` agenda o evento final: a flag `abandoned` impede que o
+         * `finalizeVoiceRecording` reponha a prévia em um formulário que já
+         * foi substituído.
+         */
+        voiceState.abandoned = true;
+
+        try {
+            voiceState.recorder.stop();
+        } catch {
+            // O gravador pode já estar inativo; nada a liberar.
+        }
+    }
+
+    stopVoiceTicker();
+    releaseVoiceStream();
+    voiceState.recorder = null;
+    voiceState.chunks = [];
+    voiceState.blob = null;
+    voiceState.mimeType = '';
+    voiceState.seconds = 0;
+
+    if (voiceState.previewUrl) {
+        URL.revokeObjectURL(voiceState.previewUrl);
+        voiceState.previewUrl = null;
+    }
+}
+
+function voiceFormData(form) {
+    const data = new FormData(form);
+
+    data.set('duration', String(voiceState.seconds));
+    data.set('mime_type', voiceState.mimeType);
+    data.set('audio', voiceState.blob, `audio.${voiceExtensionFor(voiceState.mimeType)}`);
+
+    return data;
+}
+
+function createAudioBubble(message) {
+    const template = document.querySelector('[data-chat-audio-template]');
+    const wrapper = template?.content?.firstElementChild?.cloneNode(true) ?? null;
+
+    if (!wrapper) {
+        const fallback = document.createElement('div');
+        fallback.className = 'chat-audio';
+
+        if (message.audio_url) {
+            const player = document.createElement('audio');
+            player.className = 'chat-audio__player';
+            player.controls = true;
+            player.preload = 'metadata';
+            player.src = message.audio_url;
+
+            fallback.append(player);
+        }
+
+        fallback.append(createTextElement('p', 'chat-audio__caption mb-0', 'Mensagem de voz'));
+
+        return fallback;
+    }
+
+    const player = wrapper.querySelector('[data-chat-audio-player]');
+    const duration = wrapper.querySelector('[data-chat-audio-duration]');
+
+    if (player) {
+        if (message.audio_url) {
+            player.src = message.audio_url;
+        } else {
+            player.remove();
+        }
+    }
+
+    if (duration) {
+        if (message.audio_duration_label) {
+            duration.textContent = `· ${message.audio_duration_label}`;
+        } else {
+            duration.remove();
+        }
+    }
+
+    return wrapper;
+}
+
+function bindChatVoice(root = document) {
+    root.querySelectorAll('[data-chat-voice-form]').forEach((form) => {
+        if (form.dataset.chatVoiceBound === '1') {
+            return;
+        }
+
+        form.dataset.chatVoiceBound = '1';
+
+        const fields = voiceFields(form);
+
+        if (!voiceSupported()) {
+            fields.toggle?.setAttribute('disabled', 'disabled');
+            setVoiceStatus(form, 'Este navegador não permite gravar áudio.');
+
+            return;
+        }
+
+        fields.toggle?.addEventListener('click', () => {
+            if (voiceState.recorder) {
+                stopVoiceRecording(form);
+
+                return;
+            }
+
+            startVoiceRecording(form);
+        });
+
+        fields.discard?.addEventListener('click', () => discardVoice(form));
+    });
+}
+
+/*
  * Cartas enviadas juntas compartilham `batch_id` e vivem em um único bloco
  * (`[data-chat-cards]`), lado a lado. O contador "N cartas" só aparece quando o
  * bloco tem mais de uma carta, igual ao histórico renderizado no servidor.
@@ -654,9 +1116,10 @@ function updateCardsCount(group) {
 function createMessageElement(message, currentUserId) {
     const mine = Number(message.sender_id) === Number(currentUserId);
     const isCard = message.type === 'tarot_card';
+    const isVoice = message.type === 'voice';
     const item = document.createElement('li');
 
-    item.className = `chat-message${mine ? ' chat-message--mine' : ''}`;
+    item.className = `chat-message${mine ? ' chat-message--mine' : ''}${isVoice ? ' chat-message--voice' : ''}`;
 
     if (isCard) {
         item.dataset.messageBatch = message.batch_id ?? '';
@@ -686,6 +1149,8 @@ function createMessageElement(message, currentUserId) {
         cards.dataset.chatCards = '';
         cards.append(createCardFigure(message));
         item.append(cards);
+    } else if (isVoice) {
+        item.append(createAudioBubble(message));
     } else {
         item.append(createTextElement('p', 'chat-message__body', message.body ?? ''));
     }
@@ -822,6 +1287,13 @@ async function refreshState(chat) {
         }
 
         const documentFragment = new DOMParser().parseFromString(await response.text(), 'text/html');
+
+        /*
+         * O bloco do chat é substituído inteiro: qualquer gravação em andamento
+         * (ou prévia ainda não enviada) é descartada para não manter o
+         * microfone aberto nem deixar um áudio órfão na memória.
+         */
+        abandonVoiceCapture();
 
         ['#chat', '#consultation-progress', '#consultation-actions', '#consultation-status-summary'].forEach((selector) => {
             replaceFragment(documentFragment, selector);
@@ -1264,8 +1736,16 @@ async function submitChatForm(form) {
 
     const body = form.querySelector('textarea[name="body"]');
     const isCardForm = form.dataset.chatForm === 'card';
+    const isVoiceForm = form.dataset.chatForm === 'voice';
     const maxCards = Number(form.dataset.maxCards ?? 1) || 1;
     const cards = isCardForm ? selectedCardInputs(form) : [];
+
+    if (isVoiceForm && !voiceState.blob) {
+        setFormError(form, 'Grave um áudio antes de enviar.');
+        voiceFields(form).toggle?.focus();
+
+        return;
+    }
 
     if (body && !body.value.trim()) {
         setFormError(form, 'Escreva uma mensagem antes de enviar.');
@@ -1307,7 +1787,7 @@ async function submitChatForm(form) {
                 'X-CSRF-TOKEN': csrfToken(),
                 'X-Requested-With': 'XMLHttpRequest',
             },
-            body: new FormData(form),
+            body: isVoiceForm ? voiceFormData(form) : new FormData(form),
         });
 
         if (response.status === 419) {
@@ -1364,6 +1844,12 @@ async function submitChatForm(form) {
          */
         form.reset();
         resetCardPicker(form);
+
+        if (isVoiceForm) {
+            clearVoiceCapture(form);
+            setVoiceStatus(form, `Grave até ${formatVoiceSeconds(voiceMaxSeconds(form))} segundos de áudio por mensagem.`);
+        }
+
         setNotice(current, payload.notice ?? 'Mensagem enviada.');
         window.setTimeout(() => setNotice(currentChat(), ''), 4000);
 
@@ -1711,6 +2197,7 @@ function bindEmojiPicker(root = document) {
 
 function bindChatForms(root = document) {
     bindEmojiPicker(root);
+    bindChatVoice(root);
 
     root.querySelectorAll('[data-chat-form]').forEach((form) => {
         if (form.dataset.chatFormBound === '1') {

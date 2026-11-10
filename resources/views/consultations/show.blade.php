@@ -299,19 +299,21 @@
         </div>
     </div>
 
+    @if ($consultation->requiresCall())
+        <div class="row g-4 mt-1">
+            <div class="col-12">
+                @include('consultations.partials.call')
+            </div>
+        </div>
+    @endif
+
     @if ($canViewMessages)
         <div class="row g-4 mt-1">
             <div class="col-12">
                 @include('consultations.partials.chat')
             </div>
         </div>
-    @elseif ($consultation->requiresCall())
-        <div class="row g-4 mt-1">
-            <div class="col-12">
-                @include('consultations.partials.call')
-            </div>
-        </div>
-    @elseif ($isAdmin)
+    @elseif ($isAdmin && ! $consultation->requiresCall())
         <x-ui.alert type="info" :dismissible="false" class="mt-4">
             A conversa entre cliente e atendente é privada e não é exibida na visão administrativa.
         </x-ui.alert>

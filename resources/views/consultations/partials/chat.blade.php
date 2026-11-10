@@ -12,6 +12,16 @@
      */
     $chatRealtimeMode = \App\Support\Realtime\RealtimeMode::current();
     $chatPollIntervals = config('consultation.realtime.poll');
+
+    /*
+     * Compositor desta modalidade. O texto pertence ao atendimento por texto e
+     * o áudio ao atendimento por áudio; a política repete a checagem que o
+     * controller faz no envio, então o formulário nunca aparece para quem o
+     * servidor recusaria.
+     */
+    $chatAllowsText = Gate::allows('sendMessage', $consultation);
+    $chatAllowsVoice = Gate::allows('sendVoice', $consultation);
+    $chatVoiceMaxSeconds = (int) config('consultation.voice.max_seconds');
 @endphp
 
 <section
@@ -61,17 +71,20 @@
                     recarregar a página, mantendo os `data-*` do bloco em sincronia.
                 --}}
                 <div class="chat-preferences" role="group" aria-label="Preferências da conversa">
-                    <label class="chat-preferences__item">
-                        <input
-                            class="form-check-input mt-0"
-                            type="checkbox"
-                            role="switch"
-                            id="chat-send-on-enter"
-                            data-chat-preference="send_on_enter"
-                            @checked($chatSendOnEnter)
-                        >
-                        <span>Enter envia</span>
-                    </label>
+                    @if ($chatAllowsText)
+                        {{-- O modo de envio só vale para o compositor de texto. --}}
+                        <label class="chat-preferences__item">
+                            <input
+                                class="form-check-input mt-0"
+                                type="checkbox"
+                                role="switch"
+                                id="chat-send-on-enter"
+                                data-chat-preference="send_on_enter"
+                                @checked($chatSendOnEnter)
+                            >
+                            <span>Enter envia</span>
+                        </label>
+                    @endif
                     <label class="chat-preferences__item">
                         <input
                             class="form-check-input mt-0"
@@ -171,6 +184,7 @@
                         $groupSize = count($group['messages']);
                         $mine = $message->sender_id === auth()->id();
                         $isCard = $message->type === \App\Enums\MessageType::TarotCard;
+                        $isVoice = $message->type === \App\Enums\MessageType::Voice;
                         $senderName = $message->sender_id === $consultation->attendant_id
                             ? ($consultation->attendant->attendantProfile?->display_name ?? $message->sender->name)
                             : $message->sender->name;
@@ -178,7 +192,7 @@
                     @endphp
 
                     <li
-                        class="chat-message{{ $mine ? ' chat-message--mine' : '' }}"
+                        class="chat-message{{ $mine ? ' chat-message--mine' : '' }}{{ $isVoice ? ' chat-message--voice' : '' }}"
                         @if ($group['batch_id'] !== null) data-message-batch="{{ $group['batch_id'] }}" @endif
                         @if (! $isCard) data-message-id="{{ $message->id }}" @endif
                     >
@@ -221,6 +235,29 @@
                                     </figure>
                                 @endforeach
                             </div>
+                        @elseif ($isVoice)
+                            @php
+                                $audioDuration = $message->audioDurationLabel();
+                            @endphp
+                            <div class="chat-audio" data-chat-audio>
+                                @if (filled($message->audio_path))
+                                    {{-- O player consome a rota autorizada; o disco privado nunca é exposto. --}}
+                                    <audio
+                                        class="chat-audio__player"
+                                        controls
+                                        preload="metadata"
+                                        data-chat-audio-player
+                                        src="{{ route('consultations.messages.audio', [$consultation, $message]) }}"
+                                    ></audio>
+                                @endif
+                                <p class="chat-audio__caption mb-0">
+                                    <x-ui.icon name="mic" width="14" height="14" />
+                                    <span>Mensagem de voz</span>
+                                    @if ($audioDuration !== null)
+                                        <span class="chat-audio__duration" data-chat-audio-duration>· {{ $audioDuration }}</span>
+                                    @endif
+                                </p>
+                            </div>
                         @else
                             <p class="chat-message__body">{{ $message->body }}</p>
                         @endif
@@ -239,7 +276,7 @@
                 <div class="mt-3">{{ $messages->links() }}</div>
             @endif
 
-            @if ($chatStatus === \App\Enums\ConsultationStatus::Active && Gate::allows('sendMessage', $consultation))
+            @if ($chatStatus === \App\Enums\ConsultationStatus::Active && $chatAllowsText)
                 <form
                     method="POST"
                     action="{{ route('consultations.messages.store', $consultation) }}"
@@ -313,7 +350,81 @@
                         mensagem e registra a tentativa para auditoria.
                     </p>
                 </form>
-            @elseif ($chatStatus->isFinal())
+            @endif
+
+            @if ($chatStatus === \App\Enums\ConsultationStatus::Active && $chatAllowsVoice)
+                {{--
+                    Compositor de voz do atendimento por áudio.
+
+                    A gravação acontece no navegador (`MediaRecorder`) e o
+                    arquivo só sobe depois de o participante confirmar o envio:
+                    descartar a prévia não gera upload nem mensagem. O `duration`
+                    é preenchido pelo JS; sem JavaScript, o formulário não é
+                    utilizável e a mensagem de voz pode ser enviada pelo app.
+                --}}
+                <form
+                    method="POST"
+                    action="{{ route('consultations.messages.audio.store', $consultation) }}"
+                    enctype="multipart/form-data"
+                    class="chat-form chat-voice mt-4"
+                    data-chat-form="voice"
+                    data-chat-voice-form
+                    data-max-seconds="{{ $chatVoiceMaxSeconds }}"
+                >
+                    @csrf
+                    <input type="hidden" name="duration" value="" data-chat-voice-duration>
+                    <input type="hidden" name="mime_type" value="" data-chat-voice-mime>
+
+                    <label class="form-label" for="chat-voice-toggle">Mensagem de voz</label>
+
+                    <div class="chat-voice__controls">
+                        <button
+                            type="button"
+                            class="btn btn-ghost btn-sm chat-voice__record"
+                            id="chat-voice-toggle"
+                            data-chat-voice-toggle
+                            aria-describedby="chat-voice-status"
+                        >
+                            <x-ui.icon name="mic" width="16" height="16" />
+                            <span data-chat-voice-toggle-label>Gravar áudio</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            class="btn btn-ghost btn-sm d-none"
+                            data-chat-voice-discard
+                        >
+                            <x-ui.icon name="x" width="16" height="16" />
+                            Descartar
+                        </button>
+
+                        <x-ui.button type="submit" variant="primary" size="sm" class="d-none" data-chat-voice-send>
+                            Enviar áudio
+                        </x-ui.button>
+                    </div>
+
+                    <p class="form-text mb-0 mt-2" id="chat-voice-status" data-chat-voice-status aria-live="polite">
+                        Grave até {{ $chatVoiceMaxSeconds }} segundos de áudio por mensagem.
+                    </p>
+
+                    <audio
+                        class="chat-voice__preview d-none mt-2"
+                        controls
+                        preload="metadata"
+                        data-chat-voice-preview
+                    ></audio>
+
+                    <div class="invalid-feedback d-block d-none" data-chat-error role="alert"></div>
+                    @error('audio')
+                        <div class="invalid-feedback d-block">{{ $message }}</div>
+                    @enderror
+                    @error('duration')
+                        <div class="invalid-feedback d-block">{{ $message }}</div>
+                    @enderror
+                </form>
+            @endif
+
+            @if ($chatStatus->isFinal())
                 <p class="form-text mt-4 mb-0">
                     A consulta foi encerrada. A conversa permanece disponível somente para leitura.
                 </p>
@@ -323,7 +434,7 @@
                 </p>
             @endif
 
-            @if ($isAttendant && $chatStatus === \App\Enums\ConsultationStatus::Active)
+            @if ($isAttendant && $chatStatus === \App\Enums\ConsultationStatus::Active && $chatAllowsText)
                 <div class="chat-card-sender mt-4">
                     @if ($cardDecks->isEmpty())
                         <p class="form-text mb-0">
@@ -495,5 +606,23 @@
             @endif
         </x-ui.card-body>
     </x-ui.card>
+
+    {{--
+        Molde da bolha de mensagem de voz.
+
+        Mensagens que chegam pelo broadcast (ou voltam do envio AJAX) são
+        montadas no navegador; clonar este molde mantém o ícone e a estrutura
+        idênticos ao histórico renderizado pelo servidor.
+    --}}
+    <template data-chat-audio-template>
+        <div class="chat-audio" data-chat-audio>
+            <audio class="chat-audio__player" controls preload="metadata" data-chat-audio-player></audio>
+            <p class="chat-audio__caption mb-0">
+                <x-ui.icon name="mic" width="14" height="14" />
+                <span>Mensagem de voz</span>
+                <span class="chat-audio__duration" data-chat-audio-duration></span>
+            </p>
+        </div>
+    </template>
 </section>
 

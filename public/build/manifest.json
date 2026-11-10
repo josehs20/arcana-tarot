@@ -40,7 +40,7 @@
     "src": "node_modules/@fontsource/inter/files/inter-latin-600-normal.woff2"
   },
   "resources/css/app.scss": {
-    "file": "assets/app-DAznRclk.css",
+    "file": "assets/app-aHMeT1qP.css",
     "name": "app",
     "names": [
       "app.css"
@@ -61,7 +61,7 @@
     ]
   },
   "resources/js/app.js": {
-    "file": "assets/app-B5TsaEmc.js",
+    "file": "assets/app-7pnzEseY.js",
     "name": "app",
     "src": "resources/js/app.js",
     "isEntry": true

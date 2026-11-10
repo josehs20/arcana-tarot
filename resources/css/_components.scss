@@ -804,6 +804,11 @@
     border-color: rgba(var(--arcana-gold-rgb), .3);
 }
 
+// Bolha de voz: mais estreita que a de texto, do tamanho do player nativo.
+.chat-message--voice {
+    max-width: min(85%, 22rem);
+}
+
 // Linha do tempo do painel administrativo: sem lado "meu", todas as bolhas
 // ocupam a largura disponível e as ocorrências aparecem como alerta no fluxo.
 .admin-history-timeline {
@@ -896,8 +901,86 @@
     padding: .05rem .5rem;
 }
 
+// Bolha de mensagem de voz: o player nativo ocupa a largura da bolha e a
+// legenda repete a duração calculada pelo servidor.
+.chat-audio {
+    max-width: min(100%, 20rem);
+}
+
+.chat-audio__player {
+    display: block;
+    height: 2.25rem;
+    width: 100%;
+}
+
+.chat-audio__caption {
+    color: var(--arcana-ivory-muted);
+    display: flex;
+    flex-wrap: wrap;
+    font-size: .72rem;
+    gap: .15rem;
+    margin-top: .35rem;
+}
+
+.chat-audio__duration {
+    font-variant-numeric: tabular-nums;
+}
+
 .chat-form textarea {
     resize: vertical;
+}
+
+// Compositor de voz: os controles (gravar, descartar, enviar) ficam em uma
+// linha que quebra em telas estreitas, sempre abaixo do rótulo do campo.
+.chat-voice__controls {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+}
+
+.chat-voice__record {
+    align-items: center;
+    display: inline-flex;
+    gap: .35rem;
+
+    // Gravação em andamento: destaque vermelho pulsante, o mesmo tom usado nos
+    // alertas de erro do formulário.
+    &.is-recording {
+        border-color: rgba(var(--arcana-danger-rgb), .55);
+        color: var(--arcana-danger);
+
+        &::before {
+            animation: chat-voice-pulse 1.4s ease-in-out infinite;
+            background: currentColor;
+            border-radius: 50%;
+            content: '';
+            height: .5rem;
+            width: .5rem;
+        }
+    }
+}
+
+.chat-voice__preview {
+    display: block;
+    width: 100%;
+}
+
+@keyframes chat-voice-pulse {
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: .25;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .chat-voice__record.is-recording::before {
+        animation: none;
+    }
 }
 
 // Seletor de emoji do compositor.

@@ -100,7 +100,18 @@ class ConsultationPolicy
     public function sendMessage(User $user, Consultation $consultation): bool
     {
         return $this->viewMessages($user, $consultation)
-            && $consultation->allowsMessaging();
+            && $consultation->allowsMessaging()
+            && ($consultation->modality?->allowsChat() ?? true);
+    }
+
+    /**
+     * Áudio gravado no navegador: habilidade do atendimento por áudio, para os
+     * dois participantes. O caminho do arquivo é sempre gerado no servidor.
+     */
+    public function sendVoice(User $user, Consultation $consultation): bool
+    {
+        return $this->viewMessages($user, $consultation)
+            && $consultation->allowsVoiceMessages();
     }
 
     /**
@@ -118,7 +129,8 @@ class ConsultationPolicy
     public function sendCard(User $user, Consultation $consultation): bool
     {
         return $this->isActiveAttendantOf($user, $consultation)
-            && $consultation->allowsMessaging();
+            && $consultation->allowsMessaging()
+            && ($consultation->modality?->allowsChat() ?? true);
     }
 
     /**

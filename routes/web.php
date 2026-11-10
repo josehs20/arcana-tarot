@@ -261,6 +261,22 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('throttle:consultation-cards')
         ->name('consultations.cards.store');
 
+    /*
+     * Mensagem de voz do atendimento por áudio.
+     *
+     * Mesmo limite de frequência aplicado às mensagens de texto: a gravação
+     * chega como upload multipart do MediaRecorder e é guardada no disco
+     * privado. A leitura sai por `consultations.messages.audio`.
+     */
+    Route::post('consultas/{consultation}/mensagens/audio', [ConsultationMessageController::class, 'storeVoice'])
+        ->whereNumber('consultation')
+        ->middleware('throttle:consultation-voice')
+        ->name('consultations.messages.audio.store');
+
+    Route::get('consultas/{consultation}/mensagens/{message}/audio', [ConsultationMessageController::class, 'audio'])
+        ->whereNumber(['consultation', 'message'])
+        ->name('consultations.messages.audio');
+
     Route::get('consultas/{consultation}/mensagens/{message}/imagem', [ConsultationMessageController::class, 'image'])
         ->whereNumber(['consultation', 'message'])
         ->name('consultations.messages.image');

@@ -455,7 +455,7 @@ class ConsultationModalityTest extends TestCase
         ])->save();
     }
 
-    public function test_audio_consultations_do_not_expose_chat_or_accept_messages(): void
+    public function test_audio_consultations_expose_the_voice_chat_but_reject_text_messages(): void
     {
         Carbon::setTestNow('2026-02-05 11:00:00');
 
@@ -474,14 +474,18 @@ class ConsultationModalityTest extends TestCase
             ->assertSee('data-call-request', false)
             ->assertSee('data-call-hangup', false)
             ->assertSee('data-signal-url', false)
-            ->assertDontSee('id="chat"', false)
+            // A chamada convive com o mural de voz: só o texto e as cartas saem.
+            ->assertSee('data-chat-voice-form', false)
+            ->assertSee(route('consultations.messages.audio.store', $consultation))
+            ->assertDontSee('data-chat-form="text"', false)
             ->assertDontSee('Enviar uma carta');
 
         $this->actingAs($attendant)
             ->get(route('consultations.show', $consultation))
             ->assertOk()
             ->assertSee('data-call-accept', false)
-            ->assertSee('data-call-reject', false);
+            ->assertSee('data-call-reject', false)
+            ->assertSee('data-chat-voice-form', false);
 
         $this->actingAs($client)
             ->post(route('consultations.messages.store', $consultation), [

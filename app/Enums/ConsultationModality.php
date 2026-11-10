@@ -6,8 +6,9 @@ namespace App\Enums;
  * Modalidade do atendimento.
  *
  * A modalidade é escolhida pelo cliente antes da solicitação e congela o
- * preço aplicado no aceite. O chat e o envio de cartas pertencem ao
- * atendimento por texto; áudio e vídeo usam chamadas WebRTC.
+ * preço aplicado no aceite. O chat com cartas pertence ao atendimento por
+ * texto; o atendimento por áudio usa a chamada WebRTC e compartilha o mesmo
+ * chat com mensagens de voz gravadas no navegador. O vídeo fica só na chamada.
  */
 enum ConsultationModality: string
 {
@@ -59,6 +60,24 @@ enum ConsultationModality: string
     public function allowsChat(): bool
     {
         return $this === self::Text;
+    }
+
+    /**
+     * Mensagens de voz gravadas no navegador são exclusivas do atendimento por
+     * áudio: é o mesmo chat do texto, sem cartas e sem digitação de texto.
+     */
+    public function allowsVoiceMessages(): bool
+    {
+        return $this === self::Audio;
+    }
+
+    /**
+     * A modalidade possui conversa persistida (texto e/ou voz). O vídeo não
+     * tem: a comunicação acontece somente dentro da chamada.
+     */
+    public function allowsMessageFeed(): bool
+    {
+        return $this->allowsChat() || $this->allowsVoiceMessages();
     }
 
     /**

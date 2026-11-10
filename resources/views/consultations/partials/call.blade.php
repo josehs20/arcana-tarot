@@ -3,6 +3,13 @@
     $callPayload = \App\Support\ConsultationCallPresenter::toArray($call);
     $isVideo = $consultation->modality?->requiresVideo() ?? false;
     $callConfig = $callConfig ?? [];
+
+    /*
+     * O partial é incluído pela tela da consulta, pela tela dedicada de
+     * atendimento e por testes. O papel administrativo nem sempre vem no
+     * payload; o fallback evita a variável indefinida na visão de auditoria.
+     */
+    $isAdmin = $isAdmin ?? false;
 @endphp
 
 <section
