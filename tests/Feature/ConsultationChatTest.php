@@ -299,6 +299,74 @@ class ConsultationChatTest extends TestCase
         $this->assertStringContainsString('private', (string) $image->headers->get('Cache-Control'));
     }
 
+    /**
+     * O áudio usa o mesmo chat do texto, então o painel de cartas continua
+     * disponível para o atendente: a carta enviada vira uma mensagem do
+     * histórico como em qualquer atendimento com conversa.
+     */
+    public function test_attendant_can_send_cards_in_an_audio_consultation(): void
+    {
+        $client = User::factory()->create();
+        $attendant = User::factory()->attendant()->create();
+
+        $consultation = Consultation::factory()->audio()->active()->create([
+            'client_id' => $client->id,
+            'attendant_id' => $attendant->id,
+        ]);
+
+        [$card, $deck] = $this->card();
+
+        $this->actingAs($attendant)
+            ->get(route('consultations.show', $consultation))
+            ->assertOk()
+            ->assertSee('Gravar áudio')
+            ->assertSee('Enviar cartas')
+            ->assertSee($deck->name);
+
+        $this->actingAs($attendant)
+            ->post(route('consultations.cards.store', $consultation), [
+                'tarot_card_id' => $card->id,
+            ])
+            ->assertRedirect(route('consultations.show', $consultation).'#chat')
+            ->assertSessionHas('success');
+
+        $message = ConsultationMessage::query()->sole();
+
+        $this->assertSame(MessageType::TarotCard, $message->type);
+        $this->assertSame($card->id, $message->tarot_card_id);
+        $this->assertSame($attendant->id, $message->sender_id);
+
+        $this->actingAs($client)
+            ->get(route('consultations.show', $consultation))
+            ->assertOk()
+            ->assertSee('A Estrela');
+    }
+
+    /**
+     * O vídeo não tem conversa persistida: não existe histórico onde publicar a
+     * carta, e a rota recusa o envio mesmo para o atendente escalado.
+     */
+    public function test_video_consultations_do_not_accept_tarot_cards(): void
+    {
+        $client = User::factory()->create();
+        $attendant = User::factory()->attendant()->create();
+
+        $consultation = Consultation::factory()->video()->active()->create([
+            'client_id' => $client->id,
+            'attendant_id' => $attendant->id,
+        ]);
+
+        [$card] = $this->card();
+
+        $this->actingAs($attendant)
+            ->post(route('consultations.cards.store', $consultation), [
+                'tarot_card_id' => $card->id,
+            ])
+            ->assertForbidden();
+
+        $this->assertSame(0, ConsultationMessage::query()->count());
+    }
+
     public function test_card_snapshot_survives_catalog_changes_and_ended_consultation(): void
     {
         [$client, $attendant, $consultation] = $this->conversation();

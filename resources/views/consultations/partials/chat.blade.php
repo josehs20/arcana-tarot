@@ -15,10 +15,10 @@
 
     /*
      * Compositor desta modalidade. Texto e áudio dividem o mesmo campo de
-     * envio: o botão de gravar só aparece no atendimento por áudio e as cartas
-     * só no atendimento por texto. A política repete a checagem que o
-     * controller faz no envio, então o formulário nunca aparece para quem o
-     * servidor recusaria.
+     * envio: o botão de gravar aparece só no atendimento por áudio e o seletor
+     * de cartas nos atendimentos com conversa (texto e áudio). A política
+     * repete a checagem que o controller faz no envio, então o formulário nunca
+     * aparece para quem o servidor recusaria.
      */
     $chatAllowsText = Gate::allows('sendMessage', $consultation);
     $chatAllowsVoice = Gate::allows('sendVoice', $consultation);

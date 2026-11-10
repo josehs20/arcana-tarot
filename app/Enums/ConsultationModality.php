@@ -6,10 +6,10 @@ namespace App\Enums;
  * Modalidade do atendimento.
  *
  * A modalidade é escolhida pelo cliente antes da solicitação e congela o
- * preço aplicado no aceite. Texto e áudio compartilham o mesmo chat: no texto
- * entram cartas do tarô e mensagens digitadas; no áudio, mensagens digitadas e
- * áudios gravados no navegador. O vídeo não tem conversa persistida — acontece
- * inteiro dentro da chamada WebRTC.
+ * preço aplicado no aceite. Texto e áudio compartilham o mesmo chat, com
+ * mensagens digitadas e cartas do tarô; o áudio acrescenta as gravações de voz
+ * feitas no navegador. O vídeo não tem conversa persistida — acontece inteiro
+ * dentro da chamada WebRTC.
  */
 enum ConsultationModality: string
 {
@@ -30,7 +30,7 @@ enum ConsultationModality: string
     {
         return match ($this) {
             self::Text => 'Mensagens em tempo real com envio de cartas de Tarot pelo chat.',
-            self::Audio => 'Conversa por mensagens com áudios gravados e enviados pelo chat.',
+            self::Audio => 'Conversa por mensagens, áudios gravados e cartas de Tarot pelo chat.',
             self::Video => 'Chamada de áudio e vídeo entre cliente e atendente.',
         };
     }
@@ -77,11 +77,13 @@ enum ConsultationModality: string
     }
 
     /**
-     * Cartas do tarô são exclusivas do atendimento por texto.
+     * Cartas do tarô entram nos atendimentos com conversa persistida — texto e
+     * áudio compartilham o mesmo chat. A chamada de vídeo não recebe cartas
+     * porque não existe histórico onde publicá-las.
      */
     public function allowsTarotCards(): bool
     {
-        return $this === self::Text;
+        return $this !== self::Video;
     }
 
     /**

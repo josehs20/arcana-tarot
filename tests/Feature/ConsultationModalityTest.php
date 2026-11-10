@@ -112,7 +112,7 @@ class ConsultationModalityTest extends TestCase
         $this->get(route('attendants.show', $attendant->attendantProfile))
             ->assertOk()
             ->assertSee('Modalidades e preços')
-            ->assertSee('Conversa por mensagens com áudios gravados e enviados pelo chat')
+            ->assertSee('Conversa por mensagens, áudios gravados e cartas de Tarot pelo chat')
             ->assertSee('R$ 2,00')
             ->assertSee('R$ 4,00');
     }
@@ -456,8 +456,8 @@ class ConsultationModalityTest extends TestCase
     }
 
     /**
-     * O áudio é um chat: texto digitado e áudio gravado no mesmo compositor,
-     * sem chamada ao vivo. Cartas continuam exclusivas do atendimento por texto.
+     * O áudio é um chat: texto digitado, áudio gravado e cartas do tarô no mesmo
+     * painel, sem chamada ao vivo.
      */
     public function test_audio_consultations_expose_the_chat_with_the_voice_recorder(): void
     {
@@ -480,8 +480,7 @@ class ConsultationModalityTest extends TestCase
             ->assertSee('name="body"', false)
             ->assertDontSee('data-call-request', false)
             ->assertDontSee('data-call-hangup', false)
-            ->assertDontSee('data-signal-url', false)
-            ->assertDontSee('Enviar uma carta');
+            ->assertDontSee('data-signal-url', false);
 
         $this->actingAs($attendant)
             ->get(route('consultations.show', $consultation))

@@ -3,7 +3,10 @@
 namespace App\Enums;
 
 /**
- * Estado da chamada de voz/vídeo de uma consulta.
+ * Estado da chamada WebRTC (áudio e vídeo) de uma consulta por vídeo.
+ *
+ * O atendimento por áudio não abre chamada: a voz circula pelo chat como
+ * mensagem gravada.
  *
  * ringing  -> chamada solicitada pelo cliente, aguardando o atendente
  * accepted -> atendente aceitou; navegadores trocam oferta/resposta/ICE

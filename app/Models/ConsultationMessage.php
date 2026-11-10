@@ -21,8 +21,9 @@ class ConsultationMessage extends Model
      *
      * O cliente participa do chat e pode enviar texto — e voz, no atendimento
      * por áudio —, mas somente o atendente escalado pode registrar cartas do
-     * tarô, e somente em consultas de texto. A autorização HTTP repete a regra;
-     * o model protege jobs, comandos e importações.
+     * tarô, e apenas nos atendimentos com conversa persistida (texto e áudio).
+     * A autorização HTTP repete a regra; o model protege jobs, comandos e
+     * importações.
      */
     protected static function booted(): void
     {
@@ -45,7 +46,7 @@ class ConsultationMessage extends Model
                 }
 
                 if (! ($consultation->modality?->allowsTarotCards() ?? true)) {
-                    throw new DomainException('Cartas do tarô são exclusivas do atendimento por texto.');
+                    throw new DomainException('Cartas do tarô não são enviadas em chamadas de vídeo.');
                 }
             }
 

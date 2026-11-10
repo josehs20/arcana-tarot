@@ -126,6 +126,11 @@ class ConsultationPolicy
         return $this->isActiveAdmin($user);
     }
 
+    /**
+     * Cartas do tarô: exclusividade do atendente escalado, no chat de texto e
+     * de áudio. O vídeo não tem conversa persistida, então não há onde publicar
+     * a carta.
+     */
     public function sendCard(User $user, Consultation $consultation): bool
     {
         return $this->isActiveAttendantOf($user, $consultation)
