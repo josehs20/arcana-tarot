@@ -2,6 +2,7 @@
 
 namespace App\Notifications\Auth;
 
+use App\Support\MailIdentity;
 use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Notifications\Messages\MailMessage;
 
@@ -23,8 +24,11 @@ class VerifyEmailNotification extends VerifyEmail
      */
     public function toMail($notifiable)
     {
+        $sender = MailIdentity::from();
+
         return (new MailMessage)
-            ->subject('Confirme seu e-mail | '.config('app.name'))
+            ->from($sender->address, $sender->name)
+            ->subject('Confirme seu e-mail | '.$sender->name)
             ->view('mail.verify-email', [
                 'recipientName' => $notifiable->name,
                 'recipientEmail' => $notifiable->email,

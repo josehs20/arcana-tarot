@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Mail\TestEmailMail;
+use App\Support\SiteContent;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Mail\Transport\ArrayTransport;
 use Illuminate\Support\Facades\Mail;
@@ -29,7 +30,7 @@ class SendTestEmailCommandTest extends TestCase
 
         Mail::assertSent(TestEmailMail::class, function (TestEmailMail $mail): bool {
             return $mail->hasTo('voce@example.com')
-                && $mail->subjectLine === 'Teste de e-mail — '.config('app.name')
+                && $mail->subjectLine === 'Teste de e-mail — '.app(SiteContent::class)->name()
                 && $mail->mailerName === config('mail.default');
         });
     }

@@ -2,6 +2,7 @@
 
 namespace App\Mail;
 
+use App\Support\MailIdentity;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -30,7 +31,10 @@ class TestEmailMail extends Mailable
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: $this->subjectLine);
+        return new Envelope(
+            subject: $this->subjectLine,
+            from: MailIdentity::from(),
+        );
     }
 
     public function content(): Content

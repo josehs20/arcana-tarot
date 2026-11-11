@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Mail\TestEmailMail;
+use App\Support\MailIdentity;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
@@ -55,7 +56,7 @@ class SendTestEmail extends Command
         $subject = trim((string) $this->option('subject'));
 
         if ($subject === '') {
-            $subject = 'Teste de e-mail — '.config('app.name');
+            $subject = 'Teste de e-mail — '.MailIdentity::siteName();
         }
 
         $this->describeTransport($mailerName, $transport, $config);
@@ -119,7 +120,7 @@ class SendTestEmail extends Command
     private function describeTransport(string $mailerName, string $transport, array $config): void
     {
         $from = trim((string) config('mail.from.address'));
-        $fromName = trim((string) config('mail.from.name'));
+        $fromName = MailIdentity::siteName();
 
         $this->newLine();
         $this->line('Transporte configurado:');
