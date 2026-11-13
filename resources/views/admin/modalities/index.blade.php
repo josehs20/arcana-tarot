@@ -1,4 +1,4 @@
-<x-layouts.panel variant="admin" title="Modalidades dos atendentes | Arcana Tarot">
+<x-layouts.panel variant="admin" title="Modalidades dos atendentes">
     <x-layouts.page-header
         title="Modalidades e preços dos atendentes"
         subtitle="Defina quais modalidades cada profissional atende e o preço por minuto de cada uma. Texto é sempre oferecido; áudio e vídeo exigem habilitação. Sem preço configurado a consulta não pode ser solicitada."

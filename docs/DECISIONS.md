@@ -160,12 +160,12 @@
 - **Contexto**: o catálogo precisa aceitar uploads administrativos sem expor arquivos em `public/`, sem confiar no nome/MIME enviados pelo navegador e sem quebrar mensagens históricas quando uma imagem for substituída.
 - **Decisão**:
   - Baralhos e cartas são gerenciados por rotas `role:admin` + `TarotCatalogPolicy`; a única exceção é a rota de imagem, que aceita admin ativo ou participante de consulta ativa para cartas ativas de baralhos ativos.
-  - Imagens ficam no disco dedicado `tarot_private` (`storage/app/private/tarot/cards`), com nome aleatório de 40 caracteres e extensão derivada do MIME real. São aceitos somente JPEG, PNG e WebP até `TAROT_IMAGE_MAX_KB` (padrão 5 MB). SVG, executáveis e arquivos cujo conteúdo não seja imagem são rejeitados.
+  - Imagens ficam no disco dedicado `tarot_private` (`storage/app/private/tarot/cards`), com nome aleatório de 40 caracteres e extensão derivada do formato final. São aceitos somente JPEG, PNG e WebP, com teto único `IMAGE_UPLOAD_MAX_KB` (padrão 25 MB). SVG, executáveis e arquivos cujo conteúdo não seja imagem são rejeitados. A normalização no upload está em D-028.
   - O banco guarda apenas `image_path`, `image_mime`, `image_size` e `image_checksum` (SHA-256); nunca o binário.
   - Cada substituição grava um novo caminho. O arquivo anterior **não é apagado**, pois pode estar referenciado em `consultation_messages.image_path`; qualquer limpeza futura deve provar ausência de referências e será auditada.
   - Não há exclusão de baralhos/cartas na interface. Inativar (`is_active = false`) preserva registros e arquivos; a seleção para o chat usa `availableForSelection()` (carta ativa + baralho ativo).
   - Criação, edição, status, reordenação e troca de imagem geram `audit_logs` com metadados textuais (sem binário). A troca registra `from_path`/`to_path`.
-- **Consequências**: aumenta o custo de armazenamento ao longo do tempo, aceito em troca de histórico íntegro; a rotina de limpeza fica explicitamente adiada e condicionada a referências; o `php.ini` do container precisa permitir uploads acima de 5 MB (8 MB por arquivo e 12 MB por requisição).
+- **Consequências**: aumenta o custo de armazenamento ao longo do tempo, aceito em troca de histórico íntegro; a rotina de limpeza fica explicitamente adiada e condicionada a referências; o `php.ini` do container precisa permitir uploads acima de 25 MB (32 MB por arquivo e 40 MB por requisição) e o Nginx usa `client_max_body_size 40M` para não cortar antes do PHP.
 
 ### D-022 — Ciclo de vida da consulta com estados terminais e travas no banco
 
@@ -244,6 +244,20 @@
   - Perfis públicos e diretório exibem o menor preço disponível como "a partir de" e "Preço não configurado" quando falta valor.
 - **Consequências**: cada atendente pode praticar preços diferentes por modalidade; mudanças de preço valem apenas para novas consultas (snapshot); a administração precisa manter os preços por atendente antes de publicá-lo.
 
+### D-028 — Upload de imagens: normalização no servidor, perfis de saída e guardas de processamento
+
+- **Status**: Aceita e implementada em novembro de 2026
+- **Contexto**: os storages gravavam o arquivo exatamente como recebido. Fotos de celular (6–15 MB, 4000 px de largura e EXIF de orientação) chegavam ao catálogo, às fotos de atendentes e ao CMS, consumindo banda e armazenamento sem ganho visual. Os limites também divergiam: validação de 2–5 MB, PHP CLI com 2/8 MB, container com 8/12 MB e Nginx com 20 MB, então o erro aparecia antes da mensagem de validação. Não havia biblioteca de imagem (só GD puro em `ImageThumbnail`) nem remoção de metadados.
+- **Decisão**:
+  - `intervention/image` ^3.11 com driver GD é a camada de processamento; o binding de `ImageManager` é singleton em `AppServiceProvider` e só é resolvido quando GD/Imagick existe.
+  - `ImageNormalizer` é a autoridade: detecta o tipo por `getimagesize()`, aplica a orientação do EXIF (`autoOrientation` do driver), reduz com `scaleDown()` até o perfil e recodifica em WebP (PNG no favicon). Recodificar descarta EXIF/GPS.
+  - Perfis em `ImageProfile`: `tarot_card` 1200×1800 q85, `site_section` 2400×1600 q82, `site_logo` 1200×1200 q88, `site_favicon` 512×512 PNG, `attendant_photo` 1200×1200 q85. Reduzir nunca amplia imagens menores.
+  - Teto único de recebimento `IMAGE_UPLOAD_MAX_KB` (25 MB), verificado no cabeçalho antes de decodificar. `IMAGE_MAX_PIXELS` (40 MP) e `IMAGE_MEMORY_LIMIT` (512 MB) protegem contra *decompression bombs* e estouro de memória; falhas de processamento viram `ValidationException` no campo, não erro 500.
+  - `resources/js/image-upload.js` otimiza no navegador arquivos acima de 4 MB, usando os `data-*` do componente `x-ui.image-input`; se falhar, o original segue e o servidor resolve.
+  - Limites alinhados: PHP `upload_max_filesize=32M`/`post_max_size=40M`, Nginx `client_max_body_size 40M`. `exif` foi adicionado ao Dockerfile para corrigir orientação.
+  - Arquivos antigos continuam intactos; a allowlist de entrega já aceitava JPEG/PNG/WebP. Sem GD/Imagick, o upload é gravado sem reprocessar e um aviso é registrado no log.
+- **Consequências**: novos uploads ficam menores em bytes e consistentes em orientação; a suíte de normalização exige GD (`RequiresPhpExtension`) e roda no container. HEIC continua fora de escopo — o navegador não o decodifica e o servidor o rejeita com mensagem clara. A conversão para WebP deve ser considerada ao gerar imagens em lote fora do painel.
+
 ---
 
 ## 2. Dúvidas que precisam de confirmação
@@ -259,7 +273,7 @@
 | **Q-05** | Atendente pode ficar `online` sem aceitar automaticamente? Há tempo limite para aceite? | Fluxo de solicitação/expiração | Prompt 10 |
 | **Q-06** | Administrador pode ler conversas? Em quais hipóteses e com qual auditoria? **Resolvida por D-023**: o admin não lê a conversa no MVP; qualquer acesso futuro exigirá decisão própria e auditoria. | Privacidade/LGPD | Prompts 17/18 |
 | **Q-07** | Confirmar `America/Sao_Paulo` e `pt_BR`? | Datas, cobrança e UX | Prompt 01 |
-| **Q-08** | Formatos/tamanho máximo de imagem de carta; necessidade de redimensionamento (`gd`) e verificação de mime? **Resolvida por D-021**: JPEG/PNG/WebP, 5 MB configurável, MIME real obrigatório, sem redimensionamento no MVP. | Upload e segurança | Prompt 09 |
+| **Q-08** | Formatos/tamanho máximo de imagem de carta; necessidade de redimensionamento (`gd`) e verificação de mime? **Resolvida por D-021/D-028**: JPEG/PNG/WebP, teto único de 25 MB, MIME real obrigatório e normalização no upload (orientação, redução por perfil e WebP). | Upload e segurança | Prompt 09 |
 | **Q-09** | Cliente precisa confirmar e-mail antes de consultar? | Fluxo de cadastro | Prompt 04 |
 | **Q-10** | Quais dados mínimos no cadastro do cliente (nome, e-mail, telefone, data de nascimento)? | LGPD/minimização | Prompt 04 |
 | **Q-11** | Um usuário pode ter mais de um papel (ex.: admin também atendente)? | Modelo de autorização | Prompt 04 |
@@ -305,3 +319,4 @@
 | 2026-10-21 | Prompt 20 | Runbook de implantação, backups/restauração, onboarding manual de atendente e avaliação de prontidão; `docs/DEPLOYMENT.md` e `docs/ATTENDANT_ONBOARDING.md` criados |
 | 2026-11-04 | Segurança do chat | Presença por aba, inatividade configurável, avisos de saída, encerramento no logout, compra de créditos com retorno e limites administrativos auditados; `docs/SEGURANCA_E_USABILIDADE_CHAT.md` criado |
 | 2026-11-06 | Preço por atendente | D-027 adicionada: `attendant_modality_prices` como fonte única do preço por minuto, edição em `/admin/modalidades`, snapshot em `consultations.price_per_minute_cents` e remoção da tarifa global de `/admin/financeiro`; D-018 e Q-02 atualizadas |
+| 2026-11-11 | Upload de imagens | D-028 adicionada: `intervention/image`, `ImageNormalizer`, perfis de saída, teto único de 25 MB, guardas de pixels/memória, normalização no navegador e limites PHP/Nginx alinhados; D-021 e Q-08 atualizadas |

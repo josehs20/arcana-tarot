@@ -1,4 +1,4 @@
-<x-layouts.panel variant="panel" title="Meu histórico | Arcana Tarot">
+<x-layouts.panel variant="panel" title="Meu histórico">
     <x-layouts.page-header
         title="Meu histórico"
         subtitle="Consultas, recargas e lançamentos da sua própria conta, somente para leitura."

@@ -1,4 +1,4 @@
-<x-layouts.panel variant="admin" :title="'Consulta #' . $consultation->id . ' | Arcana Tarot'">
+<x-layouts.panel variant="admin" :title="'Consulta #' . $consultation->id">
     <x-layouts.page-header
         :title="'Consulta #' . $consultation->id"
         :subtitle="$consultation->client->name . ' × ' . ($consultation->attendant->attendantProfile?->display_name ?? $consultation->attendant->name)"

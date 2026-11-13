@@ -1,4 +1,4 @@
-<x-layouts.panel variant="admin" title="Pacotes e recarga | Arcana Tarot">
+<x-layouts.panel variant="admin" title="Pacotes e recarga">
     <x-layouts.page-header
         title="Pacotes e recarga"
         subtitle="Defina o que o cliente vê no checkout de créditos: catálogo de pacotes e faixa de valores aceita na recarga da carteira."

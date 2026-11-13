@@ -1,4 +1,4 @@
-<x-layouts.guest title="Redefinir senha | Arcana Tarot">
+<x-layouts.guest title="Redefinir senha">
     <h1 class="h3 mb-1">Redefinir senha</h1>
     <p class="auth-card__subtitle mb-4">Escolha uma nova senha para acessar sua conta.</p>
 

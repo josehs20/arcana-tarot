@@ -1,4 +1,4 @@
-<x-layouts.panel variant="panel" title="Carteira e créditos | Arcana Tarot">
+<x-layouts.panel variant="panel" title="Carteira e créditos">
     <x-layouts.page-header
         title="Carteira e créditos"
         subtitle="Consulte seu saldo, o histórico de movimentações e as opções de recarga."

@@ -34,19 +34,12 @@ return [
     |--------------------------------------------------------------------------
     |
     | A foto aparece no diretório público e no perfil do atendente. Também é
-    | pública, com nome aleatório e extensão derivada do MIME real detectado
+    | pública, com nome aleatório e extensão derivada do conteúdo processado
     | no servidor. O upload é opcional: sem foto o diretório mostra as iniciais.
+    | O teto de recebimento e a normalização seguem `config/images.php`.
     |
     */
 
     'photo_directory' => 'attendant-photos',
-    'photo_max_kb' => (int) env('ATTENDANT_PHOTO_MAX_KB', 2048),
-
-    /** @var array<string, string> MIME real => extensão usada no nome aleatório. */
-    'allowed_photo_mimes' => [
-        'image/jpeg' => 'jpg',
-        'image/png' => 'png',
-        'image/webp' => 'webp',
-    ],
 
 ];

@@ -29,12 +29,12 @@ return [
     |--------------------------------------------------------------------------
     |
     | Apenas formatos raster seguros. SVG e formatos executáveis são rejeitados
-    | pela validação `image` e pela lista explícita de MIME types. O limite é
-    | configurável por ambiente (em kilobytes).
+    | pela validação `image` e pela lista explícita de MIME types. O teto de
+    | recebimento é único para o painel: ver `config/images.php`
+    | (`IMAGE_UPLOAD_MAX_KB`). A imagem recebida é normalizada antes de ser
+    | gravada (orientação, redução e recompressão em WebP).
     |
     */
-
-    'image_max_kb' => (int) env('TAROT_IMAGE_MAX_KB', 5120),
 
     /*
     |--------------------------------------------------------------------------
@@ -42,9 +42,9 @@ return [
     |--------------------------------------------------------------------------
     |
     | A grade do atendente exibe dezenas de cartas por baralho. Servir o arquivo
-    | original (até 5 MB) em uma célula de 76 px multiplica o tráfego e o tempo
-    | de abertura do seletor. A miniatura é gerada uma única vez com a extensão
-    | GD do servidor e gravada ao lado do original no mesmo disco privado; as
+    | original em uma célula de 76 px multiplica o tráfego e o tempo de abertura
+    | do seletor. A miniatura é gerada uma única vez com a extensão GD do
+    | servidor e gravada ao lado do original no mesmo disco privado; as
     | requisições seguintes leem o WebP já reduzido.
     |
     | `width` é a largura em pixels (a proporção é preservada) e `quality` é a

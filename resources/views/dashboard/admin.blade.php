@@ -1,4 +1,4 @@
-<x-layouts.panel variant="admin" title="Painel Administrativo | Arcana Tarot">
+<x-layouts.panel variant="admin" title="Painel Administrativo">
     <x-layouts.page-header
         title="Painel do Administrador"
         subtitle="Visão geral da operação, usuários e consultas da plataforma."

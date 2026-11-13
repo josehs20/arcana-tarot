@@ -316,11 +316,17 @@ class AdminTarotCatalogTest extends TestCase
         $this->assertSame($deck->id, $card->deck_id);
         $this->assertStringStartsWith('cards/', $card->image_path);
         $this->assertStringNotContainsString('minha-carta', $card->image_path);
-        $this->assertStringEndsWith('.png', $card->image_path);
-        $this->assertSame('image/png', $card->image_mime);
+        $this->assertContains(pathinfo($card->image_path, PATHINFO_EXTENSION), ['png', 'webp']);
+        $this->assertContains($card->image_mime, ['image/png', 'image/webp']);
         $this->assertGreaterThan(0, $card->image_size);
         $this->assertSame(64, strlen($card->image_checksum));
         $this->assertTrue(Storage::disk('tarot_private')->exists($card->image_path));
+
+        // O checksum e o tamanho gravados descrevem o arquivo armazenado, e não
+        // o upload original: a imagem é normalizada antes da gravação.
+        $stored = (string) Storage::disk('tarot_private')->get($card->image_path);
+        $this->assertSame(strlen($stored), $card->image_size);
+        $this->assertSame(hash('sha256', $stored), $card->image_checksum);
 
         $absolutePath = Storage::disk('tarot_private')->path($card->image_path);
         $this->assertFalse(str_starts_with($absolutePath, public_path().DIRECTORY_SEPARATOR));
@@ -356,7 +362,7 @@ class AdminTarotCatalogTest extends TestCase
             ]))
             ->assertSessionHasErrors('image');
 
-        config(['tarot.image_max_kb' => 1]);
+        config(['images.max_upload_kb' => 1]);
 
         $this->actingAs($admin)
             ->post(route('admin.decks.cards.store', $deck), $this->cardPayload([
@@ -586,6 +592,9 @@ class AdminTarotCatalogTest extends TestCase
             ->assertSee('Carta Editável')
             ->assertSee('Imagem atual')
             ->assertSee(route('tarot.cards.image', $card), false)
+            ->assertSee('data-image-upload', false)
+            ->assertSee('data-image-profile="tarot_card"', false)
+            ->assertSee('data-image-max-bytes="26214400"', false)
             ->assertSee('enctype="multipart/form-data"', false);
     }
 

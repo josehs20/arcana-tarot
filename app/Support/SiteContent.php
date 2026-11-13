@@ -150,6 +150,18 @@ final class SiteContent
         return $name !== '' ? $name : (string) config('site.profile_keys.site_name', 'Arcana Tarot');
     }
 
+    /**
+     * Nome do site lido direto do banco, sem o cache do singleton.
+     *
+     * Use em processos de vida longa (workers de fila, comandos) e em serviços
+     * fora do ciclo de request, onde o nome pode ter sido alterado no painel
+     * depois que a instância compartilhada memoizou as configurações.
+     */
+    public static function currentName(): string
+    {
+        return (new self)->name();
+    }
+
     public function description(): string
     {
         $description = trim((string) ($this->settings()['site_description'] ?? ''));

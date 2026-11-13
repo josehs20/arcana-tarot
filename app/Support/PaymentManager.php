@@ -303,7 +303,7 @@ final class PaymentManager
             $charge = $this->provider->createCharge(new PixChargeRequest(
                 externalReference: (string) $payment->external_reference,
                 amountCents: $payment->amount_cents,
-                description: 'Recarga Arcana Tarot — '.$payment->credits.' créditos',
+                description: 'Recarga '.SiteContent::currentName().' — '.$payment->credits.' créditos',
                 expiresAt: $expiresAt,
             ));
         } catch (Throwable $exception) {

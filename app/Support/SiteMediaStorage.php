@@ -2,46 +2,43 @@
 
 namespace App\Support;
 
+use App\Support\Images\ImageNormalizer;
+use App\Support\Images\ImageProfile;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
 use RuntimeException;
 
 /**
  * Uploads do CMS no disco público.
  *
- * O nome é aleatório e a extensão vem do MIME real detectado pelo servidor,
- * nunca do nome enviado pelo navegador. Assim evitamos sobrescrita de
- * arquivos e execução de conteúdo inesperado.
+ * O nome é aleatório e a extensão vem do conteúdo processado no servidor,
+ * nunca do nome enviado pelo navegador. A imagem é reduzida para o perfil da
+ * tela (logo, favicon ou seção) e recomprimida antes de ser gravada.
  */
 final class SiteMediaStorage
 {
-    public function store(UploadedFile $file): string
-    {
-        $mime = (string) $file->getMimeType();
-        $extension = config("site.allowed_image_mimes.{$mime}");
+    public function __construct(private ImageNormalizer $normalizer) {}
 
-        if (! is_string($extension) || $extension === '') {
-            throw ValidationException::withMessages([
-                'image' => 'Envie uma imagem JPEG, PNG ou WebP válida.',
-            ]);
-        }
+    /**
+     * @param  string  $field  Campo do formulário que receberá o erro de validação.
+     */
+    public function store(UploadedFile $file, ImageProfile $profile, string $field = 'image'): string
+    {
+        $image = $this->normalizer->normalize($file, $profile, $field);
 
         $directory = trim((string) config('site.image_directory'), '/');
 
         do {
-            $path = $directory.'/'.Str::random(40).'.'.$extension;
+            $path = $directory.'/'.Str::random(40).'.'.$image->extension;
         } while ($this->disk()->exists($path));
 
-        $storedPath = $this->disk()->putFileAs($directory, $file, basename($path));
-
-        if ($storedPath === false) {
+        if (! $this->disk()->put($path, $image->binary)) {
             throw new RuntimeException('Não foi possível armazenar a imagem.');
         }
 
-        return $storedPath;
+        return $path;
     }
 
     /**

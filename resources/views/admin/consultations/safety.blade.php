@@ -1,4 +1,4 @@
-<x-layouts.panel variant="admin" title="Segurança do chat | Arcana Tarot">
+<x-layouts.panel variant="admin" title="Segurança do chat">
     <x-layouts.page-header
         title="Segurança do chat"
         subtitle="Defina quando um atendimento inativo é encerrado e quanto tempo o navegador pode ficar desconectado antes da interrupção."

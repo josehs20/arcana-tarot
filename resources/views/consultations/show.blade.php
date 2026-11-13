@@ -8,7 +8,7 @@
     $attendantName = $consultation->attendant->attendantProfile?->display_name ?? $consultation->attendant->name;
 @endphp
 
-<x-layouts.panel :variant="$layoutVariant" :title="'Consulta #' . $consultation->id . ' | Arcana Tarot'">
+<x-layouts.panel :variant="$layoutVariant" :title="'Consulta #' . $consultation->id">
     <x-layouts.page-header
         :title="'Consulta #' . $consultation->id"
         :subtitle="$isAdmin

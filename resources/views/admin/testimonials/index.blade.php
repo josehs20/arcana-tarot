@@ -1,4 +1,4 @@
-<x-layouts.panel variant="admin" title="Depoimentos | Arcana Tarot">
+<x-layouts.panel variant="admin" title="Depoimentos">
     <x-layouts.page-header
         title="Depoimentos"
         subtitle="Moderação dos depoimentos publicados nos perfis dos atendentes: ocultar e republicar."

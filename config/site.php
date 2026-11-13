@@ -103,7 +103,7 @@ return [
             'eyebrow' => 'Cartas e baralhos',
             'title' => 'Tradições que abrem caminhos diferentes',
             'subtitle' => 'Cada baralho tem uma linguagem própria. Veja as cartas usadas pelos atendentes e escolha a leitura que combina com a sua pergunta.',
-            'body' => 'Os baralhos abaixo fazem parte do catálogo do Arcana Tarot. A escolha final é sempre do atendente, conforme o método que ele domina.',
+            'body' => 'Os baralhos abaixo fazem parte do nosso catálogo. A escolha final é sempre do atendente, conforme o método que ele domina.',
             'image_alt' => null,
             'primary_cta_label' => 'Conversar com um atendente',
             'primary_cta_target' => 'attendants.index',
@@ -114,7 +114,7 @@ return [
         'work_with_us' => [
             'eyebrow' => 'Para profissionais',
             'title' => 'Seu dom também tem lugar aqui',
-            'subtitle' => 'Se você lê cartas e quer atender em um ambiente reservado, conheça o processo de candidatura do Arcana Tarot.',
+            'subtitle' => 'Se você lê cartas e quer atender em um ambiente reservado, conheça o nosso processo de candidatura.',
             'body' => 'Enviar uma candidatura não garante aprovação automática; cada perfil passa por análise.',
             'image_alt' => null,
             'primary_cta_label' => 'Trabalhe conosco',
@@ -194,12 +194,8 @@ return [
         'site_favicon_path' => null,
     ],
 
-    // Uploads do CMS ficam no disco público (não são conteúdo sensível).
+    // Uploads do CMS ficam no disco público (não são conteúdo sensível) e são
+    // normalizados antes da gravação. O teto de recebimento fica em
+    // `config/images.php` e vale para todo o painel.
     'image_directory' => 'site',
-    'allowed_image_mimes' => [
-        'image/jpeg' => 'jpg',
-        'image/png' => 'png',
-        'image/webp' => 'webp',
-    ],
-    'max_image_kb' => 2048,
 ];

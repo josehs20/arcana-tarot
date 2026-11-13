@@ -1,11 +1,15 @@
+@php
+    $site ??= app(\App\Support\SiteContent::class);
+@endphp
+
 <x-layouts.public
-    title="Trabalhe conosco — Arcana Tarot"
-    description="Candidate-se para atender como tarólogo no Arcana Tarot. Conte sua experiência e sua abordagem de atendimento."
+    :title="'Trabalhe conosco — '.$site->name()"
+    :description="'Candidate-se para atender como tarólogo no '.$site->name().'. Conte sua experiência e sua abordagem de atendimento.'"
 >
     <x-public.page-hero
         eyebrow="Para profissionais"
         title="Seu dom também tem lugar aqui"
-        description="Quer atender no Arcana Tarot? Conte sua experiência com Tarot e como você conduz seus atendimentos. Nossa equipe analisa cada candidatura com atenção."
+        :description="'Quer atender no '.$site->name().'? Conte sua experiência com Tarot e como você conduz seus atendimentos. Nossa equipe analisa cada candidatura com atenção.'"
         current="Trabalhe conosco"
     />
 

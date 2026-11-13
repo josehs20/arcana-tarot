@@ -6,7 +6,7 @@
     A tabela de destinatários fica dentro do formulário de envio; a paginação e
     os filtros recarregam a página, então a seleção vale para a página atual.
 --}}
-<x-layouts.panel variant="admin" title="Disparo de e-mails | Arcana Tarot">
+<x-layouts.panel variant="admin" title="Disparo de e-mails">
     <x-layouts.page-header
         title="Disparo de e-mails"
         subtitle="Selecione os usuários, escreva a mensagem e acompanhe o envio no histórico."

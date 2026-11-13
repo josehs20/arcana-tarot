@@ -106,20 +106,39 @@ Regras aplicadas no servidor (Form Requests):
 - Formatos aceitos: **JPEG, PNG e WebP**.
 - SVG, GIF, formatos executáveis, arquivos de texto e conteúdo cujo MIME real não seja
   um dos três permitidos são rejeitados pelas regras `image`, `mimes` e `mimetypes`.
-- Limite configurável em `TAROT_IMAGE_MAX_KB` (padrão **5120 KB / 5 MB**). O `php.ini`
-  do container permite 8 MB por arquivo e 12 MB por requisição para dar folga ao
-  multipart; o Nginx permite 20 MB.
+- Teto único de recebimento em `config/images.php` (`IMAGE_UPLOAD_MAX_KB`, padrão
+  **25600 KB / 25 MB**), compartilhado pelas cartas, fotos de atendentes, logo,
+  favicon e mídia das seções. O `php.ini` do container permite 32 MB por arquivo e
+  40 MB por requisição; o Nginx aceita 40 MB (`client_max_body_size`).
+- Depois da validação, a imagem é **normalizada no servidor** por
+  `App\Support\Images\ImageNormalizer` antes de ser gravada:
+  - a orientação do EXIF é aplicada (fotos de celular não ficam deitadas);
+  - `scaleDown()` reduz até o perfil `tarot_card` (1200×1800), preservando a
+    proporção e sem ampliar imagens menores;
+  - o arquivo é recodificado em **WebP qualidade 85**, o que também descarta
+    EXIF/GPS do original;
+  - um teto de `IMAGE_MAX_PIXELS` (40 MP) barra *decompression bombs* antes da
+    decodificação, e o orçamento de memória recusa imagens que não caberiam no
+    processo.
+- Em navegadores modernos, `resources/js/image-upload.js` reduz e recomprime no
+  cliente arquivos acima de 4 MB antes do envio. É só uma otimização: a decisão
+  final e a gravação continuam no servidor.
 - A imagem é obrigatória na criação. Na edição, é opcional quando já existe imagem;
   cartas antigas sem imagem passam a exigi-la na próxima edição.
 - O nome enviado pelo navegador **nunca** é usado como destino. O servidor gera
-  `cards/{40 caracteres aleatórios}.{extensão do MIME real}`.
+  `cards/{40 caracteres aleatórios}.{extensão do formato final}`.
 - O binário não é gravado no MySQL. Persistimos apenas caminho relativo, MIME, tamanho
-  em bytes e checksum SHA-256.
+  em bytes e checksum SHA-256 **do arquivo normalizado**.
+- Arquivos gravados antes desta mudança continuam sendo servidos como estão; a
+  allowlist de entrega já aceita JPEG, PNG e WebP.
 
 Configuração:
 
 ```dotenv
-TAROT_IMAGE_MAX_KB=5120
+IMAGE_UPLOAD_MAX_KB=25600
+IMAGE_MAX_PIXELS=40000000
+IMAGE_DRIVER=gd
+IMAGE_MEMORY_LIMIT=512M
 ```
 
 Disco dedicado em `config/filesystems.php`:
@@ -218,7 +237,7 @@ credenciais ou o conteúdo integral de descrições/significados.
 Após atualizar o código:
 
 ```sh
-docker compose build app          # aplica os limites de upload do php.ini
+docker compose build app          # aplica uploads.ini, a extensão exif e o GD do Dockerfile
 docker compose up -d
 docker compose exec app php artisan migrate
 npm run build

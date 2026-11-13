@@ -1,4 +1,4 @@
-<x-layouts.panel variant="admin" :title="'Comissão de ' . $attendant->name . ' | Arcana Tarot'">
+<x-layouts.panel variant="admin" :title="'Comissão de ' . $attendant->name">
     <x-layouts.page-header
         :title="'Comissão de ' . ($profile->display_name ?: $attendant->name)"
         :subtitle="$attendant->email . ' — configuração da taxa e histórico do razão.'"

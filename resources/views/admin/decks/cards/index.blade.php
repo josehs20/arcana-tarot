@@ -1,4 +1,4 @@
-<x-layouts.panel variant="admin" :title="'Cartas — ' . $deck->name . ' | Arcana Tarot'">
+<x-layouts.panel variant="admin" :title="'Cartas — ' . $deck->name">
     <x-layouts.page-header
         :title="'Cartas de ' . $deck->name"
         :subtitle="$deck->is_active

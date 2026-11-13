@@ -1,4 +1,4 @@
-<x-layouts.panel variant="admin" title="Consultas | Arcana Tarot">
+<x-layouts.panel variant="admin" title="Consultas">
     <x-layouts.page-header
         title="Consultas"
         subtitle="Acompanhe todas as solicitações e atendimentos da plataforma."

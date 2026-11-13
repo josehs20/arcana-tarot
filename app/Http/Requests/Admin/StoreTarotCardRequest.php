@@ -2,12 +2,15 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Http\Requests\Admin\Concerns\ValidatesImageUploads;
 use App\Models\TarotCard;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 
 class StoreTarotCardRequest extends FormRequest
 {
+    use ValidatesImageUploads;
+
     public function authorize(): bool
     {
         return Gate::allows('create', TarotCard::class);
@@ -24,28 +27,13 @@ class StoreTarotCardRequest extends FormRequest
             'meaning_upright' => ['nullable', 'string', 'max:5000'],
             'meaning_reversed' => ['nullable', 'string', 'max:5000'],
             'is_active' => ['required', 'boolean'],
-            'image' => $this->imageRules(required: true),
+            'image' => $this->imageUploadRules(required: true),
         ];
     }
 
     protected function prepareForValidation(): void
     {
         $this->merge($this->normalizedTextFields());
-    }
-
-    /**
-     * @return array<int, string>
-     */
-    protected function imageRules(bool $required): array
-    {
-        return [
-            $required ? 'required' : 'nullable',
-            'file',
-            'image',
-            'mimes:jpg,jpeg,png,webp',
-            'mimetypes:image/jpeg,image/png,image/webp',
-            'max:'.max(1, (int) config('tarot.image_max_kb')),
-        ];
     }
 
     /**
@@ -87,7 +75,7 @@ class StoreTarotCardRequest extends FormRequest
             'image.image' => 'O arquivo enviado não é uma imagem válida.',
             'image.mimes' => 'A imagem deve ser JPEG, PNG ou WebP.',
             'image.mimetypes' => 'O conteúdo do arquivo não corresponde a JPEG, PNG ou WebP.',
-            'image.max' => 'A imagem deve ter no máximo '.(int) config('tarot.image_max_kb').' KB.',
+            'image.max' => 'A imagem deve ter no máximo '.$this->imageUploadMaxMb().' MB.',
             'image.uploaded' => 'Não foi possível receber a imagem. Verifique o tamanho do arquivo e tente novamente.',
         ];
     }

@@ -5,7 +5,7 @@
 
 <x-layouts.public
     :title="'Como funciona — '.$site->name()"
-    :description="$section['subtitle'] ?: 'Entenda o passo a passo para escolher um atendente, agendar sua consulta e receber a leitura no Arcana Tarot.'"
+    :description="$section['subtitle'] ?: 'Entenda o passo a passo para escolher um atendente, agendar sua consulta e receber a leitura no '.$site->name().'.'"
 >
     <x-public.page-hero
         :eyebrow="$section['eyebrow'] ?: 'Como funciona'"

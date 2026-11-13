@@ -11,12 +11,11 @@
     $phoneValue = old('phone', $user?->phone);
     $birthDateValue = old('birth_date', $user?->birth_date?->toDateString());
     $genderValue = old('gender', $user?->gender?->value);
-    $photoMaxKb = max(1, (int) config('attendant.photo_max_kb'));
 @endphp
 
 <x-layouts.panel
     variant="admin"
-    :title="($editing ? 'Editar usuário' : 'Novo atendente') . ' | Arcana Tarot'"
+    :title="($editing ? 'Editar usuário' : 'Novo atendente')"
 >
     <x-layouts.page-header
         :title="$editing ? ($isAttendant ? 'Editar atendente' : 'Editar cliente') : 'Novo atendente'"
@@ -187,25 +186,16 @@
 
                             <div class="mb-3">
                                 <label class="form-label" for="photo">Foto do perfil</label>
-                                <input
-                                    class="form-control @error('photo') is-invalid @enderror"
-                                    type="file"
-                                    id="photo"
+                                <x-ui.image-input
                                     name="photo"
-                                    accept="image/jpeg,image/png,image/webp"
-                                    @error('photo') aria-invalid="true" aria-describedby="photo-error" @enderror
+                                    :profile="\App\Support\Images\ImageProfile::AttendantPhoto"
                                 >
-                                <div class="form-text">
-                                    JPEG, PNG ou WebP, até {{ $photoMaxKb }} KB.
                                     @if ($photoUrl)
                                         Enviar um arquivo substitui a foto atual.
                                     @else
                                         Sem foto, o diretório exibe as iniciais do nome profissional.
                                     @endif
-                                </div>
-                                @error('photo')
-                                    <div class="invalid-feedback d-block" id="photo-error">{{ $message }}</div>
-                                @enderror
+                                </x-ui.image-input>
                             </div>
 
                             @if ($photoUrl)

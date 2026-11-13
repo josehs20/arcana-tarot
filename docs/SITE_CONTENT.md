@@ -62,9 +62,14 @@ php artisan storage:link
 Regras aplicadas por `SiteMediaStorage` e pelos Form Requests:
 
 - formatos: JPEG, PNG e WebP (o tipo real é detectado pelo servidor);
-- tamanho máximo: `config/site.max_image_kb` (2 MB por padrão);
-- nome aleatório de 40 caracteres, com extensão derivada do MIME — nunca do
-  nome enviado — evitando sobrescrita e execução de arquivos;
+- teto único de recebimento em `config/images.php` (`IMAGE_UPLOAD_MAX_KB`,
+  padrão 25 MB), o mesmo das cartas e das fotos de atendentes;
+- a imagem é normalizada antes da gravação: orientação do EXIF aplicada,
+  redução para o perfil da tela (logo 1200×1200, favicon 512×512 quadrado em
+  PNG e seções 2400×1600) e recompressão em WebP (qualidade 82–88), o que
+  remove EXIF/GPS;
+- nome aleatório de 40 caracteres, com extensão derivada do formato final —
+  nunca do nome enviado — evitando sobrescrita e execução de arquivos;
 - upload gravado antes da transação; se o banco falhar, o arquivo novo é
   removido;
 - a imagem substituída só é apagada depois do commit, preservando a anterior

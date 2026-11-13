@@ -2,49 +2,44 @@
 
 namespace App\Support;
 
+use App\Support\Images\ImageNormalizer;
+use App\Support\Images\ImageProfile;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
 use RuntimeException;
 
 /**
  * Upload da foto exibida no diretório público de atendentes.
  *
  * O arquivo fica no disco público (o navegador do cliente baixa a imagem), o
- * nome é aleatório e a extensão vem do MIME real detectado no servidor, nunca
- * do nome enviado pelo navegador.
+ * nome é aleatório e a extensão vem do conteúdo processado no servidor, nunca
+ * do nome enviado pelo navegador. A imagem é redimensionada para o perfil de
+ * foto de atendente e recomprimida em WebP antes de ser gravada.
  */
 final class AttendantPhotoStorage
 {
+    public function __construct(private ImageNormalizer $normalizer) {}
+
     /**
      * @return string Caminho relativo dentro do disco público.
      */
     public function store(UploadedFile $file): string
     {
-        $mime = (string) $file->getMimeType();
-        $extension = config("attendant.allowed_photo_mimes.{$mime}");
-
-        if (! is_string($extension) || $extension === '') {
-            throw ValidationException::withMessages([
-                'photo' => 'Envie uma imagem JPG, PNG ou WebP.',
-            ]);
-        }
+        $image = $this->normalizer->normalize($file, ImageProfile::AttendantPhoto, 'photo');
 
         $directory = trim((string) config('attendant.photo_directory'), '/');
 
         do {
-            $path = $directory.'/'.Str::random(40).'.'.$extension;
+            $path = $directory.'/'.Str::random(40).'.'.$image->extension;
         } while ($this->disk()->exists($path));
 
-        $storedPath = $this->disk()->putFileAs($directory, $file, basename($path));
-
-        if ($storedPath === false) {
+        if (! $this->disk()->put($path, $image->binary)) {
             throw new RuntimeException('Não foi possível armazenar a foto do atendente.');
         }
 
-        return $storedPath;
+        return $path;
     }
 
     /**

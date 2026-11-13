@@ -1,4 +1,4 @@
-<x-layouts.panel variant="admin" title="Comissões | Arcana Tarot">
+<x-layouts.panel variant="admin" title="Comissões">
     <x-layouts.page-header
         title="Comissões"
         subtitle="Taxas por atendente, razão imutável e comparação entre receita de serviço e comissões."

@@ -1,4 +1,4 @@
-<x-layouts.panel variant="admin" title="Bônus de cadastro | Arcana Tarot">
+<x-layouts.panel variant="admin" title="Bônus de cadastro">
     <x-layouts.page-header
         title="Bônus de primeiro acesso"
         subtitle="Créditos presenteados uma única vez a cada cliente que confirma o e-mail do cadastro ou entra pela primeira vez com o Google."

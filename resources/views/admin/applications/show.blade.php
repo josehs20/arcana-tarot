@@ -7,7 +7,7 @@
     ];
 @endphp
 
-<x-layouts.panel variant="admin" title="Candidatura — {{ $application->name }} | Arcana Tarot">
+<x-layouts.panel variant="admin" title="Candidatura — {{ $application->name }}">
     <x-layouts.page-header
         :title="$application->name"
         :subtitle="'Candidatura #' . $application->id . ' · enviada em ' . ($application->submitted_at?->format('d/m/Y H:i') ?? 'data não registrada')"

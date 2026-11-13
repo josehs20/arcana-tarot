@@ -16,7 +16,7 @@
     restante (`data-consultation-countdown`) também nasce no servidor e é apenas
     decrementado no navegador entre uma atualização e outra.
 --}}
-<x-layouts.panel variant="panel" :title="'Atendimento #' . $consultation->id . ' | Arcana Tarot'">
+<x-layouts.panel variant="panel" :title="'Atendimento #' . $consultation->id">
     <div
         data-consultation-workspace
         data-consultation-id="{{ $consultation->id }}"

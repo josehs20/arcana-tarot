@@ -206,7 +206,7 @@ final class InfinitePayCheckoutManager
             $link = $this->gateway->createCheckoutLink(new CheckoutLinkRequest(
                 orderNsu: (string) $payment->external_reference,
                 amountCents: $payment->amount_cents,
-                description: 'Recarga Arcana Tarot - '.$payment->credits.' créditos',
+                description: 'Recarga '.SiteContent::currentName().' - '.$payment->credits.' créditos',
                 redirectUrl: route('client.credits.checkout.return'),
                 webhookUrl: $this->webhookUrl(),
                 customerName: $payment->user?->name,

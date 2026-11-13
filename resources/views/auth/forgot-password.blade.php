@@ -1,4 +1,4 @@
-<x-layouts.guest title="Recuperar senha | Arcana Tarot">
+<x-layouts.guest title="Recuperar senha">
     <h1 class="h3 mb-1">Recuperar senha</h1>
     <p class="auth-card__subtitle mb-4">
         Informe o e-mail cadastrado e enviaremos o link de redefinição.

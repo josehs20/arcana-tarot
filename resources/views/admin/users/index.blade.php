@@ -1,4 +1,4 @@
-<x-layouts.panel variant="admin" title="Usuários | Arcana Tarot">
+<x-layouts.panel variant="admin" title="Usuários">
     <x-layouts.page-header
         title="Usuários"
         subtitle="Gerencie contas de clientes, atendentes e administradores."

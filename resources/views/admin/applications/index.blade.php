@@ -1,4 +1,4 @@
-<x-layouts.panel variant="admin" title="Candidaturas | Arcana Tarot">
+<x-layouts.panel variant="admin" title="Candidaturas">
     <x-layouts.page-header
         title="Candidaturas"
         :subtitle="'Recebidas pelo formulário Trabalhe conosco. Pendentes: ' . $pendingCount . '.'"

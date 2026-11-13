@@ -373,14 +373,14 @@ final class TarotCatalog
             [
                 'name' => 'Baralho de 52 Cartas',
                 'slug' => 'baralho-de-52-cartas',
-                'description' => 'Baralho comum de 52 cartas, com frentes originais do Arcana e leitura por posição cruzada com o naipe.',
+                'description' => 'Baralho comum de 52 cartas, com frentes originais e leitura por posição cruzada com o naipe.',
                 'assets' => 'baralho-52',
                 'cards' => self::playingCards(),
             ],
             [
                 'name' => 'Baralho Espanhol',
                 'slug' => 'baralho-espanhol',
-                'description' => 'Baraja española de 40 cartas, com frentes originais do Arcana e leitura por posição cruzada com o naipe.',
+                'description' => 'Baraja española de 40 cartas, com frentes originais e leitura por posição cruzada com o naipe.',
                 'assets' => 'baralho-espanhol',
                 'cards' => self::spanishCards(),
             ],

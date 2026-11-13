@@ -1,6 +1,10 @@
+@php
+    $site ??= app(\App\Support\SiteContent::class);
+@endphp
+
 <x-layouts.public
-    title="Termos de uso — Arcana Tarot"
-    description="Termos de uso do Arcana Tarot. Conteúdo provisório em revisão jurídica."
+    :title="'Termos de uso — '.$site->name()"
+    :description="'Termos de uso do '.$site->name().'. Conteúdo provisório em revisão jurídica.'"
 >
     <section class="arcana-hero arcana-hero--compact arcana-stars">
         <div class="container-wide">

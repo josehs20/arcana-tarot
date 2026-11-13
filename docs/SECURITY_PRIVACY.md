@@ -83,10 +83,19 @@ duplicidade por e-mail/status.
 ### 2.5 Uploads e imagens
 
 - Aceitos apenas JPEG, PNG e WebP, com validação de arquivo, extensão, MIME real
-  e limite configurável (`TAROT_IMAGE_MAX_KB`, padrão 5 MB).
+  e teto único de `IMAGE_UPLOAD_MAX_KB` (padrão **25 MB**) para todo o painel.
+- Antes da gravação a imagem é normalizada (`ImageNormalizer`): orientação do
+  EXIF aplicada, redução para o perfil da tela (cartas 1200×1800, fotos
+  1200×1200, logo 1200×1200, favicon 512×512, seções 2400×1600) e
+  recompressão em WebP — o favicon permanece PNG. Recodificar descarta EXIF,
+  GPS e demais metadados do original.
+- Guardas de processamento: teto de `IMAGE_MAX_PIXELS` (40 MP) verificado no
+  cabeçalho, antes da decodificação, e orçamento de memória conferido contra o
+  `memory_limit` do processo (padrão 512 MB via `IMAGE_MEMORY_LIMIT`). Arquivos
+  acima do teto são recusados com erro de validação, não com erro 500.
 - SVG, executáveis e arquivos cujo conteúdo não seja raster são rejeitados.
 - O navegador nunca escolhe caminho: o servidor gera nome aleatório de 40
-  caracteres e extensão a partir do MIME detectado.
+  caracteres e extensão a partir do formato processado.
 - O disco é privado (`tarot_private`), sem `serve` público nem symlink em
   `public/`.
 - A entrega passa por rota autorizada, com `X-Content-Type-Options: nosniff` e

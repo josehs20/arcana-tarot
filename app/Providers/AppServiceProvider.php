@@ -37,12 +37,28 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
+use Intervention\Image\Drivers\Gd\Driver as GdDriver;
+use Intervention\Image\Drivers\Imagick\Driver as ImagickDriver;
+use Intervention\Image\ImageManager;
 use InvalidArgumentException;
 
 class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        // Normalização das imagens do painel. O binding é resolvido apenas
+        // dentro do fluxo de upload, quando GD/Imagick já foi confirmado; em
+        // ambientes sem extensão de imagem o arquivo é gravado sem reprocessar.
+        $this->app->singleton(ImageManager::class, function (): ImageManager {
+            $driver = strtolower((string) config('images.driver', 'gd'));
+
+            if ($driver === 'imagick' && extension_loaded('imagick')) {
+                return new ImageManager(new ImagickDriver);
+            }
+
+            return new ImageManager(new GdDriver);
+        });
+
         // O conteúdo do site é memoizado dentro da instância; um singleton por
         // request evita repetir consultas entre layout, navbar e rodapé.
         $this->app->singleton(SiteContent::class);

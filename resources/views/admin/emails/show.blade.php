@@ -2,7 +2,7 @@
     Detalhe de um disparo: o texto exatamente como foi enviado e a situação de
     cada destinatário. O botão de reenvio só aparece quando há falhas.
 --}}
-<x-layouts.panel variant="admin" title="Disparo de e-mails | Arcana Tarot">
+<x-layouts.panel variant="admin" title="Disparo de e-mails">
     <x-layouts.page-header title="Detalhes do disparo" :subtitle="$campaign->subject">
         <x-slot name="actions">
             <a class="btn btn-ghost btn-sm" href="{{ route('admin.emails.index') }}">Voltar para disparos</a>

@@ -9,6 +9,7 @@ use App\Support\AuthenticationSettings;
 use App\Support\FirstAccessBonus;
 use App\Support\GoogleAccountException;
 use App\Support\GoogleAccountManager;
+use App\Support\SiteContent;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -111,7 +112,7 @@ class GoogleAuthenticationController extends Controller
         return redirect()
             ->route($user->dashboardRouteName())
             ->with('success', $user->wasRecentlyCreated
-                ? 'Conta criada com o Google. Bem-vindo(a) à Arcana Tarot!'
+                ? 'Conta criada com o Google. Boas-vindas ao '.SiteContent::currentName().'!'
                 : 'Login com Google realizado.');
     }
 }

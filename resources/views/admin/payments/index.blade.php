@@ -1,4 +1,4 @@
-<x-layouts.panel variant="admin" title="Pagamentos | Arcana Tarot">
+<x-layouts.panel variant="admin" title="Pagamentos">
     <x-layouts.page-header
         title="Pagamentos"
         subtitle="Recargas PIX registradas, com filtros e totais calculados a partir do estado oficial."

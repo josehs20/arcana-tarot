@@ -1,4 +1,4 @@
-<x-layouts.guest title="Entrar | Arcana Tarot">
+<x-layouts.guest title="Entrar">
     <h1 class="h3 mb-1">Entrar</h1>
     <p class="text-ivory-muted mb-4">Acesse sua conta para acompanhar suas consultas.</p>
 

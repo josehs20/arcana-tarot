@@ -19,7 +19,8 @@ RUN php -r 'if (PHP_VERSION_ID < 80400) { fwrite(STDERR, "PHP >= 8.4 obrigatorio
 #   pdo_mysql : driver do MySQL 8.4 (banco principal)
 #   redis     : cliente Redis (cache, filas, sessões e Laravel Reverb)
 #   intl      : localização pt_BR (formatação de datas/números)
-#   gd        : processamento/validação das imagens das cartas de Tarot
+#   gd        : processamento/validação das imagens do painel
+#   exif      : leitura da orientação de fotos de celular antes de reduzi-las
 #   bcmath    : precisão em cálculos decimais auxiliares (financeiro)
 #   pcntl     : controle de processos (queue worker, Reverb)
 #   sockets   : servidor WebSocket do Laravel Reverb
@@ -47,6 +48,7 @@ RUN apk add --no-cache --virtual .build-deps \
         --with-webp \
     && docker-php-ext-install -j"$(nproc)" \
         bcmath \
+        exif \
         gd \
         intl \
         pdo_mysql \
@@ -68,7 +70,7 @@ RUN addgroup -g 1000 appuser \
 # Pool do PHP-FPM escutando na porta 9000 para o Nginx.
 COPY docker/php/www.conf /usr/local/etc/php-fpm.d/www.conf
 
-# Limites de upload compatíveis com o catálogo de cartas (5 MB na aplicação).
+# Limites de upload compatíveis com o teto da aplicação (25 MB por imagem).
 COPY docker/php/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
 
 WORKDIR /var/www/html

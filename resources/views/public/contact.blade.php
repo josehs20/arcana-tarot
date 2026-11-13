@@ -1,6 +1,10 @@
+@php
+    $site ??= app(\App\Support\SiteContent::class);
+@endphp
+
 <x-layouts.public
-    title="Contato — Arcana Tarot"
-    description="Canais de contato do Arcana Tarot. Página provisória em preparação."
+    :title="'Contato — '.$site->name()"
+    :description="'Canais de contato do '.$site->name().'. Página provisória em preparação.'"
 >
     <section class="arcana-hero arcana-hero--compact arcana-stars">
         <div class="container-wide">

@@ -243,7 +243,7 @@ Lembre que `public/build` está no `.gitignore`: no Hostoo ele precisa ser gerad
 | 9 | Cobrança por minuto | consulta ativa + `consultations:charge-minutes` | saldo/créditos caem 1 minuto por execução; sem saldo, a consulta encerra |
 | 10 | Expiração de pedido | abrir pedido e rodar `consultations:expire-requests` após o TTL | pedido sai da fila do atendente (TTL 10 min) |
 | 11 | Chamada sem resposta | iniciar áudio/vídeo e rodar `consultations:close-stale-calls` | encerra após 90 s de toque |
-| 12 | Upload | carta de 5 MB e som de 1 MB | aceitos; acima disso, erro de validação da aplicação (não 413 do PHP) |
+| 12 | Upload | foto de celular de 10–15 MB (carta, atendente e seção) e som de 1 MB | imagens aceitas e normalizadas para WebP no perfil de cada tela; acima de 25 MB, erro de validação da aplicação (não 413 do PHP) |
 | 13 | Carteira | recarga + `pix:sandbox-simulate` (§7.3) | créditos creditados uma única vez (idempotência) |
 | 14 | Healthcheck | `curl -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/up` | `200` |
 | 15 | Assets compilados | view-source da home | `/build/assets/...`, nada de `localhost:5173` |
@@ -306,7 +306,7 @@ que é o padrão do perfil local.
 | Docroot fora de `public_html` (D-03) | `@vite`, `asset()`, cookie `SESSION_PATH` errados | só no servidor |
 | PHP do **cron** ≠ PHP do site | cron "não faz nada" em silêncio | caminho absoluto do binário no crontab |
 | `disable_functions`, `max_execution_time` | `queue:work`/`schedule:run` morrem no meio | checklist do painel |
-| Upload máximo do provedor | 413 em cartas de 5 MB | testar com arquivo grande no Hostoo |
+| Upload máximo do provedor | 413 em imagens de 10–15 MB | conferir `upload_max_filesize=32M`, `post_max_size=40M` e o limite do painel; testar com arquivo grande no Hostoo |
 | SMTP real (D-06) | e-mails não saem | teste real no servidor |
 | MariaDB 10.x × MySQL 8.4 | `sql_mode`, `ONLY_FULL_GROUP_BY`, colação | `SELECT VERSION(), @@sql_mode` no painel |
 | Concorrência | `serve` é single-thread (FPM atende em paralelo) | abra 2–3 abas; se precisar, `PHP_CLI_SERVER_WORKERS=4` **com** `--no-reload` |

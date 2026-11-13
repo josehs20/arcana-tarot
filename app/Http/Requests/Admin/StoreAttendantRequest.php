@@ -4,6 +4,7 @@ namespace App\Http\Requests\Admin;
 
 use App\Enums\ConsultationModality;
 use App\Http\Requests\Admin\Concerns\HandlesAttendantFields;
+use App\Http\Requests\Admin\Concerns\ValidatesImageUploads;
 use App\Models\User;
 use App\Support\ConsultationModalityCatalog;
 use App\Support\PhoneNumber;
@@ -22,7 +23,7 @@ use Illuminate\Validation\Validator;
  */
 class StoreAttendantRequest extends FormRequest
 {
-    use HandlesAttendantFields;
+    use HandlesAttendantFields, ValidatesImageUploads;
 
     /**
      * Idade mínima e limite de sanidade, iguais aos do cadastro público.
@@ -86,12 +87,7 @@ class StoreAttendantRequest extends FormRequest
             'bio' => ['nullable', 'string', 'max:1000'],
             'specialties' => ['nullable', 'array', 'max:6'],
             'specialties.*' => ['string', 'max:40'],
-            'photo' => [
-                'nullable',
-                'image',
-                'mimes:jpg,jpeg,png,webp',
-                'max:'.max(1, (int) config('attendant.photo_max_kb')),
-            ],
+            'photo' => $this->imageUploadRules(),
             'commission_rate' => ['required', 'string', $this->commissionRateRule()],
             'is_published' => ['boolean'],
             'prices' => ['nullable', 'array'],
@@ -163,7 +159,7 @@ class StoreAttendantRequest extends FormRequest
             'specialties.*.max' => 'Cada especialidade deve ter no máximo 40 caracteres.',
             'photo.image' => 'Envie um arquivo de imagem.',
             'photo.mimes' => 'Envie uma imagem JPG, PNG ou WebP.',
-            'photo.max' => 'A foto deve ter no máximo '.intdiv(max(1, (int) config('attendant.photo_max_kb')), 1024).' MB.',
+            'photo.max' => 'A foto deve ter no máximo '.$this->imageUploadMaxMb().' MB.',
             'commission_rate.required' => 'Informe a comissão da plataforma.',
             'prices.*.integer' => 'Informe o preço em centavos, sem vírgula (ex.: 250).',
             'prices.*.min' => 'O preço por minuto deve ser maior que zero.',

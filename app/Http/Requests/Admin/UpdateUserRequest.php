@@ -4,6 +4,7 @@ namespace App\Http\Requests\Admin;
 
 use App\Enums\Gender;
 use App\Http\Requests\Admin\Concerns\HandlesAttendantFields;
+use App\Http\Requests\Admin\Concerns\ValidatesImageUploads;
 use App\Models\User;
 use App\Support\PhoneNumber;
 use Closure;
@@ -22,7 +23,7 @@ use Illuminate\Validation\Rule;
  */
 class UpdateUserRequest extends FormRequest
 {
-    use HandlesAttendantFields;
+    use HandlesAttendantFields, ValidatesImageUploads;
 
     /**
      * Idade mínima e limite de sanidade, iguais aos do cadastro público.
@@ -104,12 +105,7 @@ class UpdateUserRequest extends FormRequest
             'bio' => ['nullable', 'string', 'max:1000'],
             'specialties' => ['nullable', 'array', 'max:6'],
             'specialties.*' => ['string', 'max:40'],
-            'photo' => [
-                'nullable',
-                'image',
-                'mimes:jpg,jpeg,png,webp',
-                'max:'.max(1, (int) config('attendant.photo_max_kb')),
-            ],
+            'photo' => $this->imageUploadRules(),
             'remove_photo' => ['boolean'],
             'commission_rate' => ['nullable', 'string', $this->commissionRateRule()],
             'is_published' => ['boolean'],
@@ -150,7 +146,7 @@ class UpdateUserRequest extends FormRequest
             'specialties.*.max' => 'Cada especialidade deve ter no máximo 40 caracteres.',
             'photo.image' => 'Envie um arquivo de imagem.',
             'photo.mimes' => 'Envie uma imagem JPG, PNG ou WebP.',
-            'photo.max' => 'A foto deve ter no máximo '.intdiv(max(1, (int) config('attendant.photo_max_kb')), 1024).' MB.',
+            'photo.max' => 'A foto deve ter no máximo '.$this->imageUploadMaxMb().' MB.',
             'prices.*.integer' => 'Informe o preço em centavos, sem vírgula (ex.: 250).',
             'prices.*.min' => 'O preço por minuto deve ser maior que zero.',
             'prices.*.max' => 'O preço por minuto informado é muito alto.',

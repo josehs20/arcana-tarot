@@ -1,4 +1,4 @@
-<x-layouts.guest title="Confirme seu e-mail | Arcana Tarot">
+<x-layouts.guest title="Confirme seu e-mail">
     <h1 class="h3 mb-1">Confirme seu e-mail</h1>
     <p class="auth-card__subtitle mb-4">
         Sua conta já está criada. Enviamos um link de confirmação para

@@ -1,4 +1,4 @@
-<x-layouts.panel variant="admin" title="Baralhos e cartas | Arcana Tarot">
+<x-layouts.panel variant="admin" title="Baralhos e cartas">
     <x-layouts.page-header
         title="Baralhos e cartas"
         subtitle="Configure o catálogo usado nas consultas. Apenas baralhos e cartas ativos aparecem no seletor."

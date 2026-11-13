@@ -1,4 +1,4 @@
-<x-layouts.panel variant="panel" :title="'Recarga #' . $payment->getKey() . ' | Arcana Tarot'">
+<x-layouts.panel variant="panel" :title="'Recarga #' . $payment->getKey()">
     <x-layouts.page-header
         :title="'Recarga #' . $payment->getKey()"
         subtitle="Acompanhe o status do pedido e as instruções de pagamento."

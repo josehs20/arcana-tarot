@@ -1,4 +1,4 @@
-<x-layouts.panel variant="panel" title="Meus depoimentos | Arcana Tarot">
+<x-layouts.panel variant="panel" title="Meus depoimentos">
     <x-layouts.page-header
         title="Meus depoimentos"
         subtitle="Avalie os atendimentos concluídos e acompanhe o que já foi publicado nos perfis."

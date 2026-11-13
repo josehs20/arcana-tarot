@@ -1,4 +1,4 @@
-<x-layouts.panel variant="admin" title="Auditoria | Arcana Tarot">
+<x-layouts.panel variant="admin" title="Auditoria">
     <x-layouts.page-header
         title="Trilha de auditoria"
         subtitle="Eventos financeiros, administrativos e de catálogo. Somente leitura, com acesso restrito."

@@ -2,7 +2,7 @@
 
 <x-layouts.panel
     variant="admin"
-    :title="($editing ? 'Editar baralho' : 'Novo baralho') . ' | Arcana Tarot'"
+    :title="($editing ? 'Editar baralho' : 'Novo baralho')"
 >
     <x-layouts.page-header
         :title="$editing ? 'Editar baralho' : 'Novo baralho'"

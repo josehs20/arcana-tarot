@@ -1,4 +1,4 @@
-<x-layouts.panel variant="admin" title="Financeiro | Arcana Tarot">
+<x-layouts.panel variant="admin" title="Financeiro">
     <x-layouts.page-header
         title="Financeiro"
         subtitle="Acompanhe o livro-razão de créditos e ajuste carteiras com motivo e auditoria."

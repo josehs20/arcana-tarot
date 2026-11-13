@@ -1,4 +1,4 @@
-<x-layouts.panel variant="panel" title="Meu histórico | Arcana Tarot">
+<x-layouts.panel variant="panel" title="Meu histórico">
     <x-layouts.page-header
         title="Meu histórico"
         subtitle="Seus atendimentos, taxas congeladas e comissões calculadas pelo servidor."

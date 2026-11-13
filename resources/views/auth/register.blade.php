@@ -1,4 +1,4 @@
-<x-layouts.guest title="Criar conta | Arcana Tarot">
+<x-layouts.guest title="Criar conta">
     <h1 class="h3 mb-1">Criar conta</h1>
     <p class="auth-card__subtitle mb-4">
         Comece a explorar suas leituras em poucos passos. Enviaremos um link de

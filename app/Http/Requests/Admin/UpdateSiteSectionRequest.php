@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Http\Requests\Admin\Concerns\ValidatesImageUploads;
 use App\Support\SiteContent;
 use Closure;
 use Illuminate\Foundation\Http\FormRequest;
@@ -9,6 +10,8 @@ use Illuminate\Support\Facades\Gate;
 
 class UpdateSiteSectionRequest extends FormRequest
 {
+    use ValidatesImageUploads;
+
     public function authorize(): bool
     {
         return Gate::allows('access-admin-panel');
@@ -19,8 +22,6 @@ class UpdateSiteSectionRequest extends FormRequest
      */
     public function rules(): array
     {
-        $maxKb = max(1, (int) config('site.max_image_kb', 2048));
-
         return [
             'eyebrow' => ['nullable', 'string', 'max:80'],
             'title' => ['required', 'string', 'max:120'],
@@ -33,14 +34,7 @@ class UpdateSiteSectionRequest extends FormRequest
             'secondary_cta_target' => ['nullable', 'string', 'max:255', $this->targetRule()],
             'is_published' => ['sometimes', 'boolean'],
             'sort_order' => ['nullable', 'integer', 'min:0', 'max:999'],
-            'image' => [
-                'nullable',
-                'file',
-                'image',
-                'mimes:jpg,jpeg,png,webp',
-                'mimetypes:image/jpeg,image/png,image/webp',
-                'max:'.$maxKb,
-            ],
+            'image' => $this->imageUploadRules(),
             'remove_image' => ['sometimes', 'boolean'],
         ];
     }
@@ -83,7 +77,7 @@ class UpdateSiteSectionRequest extends FormRequest
             'image.image' => 'Envie uma imagem válida.',
             'image.mimes' => 'A imagem deve ser JPEG, PNG ou WebP.',
             'image.mimetypes' => 'O conteúdo do arquivo não corresponde a JPEG, PNG ou WebP.',
-            'image.max' => 'A imagem deve ter no máximo '.(int) config('site.max_image_kb', 2048).' KB.',
+            'image.max' => 'A imagem deve ter no máximo '.$this->imageUploadMaxMb().' MB.',
         ];
     }
 

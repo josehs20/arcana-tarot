@@ -2,11 +2,14 @@
 
 namespace App\Http\Requests\Admin;
 
+use App\Http\Requests\Admin\Concerns\ValidatesImageUploads;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 
 class UpdateSiteIdentityRequest extends FormRequest
 {
+    use ValidatesImageUploads;
+
     public function authorize(): bool
     {
         return Gate::allows('access-admin-panel');
@@ -17,27 +20,11 @@ class UpdateSiteIdentityRequest extends FormRequest
      */
     public function rules(): array
     {
-        $maxKb = max(1, (int) config('site.max_image_kb', 2048));
-
         return [
             'site_name' => ['required', 'string', 'max:80'],
             'site_description' => ['required', 'string', 'max:300'],
-            'logo' => [
-                'nullable',
-                'file',
-                'image',
-                'mimes:jpg,jpeg,png,webp',
-                'mimetypes:image/jpeg,image/png,image/webp',
-                'max:'.$maxKb,
-            ],
-            'favicon' => [
-                'nullable',
-                'file',
-                'image',
-                'mimes:jpg,jpeg,png,webp',
-                'mimetypes:image/jpeg,image/png,image/webp',
-                'max:'.$maxKb,
-            ],
+            'logo' => $this->imageUploadRules(),
+            'favicon' => $this->imageUploadRules(),
             'remove_logo' => ['sometimes', 'boolean'],
             'remove_favicon' => ['sometimes', 'boolean'],
         ];
@@ -69,11 +56,11 @@ class UpdateSiteIdentityRequest extends FormRequest
             'logo.image' => 'O logotipo deve ser uma imagem válida.',
             'logo.mimes' => 'O logotipo deve ser JPEG, PNG ou WebP.',
             'logo.mimetypes' => 'O conteúdo do logotipo não corresponde a JPEG, PNG ou WebP.',
-            'logo.max' => 'O logotipo deve ter no máximo '.(int) config('site.max_image_kb', 2048).' KB.',
+            'logo.max' => 'O logotipo deve ter no máximo '.$this->imageUploadMaxMb().' MB.',
             'favicon.image' => 'O favicon deve ser uma imagem válida.',
             'favicon.mimes' => 'O favicon deve ser JPEG, PNG ou WebP.',
             'favicon.mimetypes' => 'O conteúdo do favicon não corresponde a JPEG, PNG ou WebP.',
-            'favicon.max' => 'O favicon deve ter no máximo '.(int) config('site.max_image_kb', 2048).' KB.',
+            'favicon.max' => 'O favicon deve ter no máximo '.$this->imageUploadMaxMb().' MB.',
         ];
     }
 }

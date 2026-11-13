@@ -1,4 +1,4 @@
-<x-layouts.panel variant="panel" title="Painel do Cliente | Arcana Tarot">
+<x-layouts.panel variant="panel" title="Painel do Cliente">
     <x-layouts.page-header
         title="Painel do Cliente"
         :subtitle="'Olá, ' . auth()->user()->name . '. Acompanhe suas consultas, saldo e recargas em um só lugar.'"

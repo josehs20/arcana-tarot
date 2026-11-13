@@ -42,7 +42,7 @@ final class MailIdentity
     public static function siteName(): string
     {
         try {
-            return (new SiteContent)->name();
+            return SiteContent::currentName();
         } catch (Throwable) {
             $fallback = trim((string) config('mail.from.name'));
 

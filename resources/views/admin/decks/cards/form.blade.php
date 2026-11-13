@@ -5,7 +5,7 @@
 
 <x-layouts.panel
     variant="admin"
-    :title="($editing ? 'Editar carta' : 'Nova carta') . ' — ' . $deck->name . ' | Arcana Tarot'"
+    :title="($editing ? 'Editar carta' : 'Nova carta') . ' — ' . $deck->name"
 >
     <x-layouts.page-header
         :title="$editing ? 'Editar carta' : 'Nova carta'"
@@ -62,25 +62,16 @@
                             <label class="form-label {{ $hasStoredImage ? '' : 'required' }}" for="image">
                                 Imagem frontal
                             </label>
-                            <input
-                                class="form-control @error('image') is-invalid @enderror"
-                                type="file"
-                                id="image"
+                            <x-ui.image-input
                                 name="image"
-                                accept="image/jpeg,image/png,image/webp"
-                                @unless ($hasStoredImage) required @endunless
-                                @error('image') aria-invalid="true" aria-describedby="image-error" @enderror
+                                :profile="\App\Support\Images\ImageProfile::TarotCard"
+                                :required="! $hasStoredImage"
                             >
-                            <div class="form-text">
-                                JPEG, PNG ou WebP, até {{ (int) config('tarot.image_max_kb') }} KB.
                                 O servidor valida o conteúdo real do arquivo e gera um nome aleatório.
                                 @if ($hasStoredImage)
                                     Envie um novo arquivo apenas se quiser substituir a imagem atual; a anterior é preservada no histórico.
                                 @endif
-                            </div>
-                            @error('image')
-                                <div class="invalid-feedback d-block" id="image-error">{{ $message }}</div>
-                            @enderror
+                            </x-ui.image-input>
                         </div>
 
                         @if ($hasStoredImage)

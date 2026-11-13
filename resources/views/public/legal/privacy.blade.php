@@ -1,6 +1,10 @@
+@php
+    $site ??= app(\App\Support\SiteContent::class);
+@endphp
+
 <x-layouts.public
-    title="Política de privacidade — Arcana Tarot"
-    description="Política de privacidade do Arcana Tarot. Conteúdo provisório em revisão jurídica."
+    :title="'Política de privacidade — '.$site->name()"
+    :description="'Política de privacidade do '.$site->name().'. Conteúdo provisório em revisão jurídica.'"
 >
     <section class="arcana-hero arcana-hero--compact arcana-stars">
         <div class="container-wide">

@@ -1,10 +1,11 @@
 @php
+    $site ??= app(\App\Support\SiteContent::class);
     $status = $attendant->publicStatus();
     $photoUrl = $attendant->photoUrl();
     $specialties = $attendant->specialties ?? [];
     $description = $attendant->bio
         ? Str::limit($attendant->bio, 150)
-        : 'Conheça o perfil de ' . $attendant->display_name . ' no Arcana Tarot.';
+        : 'Conheça o perfil de ' . $attendant->display_name . ' no ' . $site->name() . '.';
     $panelRoute = auth()->check()
         ? (auth()->user()->isAdmin()
             ? route('admin.dashboard')
@@ -30,7 +31,7 @@
 @endphp
 
 <x-layouts.public
-    :title="$attendant->display_name . ' — Atendente | Arcana Tarot'"
+    :title="$attendant->display_name . ' — Atendente — ' . $site->name()"
     :description="$description"
 >
     <x-public.page-hero

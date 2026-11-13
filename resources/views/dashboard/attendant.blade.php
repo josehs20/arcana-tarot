@@ -1,4 +1,4 @@
-<x-layouts.panel variant="panel" title="Painel do Atendente | Arcana Tarot">
+<x-layouts.panel variant="panel" title="Painel do Atendente">
     <x-layouts.page-header
         title="Painel do Atendente"
         :subtitle="'Olá, ' . auth()->user()->name . '. Gerencie sua disponibilidade e acompanhe seus atendimentos.'"

@@ -1,4 +1,5 @@
 @php
+    $site ??= app(\App\Support\SiteContent::class);
     $panelRoute = auth()->check()
         ? (auth()->user()->isAdmin()
             ? route('admin.dashboard')
@@ -7,8 +8,8 @@
 @endphp
 
 <x-layouts.public
-    title="Atendentes — Arcana Tarot"
-    description="Conheça os atendentes de tarô do Arcana Tarot, suas especialidades, disponibilidade e valor por minuto."
+    :title="'Atendentes — '.$site->name()"
+    :description="'Conheça os atendentes de tarô do '.$site->name().', suas especialidades, disponibilidade e valor por minuto.'"
 >
     <x-public.page-hero
         eyebrow="Diretório"
@@ -35,7 +36,7 @@
                 <x-ui.empty-state
                     icon="☾"
                     title="Nenhum atendente publicado ainda"
-                    text="Estamos preparando o quadro de profissionais. Volte em breve ou conheça como o Arcana Tarot funciona."
+                    :text="'Estamos preparando o quadro de profissionais. Volte em breve ou conheça como '.$site->name().' funciona.'"
                 >
                     <a class="btn btn-ghost mt-2" href="{{ route('home') }}#como-funciona">Como funciona</a>
                 </x-ui.empty-state>

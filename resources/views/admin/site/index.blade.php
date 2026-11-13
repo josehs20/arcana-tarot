@@ -1,4 +1,4 @@
-<x-layouts.panel variant="admin" title="Conteúdo do site | Arcana Tarot">
+<x-layouts.panel variant="admin" title="Conteúdo do site">
     @php
         $publishedCount = $sections->where('is_published', true)->count();
         $customizedCount = $sections->where('is_customized', true)->count();
@@ -182,17 +182,10 @@
                                     <p class="form-text mt-0">Nenhum logotipo personalizado. O nome em texto é usado.</p>
                                 @endif
 
-                                <input
-                                    class="form-control @error('logo') is-invalid @enderror"
-                                    type="file"
-                                    id="logo"
+                                <x-ui.image-input
                                     name="logo"
-                                    accept="image/jpeg,image/png,image/webp"
-                                >
-                                <div class="form-text">JPEG, PNG ou WebP, até {{ (int) config('site.max_image_kb', 2048) }} KB.</div>
-                                @error('logo')
-                                    <div class="invalid-feedback d-block">{{ $message }}</div>
-                                @enderror
+                                    :profile="\App\Support\Images\ImageProfile::SiteLogo"
+                                />
                             </div>
 
                             <div class="col-md-6">
@@ -222,17 +215,12 @@
                                     <p class="form-text mt-0">Nenhum favicon personalizado. O ícone padrão é usado.</p>
                                 @endif
 
-                                <input
-                                    class="form-control @error('favicon') is-invalid @enderror"
-                                    type="file"
-                                    id="favicon"
+                                <x-ui.image-input
                                     name="favicon"
-                                    accept="image/jpeg,image/png,image/webp"
+                                    :profile="\App\Support\Images\ImageProfile::SiteFavicon"
                                 >
-                                <div class="form-text">Recomendado: PNG quadrado, até {{ (int) config('site.max_image_kb', 2048) }} KB.</div>
-                                @error('favicon')
-                                    <div class="invalid-feedback d-block">{{ $message }}</div>
-                                @enderror
+                                    Recomendado: PNG quadrado; o servidor converte o arquivo para PNG.
+                                </x-ui.image-input>
                             </div>
                         </div>
 

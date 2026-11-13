@@ -1,4 +1,4 @@
-<x-layouts.panel variant="admin" :title="'Carteira de ' . $user->name . ' | Arcana Tarot'">
+<x-layouts.panel variant="admin" :title="'Carteira de ' . $user->name">
     <x-layouts.page-header
         :title="'Carteira de ' . $user->name"
         :subtitle="$user->email . ' — histórico de créditos e débitos.'"

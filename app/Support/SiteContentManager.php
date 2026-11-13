@@ -8,6 +8,7 @@ use App\Models\Setting;
 use App\Models\SiteNavigationLink;
 use App\Models\SiteSection;
 use App\Models\User;
+use App\Support\Images\ImageProfile;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -29,8 +30,8 @@ final class SiteContentManager
      */
     public function updateIdentity(User $actor, array $data, ?UploadedFile $logo = null, ?UploadedFile $favicon = null): void
     {
-        $newLogo = $logo !== null ? $this->media->store($logo) : null;
-        $newFavicon = $favicon !== null ? $this->media->store($favicon) : null;
+        $newLogo = $logo !== null ? $this->media->store($logo, ImageProfile::SiteLogo, 'logo') : null;
+        $newFavicon = $favicon !== null ? $this->media->store($favicon, ImageProfile::SiteFavicon, 'favicon') : null;
 
         $oldLogo = null;
         $oldFavicon = null;
@@ -107,7 +108,7 @@ final class SiteContentManager
      */
     public function updateSection(string $key, array $data, User $actor, ?UploadedFile $image = null): SiteSection
     {
-        $newImage = $image !== null ? $this->media->store($image) : null;
+        $newImage = $image !== null ? $this->media->store($image, ImageProfile::SiteSection, 'image') : null;
 
         $oldImage = null;
         $finalImage = null;

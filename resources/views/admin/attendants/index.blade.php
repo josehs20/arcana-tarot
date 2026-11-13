@@ -1,4 +1,4 @@
-<x-layouts.panel variant="admin" title="Atendentes | Arcana Tarot">
+<x-layouts.panel variant="admin" title="Atendentes">
     <x-layouts.page-header
         title="Atendentes"
         subtitle="Cadastro dos profissionais, preferências do atendimento (como o som que avisa quando um cliente está aguardando) e comissão de cada atendente."

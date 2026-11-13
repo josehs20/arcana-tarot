@@ -7,8 +7,17 @@
         </x-layouts.guest>
 --}}
 @props([
-    'title' => 'Arcana Tarot',
+    'title' => null,
 ])
+
+@inject('siteContent', 'App\Support\SiteContent')
+
+@php
+    // O nome vem do CMS (/admin/conteudo); o título da página recebe o sufixo
+    // aqui para que nenhuma tela precise repetir a identidade do site.
+    $siteName = $siteContent->name();
+    $pageTitle = filled($title) ? $title.' | '.$siteName : $siteName;
+@endphp
 
 <!DOCTYPE html>
 <html lang="pt-BR" data-theme="{{ \App\Support\Theme::current()->value }}" data-theme-user="{{ \App\Support\Theme::isPersisted() ? '1' : '0' }}">
@@ -17,7 +26,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="theme-endpoint" content="{{ route('preferences.theme.update') }}">
-    <title>{{ $title }}</title>
+    <title>{{ $pageTitle }}</title>
 
     @include('layouts.partials.theme-bootstrap')
 
@@ -33,12 +42,12 @@
     </div>
 
     <div class="auth-card arcana-fade-up">
-        <a class="auth-card__brand" href="{{ route('home') }}" aria-label="Arcana Tarot — Início">
+        <a class="auth-card__brand" href="{{ route('home') }}" aria-label="{{ $siteName }} — Início">
             <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
                 <path d="M12 6v6l4 2"/>
             </svg>
-            <span>Arcana Tarot</span>
+            <span>{{ $siteName }}</span>
         </a>
 
         <div class="mt-4">

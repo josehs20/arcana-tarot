@@ -68,6 +68,25 @@ Leia o `php-version.txt` pelo gerenciador de arquivos; o esperado é `8.4.x` e u
 bloco `Environment` sem `Composer detected issues`. No site, o teste equivalente é
 abrir `/up` (deve responder 200) e, depois, o próprio bootstrap da aplicação.
 
+### 1.2 Limites de upload de imagem
+
+O painel aceita imagens de até **25 MB** (`IMAGE_UPLOAD_MAX_KB`) e normaliza
+tudo no servidor — orientação do EXIF, redução por perfil e recompressão em
+WebP — antes de gravar. Para fotos de celular chegarem à aplicação, o PHP do
+site (MultiPHP/`php.ini` do painel) precisa de:
+
+```ini
+upload_max_filesize = 32M
+post_max_size = 40M
+memory_limit = 512M
+```
+
+As extensões **gd** e **exif** precisam estar habilitadas. O teto efetivo é o
+menor entre o limite da aplicação, `upload_max_filesize` e o limite do proxy do
+provedor: se o provedor cortar em 8 MB, o formulário exibirá o 413 antes da
+validação. Confira também `php -m` pelo cron do painel, porque ele pode usar um
+PHP diferente do site (§1.1).
+
 ---
 
 ## 2. Decisões de arquitetura

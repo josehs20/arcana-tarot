@@ -10,13 +10,17 @@
 --}}
 @props([
     'variant' => 'panel',
-    'title' => 'Painel — Arcana Tarot',
+    'title' => null,
 ])
 
 @inject('siteContent', 'App\Support\SiteContent')
 
 @php
     $isAdmin = $variant === 'admin';
+    // O sufixo com o nome do site fica no layout: as telas passam apenas o
+    // título da página e o CMS continua sendo a fonte única da identidade.
+    $siteName = $siteContent->name();
+    $pageTitle = filled($title) ? $title.' | '.$siteName : 'Painel | '.$siteName;
 @endphp
 
 <!DOCTYPE html>
@@ -34,7 +38,7 @@
     <meta name="realtime-mode" content="{{ \App\Support\Realtime\RealtimeMode::current() }}">
     <meta name="theme-endpoint" content="{{ route('preferences.theme.update') }}">
     <meta name="robots" content="noindex, nofollow">
-    <title>{{ $title }}</title>
+    <title>{{ $pageTitle }}</title>
 
     @include('layouts.partials.theme-bootstrap')
 

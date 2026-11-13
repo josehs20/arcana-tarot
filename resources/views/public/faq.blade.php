@@ -4,7 +4,7 @@
 
 <x-layouts.public
     :title="'Dúvidas frequentes — '.$site->name()"
-    :description="$section['subtitle'] ?: 'Respostas sobre consultas, créditos, privacidade e o funcionamento do Arcana Tarot.'"
+    :description="$section['subtitle'] ?: 'Respostas sobre consultas, créditos, privacidade e o funcionamento do '.$site->name().'.'"
 >
     <x-public.page-hero
         :eyebrow="$section['eyebrow'] ?: 'Central de dúvidas'"
@@ -26,7 +26,7 @@
                     <p class="arcana-eyebrow mb-2">Atendimento humano</p>
                     <h2 class="arcana-section__title">Não encontrou a sua pergunta?</h2>
                     <p class="arcana-section__subtitle mb-0">
-                        A equipe do Arcana Tarot responde sobre créditos, agendamentos,
+                        A equipe do {{ $site->name() }} responde sobre créditos, agendamentos,
                         privacidade e qualquer detalhe antes de você começar.
                     </p>
                 </div>

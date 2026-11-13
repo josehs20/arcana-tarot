@@ -24,19 +24,6 @@ final class BulkEmailTemplate
 
     public const BODY_SETTING_KEY = 'bulk_email_default_body';
 
-    public const DEFAULT_SUBJECT = 'Novidades do Arcana Tarot';
-
-    public const DEFAULT_BODY = <<<'TEXT'
-Olá, {{nome}}!
-
-Passando para contar as novidades do Arcana Tarot: novos atendentes, baralhos atualizados e melhorias no atendimento por chat.
-
-Conheça as cartas e os atendentes disponíveis agora em {{link}}.
-
-Com carinho,
-Equipe Arcana Tarot
-TEXT;
-
     /** @var array<string, string|null>|null */
     private ?array $settings = null;
 
@@ -44,14 +31,40 @@ TEXT;
     {
         $stored = $this->stored(self::SUBJECT_SETTING_KEY);
 
-        return $stored !== null && trim($stored) !== '' ? $stored : self::DEFAULT_SUBJECT;
+        return $stored !== null && trim($stored) !== ''
+            ? $stored
+            : 'Novidades do '.SiteContent::currentName();
     }
 
     public function body(): string
     {
         $stored = $this->stored(self::BODY_SETTING_KEY);
 
-        return $stored !== null && trim($stored) !== '' ? $stored : self::DEFAULT_BODY;
+        return $stored !== null && trim($stored) !== '' ? $stored : $this->defaultBody();
+    }
+
+    /**
+     * Texto inicial sugerido, montado com o nome atual do site.
+     *
+     * O nome vem do banco (e não do `config/site.php`) para que o modelo padrão
+     * não continue exibindo a identidade antiga depois de renomear o site em
+     * /admin/conteudo — o valor só é salvo em `settings` quando a administração
+     * edita o modelo.
+     */
+    private function defaultBody(): string
+    {
+        $siteName = SiteContent::currentName();
+
+        return <<<TEXT
+        Olá, {{nome}}!
+
+        Passando para contar as novidades do {$siteName}: novos atendentes, baralhos atualizados e melhorias no atendimento por chat.
+
+        Conheça as cartas e os atendentes disponíveis agora em {{link}}.
+
+        Com carinho,
+        Equipe {$siteName}
+        TEXT;
     }
 
     /**

@@ -1,4 +1,4 @@
-<x-layouts.panel variant="admin" :title="$title . ' | Arcana Tarot'">
+<x-layouts.panel variant="admin" :title="$title">
     <x-layouts.page-header :title="$title" subtitle="Módulo em preparação.">
         <x-slot name="actions">
             <a class="btn btn-ghost btn-sm" href="{{ route('admin.dashboard') }}">Voltar ao painel</a>
