@@ -41,6 +41,7 @@ use Intervention\Image\Drivers\Gd\Driver as GdDriver;
 use Intervention\Image\Drivers\Imagick\Driver as ImagickDriver;
 use Intervention\Image\ImageManager;
 use InvalidArgumentException;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -99,6 +100,40 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('access-admin-panel', fn (User $user): bool => $user->is_active && $user->isAdmin());
         Gate::define('access-attendant-panel', fn (User $user): bool => $user->is_active && $user->isAttendant());
         Gate::define('access-client-panel', fn (User $user): bool => $user->is_active && $user->isClient());
+
+        /*
+         * API móvel: o guard expira pelo `created_at` + config, mas o comando
+         * `sanctum:prune-expired` só enxerga `expires_at`. Gravar o prazo na
+         * emissão mantém a limpeza diária eficaz e o token autodescritivo.
+         */
+        PersonalAccessToken::creating(function (PersonalAccessToken $token): void {
+            $expirationMinutes = (int) config('sanctum.expiration');
+
+            if ($token->expires_at === null && $expirationMinutes > 0) {
+                $token->expires_at = now()->addMinutes($expirationMinutes);
+            }
+        });
+
+        /*
+         * API móvel: identifica o token antes do throttle (o middleware de
+         * autenticação da rota roda depois do grupo `api`). Sem token válido o
+         * limite cai para o IP, cobrindo tentativas anônimas.
+         */
+        RateLimiter::for('api', function (Request $request): Limit {
+            $userId = $request->user()?->getKey() ?? $request->user('sanctum')?->getKey();
+
+            return Limit::perMinute((int) config('api.rate_limit_per_minute'))
+                ->by('api:'.($userId ?? $request->ip()));
+        });
+
+        /*
+         * Login/cadastro/recuperação por token (etapa 03): limite por IP bem
+         * menor que o geral para dificultar força bruta e criação em massa.
+         */
+        RateLimiter::for('api-auth', function (Request $request): Limit {
+            return Limit::perMinute((int) config('api.auth_rate_limit_per_minute'))
+                ->by('api-auth:'.$request->ip());
+        });
 
         RateLimiter::for('consultation-messages', function (Request $request): Limit {
             return Limit::perMinute((int) config('consultation.message_rate_per_minute'))

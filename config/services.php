@@ -43,6 +43,17 @@ return [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
         'redirect' => env('GOOGLE_REDIRECT_URI'),
+        /*
+         * IDs nativos (Android/iOS) aceitos ao validar o ID token do SDK
+         * mobile. O client ID web acima também é aceito automaticamente,
+         * porque o Android costuma enviá-lo como `serverClientId`. Lista
+         * separada por vírgulas; vazio desliga o login Google da API.
+         */
+        'mobile_client_ids' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('GOOGLE_MOBILE_CLIENT_IDS', '')),
+        ))),
+        'jwks_uri' => env('GOOGLE_JWKS_URI', 'https://www.googleapis.com/oauth2/v3/certs'),
     ],
 
 ];

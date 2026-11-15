@@ -1,0 +1,16 @@
+---
+description: Regras para evolução incremental do Laravel como backend API do arcana-tarot
+alwaysApply: true
+---
+- Execute somente o prompt solicitado; nunca avance etapas automaticamente.
+- Inspecione o código real antes de editar; preserve funcionalidades e convenções existentes.
+- Leia `docs/api-mobile/ANALISE.md` e `docs/api-mobile/STATUS.md` quando existirem; não repita auditoria ampla.
+- Contexto econômico: leia somente arquivos relacionados; não copie arquivos extensos para a resposta.
+- Web Blade/sessão e API REST/Sanctum são interfaces distintas sobre a mesma camada de aplicação.
+- Não duplique regras de negócio em controllers, rotas, JavaScript ou API.
+- Não presuma versões de Laravel/PHP nem instale dependências sem necessidade comprovada.
+- Não exigir Docker, Redis, Reverb ou workers para API REST básica/Hostoo.
+- Segurança no servidor: autenticação, autorização, validação, ownership, rate limit e proteção contra replay/duplicidade.
+- Não confiar em valores enviados pelo cliente para créditos, preços, comissões, duração ou status.
+- Não registrar tokens, credenciais, dados pessoais ou conteúdo privado de chats em logs.
+- Não remover testes nem afirmar execução não realizada. Atualize STATUS.md e informe arquivos/testes/pendências sucintamente.

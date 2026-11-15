@@ -2,17 +2,13 @@
 
 namespace App\Http\Controllers\Auth;
 
-use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
-use App\Models\User;
-use App\Support\AttendantAvailabilityManager;
-use App\Support\ConsultationLifecycleManager;
+use App\Support\AuthenticationLifecycleManager;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
-use Throwable;
 
 class AuthenticatedSessionController extends Controller
 {
@@ -23,7 +19,7 @@ class AuthenticatedSessionController extends Controller
 
     public function store(
         LoginRequest $request,
-        AttendantAvailabilityManager $availability,
+        AuthenticationLifecycleManager $authentication,
     ): RedirectResponse {
         $request->authenticate();
 
@@ -42,49 +38,21 @@ class AuthenticatedSessionController extends Controller
                 ->with('status', 'Confirme seu e-mail para liberar o acesso ao painel.');
         }
 
-        if ($user !== null && $user->role === UserRole::Attendant) {
-            $this->bringAttendantOnline($user, $availability);
+        if ($user !== null) {
+            $authentication->afterLogin($user);
         }
 
         return redirect()->route($user->dashboardRouteName());
     }
 
-    /**
-     * Entrar na conta deixa o atendente online por padrão.
-     *
-     * A disponibilidade é um efeito colateral do login e nunca pode impedir a
-     * autenticação: falhas são reportadas e o usuário segue para o painel.
-     */
-    private function bringAttendantOnline(User $user, AttendantAvailabilityManager $availability): void
-    {
-        try {
-            $availability->signIn($user);
-        } catch (Throwable $exception) {
-            report($exception);
-        }
-    }
-
     public function destroy(
         Request $request,
-        AttendantAvailabilityManager $availability,
-        ConsultationLifecycleManager $lifecycle,
+        AuthenticationLifecycleManager $authentication,
     ): RedirectResponse {
         $user = $request->user();
 
         if ($user !== null) {
-            try {
-                $lifecycle->endActiveForLogout($user);
-            } catch (Throwable $exception) {
-                report($exception);
-            }
-        }
-
-        if ($user !== null && $user->role === UserRole::Attendant) {
-            try {
-                $availability->signOut($user);
-            } catch (Throwable $exception) {
-                report($exception);
-            }
+            $authentication->afterLogout($user);
         }
 
         Auth::guard('web')->logout();

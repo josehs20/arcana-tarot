@@ -1,0 +1,16 @@
+---
+description: Padrões de arquitetura para Web AJAX, API REST e serviços compartilhados
+globs: ["app/**/*.php", "routes/**/*.php", "tests/**/*.php"]
+alwaysApply: false
+---
+- Preserve `web.php` e as rotas/fluxos Blade atuais; API versionada em `routes/api.php` com prefixo `/api/v1`.
+- Controllers finos. Use Services/Actions existentes ou crie-os apenas quando necessário para compartilhar casos de uso entre web e API.
+- Form Requests, API Resources e Policies/Gates conforme padrões/versão instalados.
+- Web usa sessão/CSRF; app usa Sanctum Bearer Tokens. Não misture guards sem necessidade.
+- Sanctum é para tokens de app; não substituir sessão web funcional.
+- Retornos API JSON consistentes, códigos HTTP corretos e sem stack traces/segredos.
+- Autorização por papel e propriedade no servidor. Cliente e atendente têm capacidades distintas; admin permanece web.
+- Transações e idempotência para mutações financeiras e início/fim de consultas.
+- Reutilize modelos, tabelas, eventos e regras existentes; não crie duplicatas.
+- Reverb/canais privados são opcionais por ambiente; autorizar usuário e consulta em cada canal.
+- Testes cobrem acesso anônimo, papéis indevidos, ownership, validação e regressões web.

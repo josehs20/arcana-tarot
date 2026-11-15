@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\ConsultationStatus;
 use App\Models\Consultation;
 use App\Models\User;
+use App\Support\ConsultationInbox;
 use App\Support\ConsultationRequestPresenter;
 use App\Support\ConsultationStatePresenter;
 use App\Support\Realtime\RealtimeMode;
@@ -26,7 +26,7 @@ use Illuminate\Support\Facades\Gate;
  */
 class PanelEventsController extends Controller
 {
-    public function __invoke(Request $request): JsonResponse
+    public function __invoke(Request $request, ConsultationInbox $inbox): JsonResponse
     {
         /** @var User $user */
         $user = $request->user();
@@ -36,22 +36,10 @@ class PanelEventsController extends Controller
 
         abort_unless($canAttend || $canRequest, 403);
 
-        $openConsultation = Consultation::query()
-            ->with(['client', 'attendant.attendantProfile'])
-            ->where(function ($query) use ($user): void {
-                $query->where('client_id', $user->getKey())
-                    ->orWhere('attendant_id', $user->getKey());
-            })
-            ->whereIn('status', ConsultationStatus::openValues())
-            ->latest('id')
-            ->first();
+        $openConsultation = $inbox->openFor($user);
 
         $requests = $canAttend
-            ? $user->attendantConsultations()
-                ->with(['client', 'attendant.attendantProfile'])
-                ->where('status', ConsultationStatus::Requested->value)
-                ->oldest()
-                ->get()
+            ? $inbox->pendingForAttendant($user)
                 ->map(fn (Consultation $consultation): array => ConsultationRequestPresenter::toArray($consultation))
                 ->values()
             : collect();

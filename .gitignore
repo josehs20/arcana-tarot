@@ -1,3 +1,10 @@
+# deploy: segredos e certificados ficam só no servidor
+/deploy/.env
+/deploy/nginx/letsencrypt/*
+!/deploy/nginx/letsencrypt/.gitkeep
+/deploy/nginx/acme/*
+!/deploy/nginx/acme/.gitkeep
+
 *.log
 .DS_Store
 .env

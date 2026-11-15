@@ -1,0 +1,171 @@
+# =============================================================================
+# Infraestrutura COMPARTILHADA (sobe UMA única vez por servidor)
+# =============================================================================
+# Serviços aqui: MariaDB, Redis e o proxy reverso Nginx com TLS.
+# As duas instâncias da aplicação (`astros21` e `voz-arcana`) NÃO têm banco,
+# Redis nem Nginx próprio: elas entram na rede externa `shared-net` e usam os
+# containers criados por este arquivo.
+#
+# Uso (a rede precisa existir antes):
+#   docker network create shared-net
+#   cp deploy/.env.example deploy/.env   # e preencha as senhas
+#   docker compose -f deploy/docker-compose.infra.yml up -d
+#
+# Orçamento de memória neste arquivo (limites rígidos):
+#   shared-mysql 350M  + shared-redis 64M  + shared-proxy 48M  = 462M
+# O restante dos 2 GB fica para as duas aplicações (~1,2 GB de limite) e para
+# o sistema operacional. Ver deploy/DEPLOY.md.
+# =============================================================================
+
+name: shared-infra
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # ---------------------------------------------------------------------------
+  # Banco de dados — MariaDB 10.11 LTS (suporte até 2028).
+  # Escolhido no lugar do MySQL 8.x porque o `performance_schema` e o consumo
+  # base do servidor são menores: precisamos de dois bancos em 350 MB.
+  # `DB_CONNECTION=mysql` nas aplicações continua correto (o driver PDO é o
+  # mesmo); `DB_CONNECTION=mariadb` também funciona em Laravel 13.
+  # ---------------------------------------------------------------------------
+  mysql:
+    image: mariadb:10.11
+    container_name: shared-mysql
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-America/Sao_Paulo}
+      MARIADB_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?defina MYSQL_ROOT_PASSWORD em deploy/.env}
+      # Lidos por deploy/mysql/init/01-create-databases.sh no primeiro boot.
+      ASTROS21_DB_NAME: ${ASTROS21_DB_NAME:-astros21_db}
+      ASTROS21_DB_USER: ${ASTROS21_DB_USER:-astros21}
+      ASTROS21_DB_PASSWORD: ${ASTROS21_DB_PASSWORD:?defina ASTROS21_DB_PASSWORD em deploy/.env}
+      VOZ_ARCANA_DB_NAME: ${VOZ_ARCANA_DB_NAME:-voz_arcana_db}
+      VOZ_ARCANA_DB_USER: ${VOZ_ARCANA_DB_USER:-voz_arcana}
+      VOZ_ARCANA_DB_PASSWORD: ${VOZ_ARCANA_DB_PASSWORD:?defina VOZ_ARCANA_DB_PASSWORD em deploy/.env}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # my.cnf de baixo consumo (buffer pool 128M, 50 conexões, sem
+      # performance_schema). O nome começa com `zz-` para ser o último lido.
+      - ./mysql/my.cnf:/etc/mysql/conf.d/zz-memory.cnf:ro
+      # Scripts de init: SÓ rodam com o volume de dados vazio (primeiro boot).
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - shared-net
+    mem_limit: 350m
+    deploy:
+      resources:
+        limits:
+          memory: 350M
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    stop_grace_period: 60s
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # Redis — cache, filas, sessões e pub/sub do Reverb das duas instâncias.
+  #
+  # maxmemory 48mb + allkeys-lru: acima do teto o Redis descarta as chaves menos
+  # usadas em vez de recusar escrita (o que derrubaria cache, fila e sessão).
+  # Como consequência, sob pressão de memória JOBS DA FILA PODEM SER EVICTADOS.
+  # Cada aplicação usa bancos (REDIS_DB/REDIS_CACHE_DB) e prefixo
+  # (REDIS_PREFIX) diferentes, por isso um não sobrescreve o outro. Se
+  # `evicted_keys` crescer no `INFO`, ver a seção de diagnóstico do DEPLOY.md.
+  #
+  # Sem RDB/AOF de propósito: o fork de BGSAVE/rewrite dobra o consumo e o teto
+  # é 64M. As sessões ficam no MySQL (SESSION_DRIVER=database) e os jobs são
+  # recriados a cada minuto pelo agendador nas cobranças.
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: shared-redis
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --maxmemory
+      - 48mb
+      - --maxmemory-policy
+      - allkeys-lru
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --maxclients
+      - "128"
+      - --tcp-keepalive
+      - "60"
+      - --timeout
+      - "0"
+      - --loglevel
+      - notice
+    networks:
+      - shared-net
+    mem_limit: 64m
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 20s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # Proxy reverso — único ponto exposto na internet (80/443).
+  #
+  # Roteia por domínio para o container web de cada instância e o caminho
+  # `/app/...` (protocolo Pusher do Laravel Reverb) para o WebSocket do Reverb.
+  # Os `conf.d/*.conf` usam `set $upstream ...` + `resolver 127.0.0.11`, então o
+  # proxy sobe mesmo com as aplicações paradas (responde 502) e passa a
+  # resolvê-las alguns segundos depois de subirem.
+  # ---------------------------------------------------------------------------
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: shared-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      # Certificados no layout do certbot (`live/<dominio>/fullchain.pem`).
+      - ./nginx/letsencrypt:/etc/letsencrypt:ro
+      # Webroot do desafio de renovação (/.well-known/acme-challenge).
+      - ./nginx/acme:/var/www/acme:ro
+    networks:
+      - shared-net
+    mem_limit: 48m
+    deploy:
+      resources:
+        limits:
+          memory: 48M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/healthz || exit 1"]
+      interval: 20s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    logging: *default-logging
+
+networks:
+  # Criada fora do Compose porque é compartilhada por projetos independentes:
+  #   docker network create shared-net
+  shared-net:
+    external: true
+    name: shared-net
+
+volumes:
+  mysql_data:
+    name: shared-mysql-data

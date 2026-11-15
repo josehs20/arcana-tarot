@@ -6,6 +6,7 @@ use App\Enums\ConsultationStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Consultation;
 use App\Models\User;
+use App\Support\ConsultationInbox;
 use App\Support\ConsultationLifecycleManager;
 use App\Support\ConsultationRequestPresenter;
 use App\Support\ConsultationStatePresenter;
@@ -82,18 +83,14 @@ class ConsultationController extends Controller
      * depois de queda de rede ou suspensão do notebook), sincroniza por aqui.
      * É uma leitura pontual por evento — não é polling.
      */
-    public function pending(Request $request): JsonResponse
+    public function pending(Request $request, ConsultationInbox $inbox): JsonResponse
     {
         Gate::authorize('viewAttendantPanel', Consultation::class);
 
         /** @var User $user */
         $user = $request->user();
 
-        $requests = $user->attendantConsultations()
-            ->with(['client', 'attendant.attendantProfile'])
-            ->where('status', ConsultationStatus::Requested->value)
-            ->oldest()
-            ->get()
+        $requests = $inbox->pendingForAttendant($user)
             ->map(fn (Consultation $consultation): array => ConsultationRequestPresenter::toArray($consultation))
             ->values();
 

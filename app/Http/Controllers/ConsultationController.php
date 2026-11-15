@@ -4,17 +4,15 @@ namespace App\Http\Controllers;
 
 use App\Enums\ConsultationStatus;
 use App\Models\Consultation;
-use App\Models\TarotCard;
-use App\Models\TarotDeck;
 use App\Models\User;
 use App\Support\ConsultationActivityTracker;
 use App\Support\ConsultationLifecycleManager;
+use App\Support\ConsultationMessageFeed;
 use App\Support\ConsultationMetricsPresenter;
 use App\Support\ConsultationPartyPresenter;
 use App\Support\ConsultationSafety;
 use App\Support\CreditWalletManager;
 use App\Support\Money;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -25,8 +23,11 @@ use Illuminate\View\View;
 
 class ConsultationController extends Controller
 {
-    public function show(Request $request, Consultation $consultation): View
-    {
+    public function show(
+        Request $request,
+        Consultation $consultation,
+        ConsultationMessageFeed $feed,
+    ): View {
         Gate::authorize('view', $consultation);
 
         $consultation->loadMissing(['client', 'attendant.attendantProfile', 'call']);
@@ -38,7 +39,7 @@ class ConsultationController extends Controller
             $consultation->attendant->attendantProfile?->markSeen();
         }
 
-        $chat = $this->chatData($consultation, $user);
+        $chat = $this->chatData($consultation, $user, $feed);
         $isClient = $consultation->isClient($user);
 
         return view('consultations.show', [
@@ -81,6 +82,7 @@ class ConsultationController extends Controller
         ConsultationSafety $safety,
         CreditWalletManager $wallets,
         ConsultationLifecycleManager $lifecycle,
+        ConsultationMessageFeed $feed,
     ): View|RedirectResponse {
         Gate::authorize('view', $consultation);
 
@@ -107,7 +109,7 @@ class ConsultationController extends Controller
             $consultation->attendant->attendantProfile?->markSeen();
         }
 
-        $chat = $this->chatData($consultation, $user);
+        $chat = $this->chatData($consultation, $user, $feed);
         $isClient = $consultation->isClient($user);
 
         return view('consultations.workspace', [
@@ -308,8 +310,11 @@ class ConsultationController extends Controller
      *     cardDecks: Collection
      * }
      */
-    private function chatData(Consultation $consultation, User $user): array
-    {
+    private function chatData(
+        Consultation $consultation,
+        User $user,
+        ConsultationMessageFeed $feed,
+    ): array {
         /*
          * Texto e áudio compartilham o histórico da conversa. Chamadas de vídeo
          * usam somente a interface de chamada e nunca exibem o chat.
@@ -320,22 +325,15 @@ class ConsultationController extends Controller
         $unreadMessagesCount = 0;
 
         if ($canViewMessages) {
-            $unreadMessagesCount = $consultation->unreadMessageCountFor($user);
+            $unreadMessagesCount = $feed->unreadCount($consultation, $user);
 
             /** @var LengthAwarePaginator $messages */
-            $messages = $consultation->messages()
-                ->with('sender')
-                ->orderByDesc('id')
-                ->paginate((int) config('consultation.message_page_size'))
+            $messages = $feed->paginate($consultation)
                 ->withQueryString()
                 ->fragment('chat');
 
-            // A consulta é feita do mais recente para o mais antigo para a
-            // paginação, mas a linha do tempo é exibida em ordem cronológica.
-            $messages->setCollection($messages->getCollection()->reverse()->values());
-
             if ($unreadMessagesCount > 0) {
-                $consultation->markMessagesReadBy($user);
+                $feed->markRead($consultation, $user);
             }
         }
 
@@ -344,38 +342,9 @@ class ConsultationController extends Controller
             'messages' => $messages,
             'unreadMessagesCount' => $unreadMessagesCount,
             'cardDecks' => Gate::allows('sendCard', $consultation)
-                ? $this->availableCardDecks()
+                ? $feed->availableCardDecks()
                 : collect(),
         ];
-    }
-
-    /**
-     * Baralhos com cartas ativas e arquivo de imagem presente. Somente o
-     * atendente da consulta ativa recebe esta lista.
-     */
-    private function availableCardDecks(): Collection
-    {
-        return TarotDeck::query()
-            ->active()
-            ->whereHas('cards', fn (Builder $query) => $query->where('is_active', true))
-            ->with(['cards' => fn ($query) => $query
-                ->where('is_active', true)
-                ->orderBy('sort_order')
-                ->orderBy('name')])
-            ->orderBy('name')
-            ->get()
-            ->map(function (TarotDeck $deck): TarotDeck {
-                $deck->setRelation(
-                    'cards',
-                    $deck->cards
-                        ->filter(fn (TarotCard $card): bool => $card->hasStoredImage())
-                        ->values(),
-                );
-
-                return $deck;
-            })
-            ->filter(fn (TarotDeck $deck): bool => $deck->cards->isNotEmpty())
-            ->values();
     }
 
     public function end(

@@ -3,19 +3,18 @@
 namespace App\Http\Controllers;
 
 use App\Models\AttendantProfile;
+use App\Support\AttendantDirectoryQuery;
 use App\Support\ConsultationModalityCatalog;
 use App\Support\ConsultationPricing;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\View\View;
 
 class AttendantDirectoryController extends Controller
 {
-    public function index(ConsultationModalityCatalog $catalog): View
-    {
-        $attendants = $this->directoryQuery()
-            ->published()
-            ->orderForDirectory()
-            ->get();
+    public function index(
+        ConsultationModalityCatalog $catalog,
+        AttendantDirectoryQuery $directory,
+    ): View {
+        $attendants = $directory->query()->get();
 
         return view('public.attendants.index', [
             'attendants' => $attendants,
@@ -27,11 +26,13 @@ class AttendantDirectoryController extends Controller
         ]);
     }
 
-    public function show(int $attendant, ConsultationModalityCatalog $catalog, ConsultationPricing $pricing): View
-    {
-        $profile = $this->directoryQuery()
-            ->published()
-            ->findOrFail($attendant);
+    public function show(
+        int $attendant,
+        ConsultationModalityCatalog $catalog,
+        ConsultationPricing $pricing,
+        AttendantDirectoryQuery $directory,
+    ): View {
+        $profile = $directory->findPublishedOrFail($attendant);
 
         /*
          * Depoimentos reais de atendimentos concluídos. Apenas os visíveis
@@ -64,18 +65,5 @@ class AttendantDirectoryController extends Controller
                 ? null
                 : round((float) (clone $visibleTestimonials)->avg('rating'), 1),
         ]);
-    }
-
-    /**
-     * Somente colunas públicas: nunca carrega e-mail, comissão ou dados financeiros.
-     *
-     * @return Builder<AttendantProfile>
-     */
-    private function directoryQuery(): Builder
-    {
-        return AttendantProfile::query()
-            ->select(['id', 'user_id', 'display_name', 'bio', 'specialties', 'offered_modalities', 'photo_path', 'availability'])
-            ->with('modalityPrices')
-            ->withExists('activeConsultation');
     }
 }

@@ -2,15 +2,13 @@
 
 namespace App\Http\Controllers\Auth;
 
-use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\RegisterRequest;
-use App\Models\User;
-use App\Support\CreditWalletManager;
+use App\Support\ClientAccountManager;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 use Throwable;
 
@@ -30,24 +28,16 @@ class RegisteredUserController extends Controller
         return view('auth.register');
     }
 
-    public function store(RegisterRequest $request, CreditWalletManager $wallets): RedirectResponse
+    public function store(RegisterRequest $request, ClientAccountManager $accounts): RedirectResponse
     {
-        $user = DB::transaction(function () use ($request, $wallets): User {
-            $user = User::create([
-                'name' => $request->validated('name'),
-                'email' => $request->validated('email'),
-                'phone' => $request->validated('phone'),
-                'birth_date' => $request->validated('birth_date'),
-                'gender' => $request->validated('gender'),
-                'password' => $request->validated('password'),
-                'role' => UserRole::Client->value,
-                'is_active' => true,
-            ]);
-
-            $wallets->walletFor($user);
-
-            return $user;
-        });
+        $user = $accounts->register(Arr::only($request->validated(), [
+            'name',
+            'email',
+            'phone',
+            'birth_date',
+            'gender',
+            'password',
+        ]));
 
         Auth::login($user);
 

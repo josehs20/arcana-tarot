@@ -1,0 +1,170 @@
+# syntax=docker/dockerfile:1
+
+# =============================================================================
+# Imagem de PRODUÇÃO — multi-stage, uma imagem para os três serviços
+# =============================================================================
+#   web      -> supervisord: php-fpm + nginx + schedule:work   (220 MB)
+#   queue    -> php artisan queue:work                         (150 MB)
+#   reverb   -> php artisan reverb:start                       (150 MB)
+#
+# Estágios:
+#   base    PHP 8.4-FPM + extensões (mesmo conjunto do Dockerfile de dev)
+#   vendor  composer install --no-dev (cacheado só por composer.lock)
+#   assets  `npm ci && npm run build` no Node 22 (Vite gera public/build)
+#   runtime imagem final: código + vendor + assets + nginx + supervisor
+#
+# O código é COPIADO para dentro da imagem (não é bind mount). O que fica fora:
+# .env e storage/ — montados em docker-compose.prod.yml, para que a mesma
+# imagem possa servir as duas instâncias com dados diferentes.
+# =============================================================================
+FROM php:8.4-fpm-alpine AS base
+
+# A série 8.4 é exigida pelo composer.json (`^8.4`); o patch é livre de
+# propósito para receber correções de segurança a cada rebuild.
+RUN php -r 'if (PHP_VERSION_ID < 80400) { fwrite(STDERR, "PHP >= 8.4 obrigatorio\n"); exit(1); }' \
+    && php -v | head -1
+
+RUN apk add --no-cache --virtual .build-deps \
+        $PHPIZE_DEPS \
+        icu-dev \
+        libzip-dev \
+        libpng-dev \
+        libjpeg-turbo-dev \
+        freetype-dev \
+        libwebp-dev \
+        linux-headers \
+    && apk add --no-cache \
+        icu-libs \
+        libzip \
+        libpng \
+        libjpeg-turbo \
+        freetype \
+        libwebp \
+    && docker-php-ext-configure gd \
+        --with-freetype \
+        --with-jpeg \
+        --with-webp \
+    && docker-php-ext-install -j"$(nproc)" \
+        bcmath \
+        exif \
+        gd \
+        intl \
+        pdo_mysql \
+        pcntl \
+        sockets \
+        zip \
+    && pecl install redis \
+    && docker-php-ext-enable redis \
+    && apk del .build-deps \
+    && rm -rf /tmp/pear /var/cache/apk/*
+
+# Composer só é necessário no build (dump-autoload); não fica no runtime.
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
+# uid/gid 1000: alinhado ao dono dos arquivos no host (storage/ montado).
+RUN addgroup -g 1000 appuser \
+    && adduser -D -u 1000 -G appuser appuser
+
+WORKDIR /var/www/html
+
+# -----------------------------------------------------------------------------
+# Dependências PHP: camada independente do código da aplicação.
+#   --no-scripts/--no-autoloader: o autoload definitivo é gerado no runtime,
+#   quando o código já está presente (e com vendor/ sem o dev).
+# -----------------------------------------------------------------------------
+FROM base AS vendor
+
+ENV COMPOSER_ALLOW_SUPERUSER=1 \
+    COMPOSER_MEMORY_LIMIT=-1
+
+COPY composer.json composer.lock ./
+
+RUN composer install \
+        --no-dev \
+        --no-interaction \
+        --no-progress \
+        --prefer-dist \
+        --no-scripts \
+        --no-autoloader
+
+# -----------------------------------------------------------------------------
+# Front-end: `npm ci` usa o package-lock.json (build reprodutível) e o Vite
+# inlina VITE_* no bundle — por isso as URLs públicas do Reverb são build args
+# e viram imagem por instância.
+# -----------------------------------------------------------------------------
+FROM node:22-alpine AS assets
+
+WORKDIR /app
+
+COPY package.json package-lock.json .npmrc ./
+
+RUN npm ci --no-audit --no-fund
+
+COPY . .
+
+ARG VITE_APP_NAME="Arcana Tarot"
+ARG VITE_REVERB_APP_KEY=""
+ARG VITE_REVERB_HOST=""
+ARG VITE_REVERB_PORT="443"
+ARG VITE_REVERB_SCHEME="https"
+
+ENV VITE_APP_NAME=$VITE_APP_NAME \
+    VITE_REVERB_APP_KEY=$VITE_REVERB_APP_KEY \
+    VITE_REVERB_HOST=$VITE_REVERB_HOST \
+    VITE_REVERB_PORT=$VITE_REVERB_PORT \
+    VITE_REVERB_SCHEME=$VITE_REVERB_SCHEME
+
+RUN npm run build
+
+# -----------------------------------------------------------------------------
+# Runtime
+# -----------------------------------------------------------------------------
+FROM base AS runtime
+
+# Nginx e supervisor no MESMO container do PHP-FPM: um container a menos e
+# ~24 MB a menos de limite por instância no VPS de 2 GB.
+RUN apk add --no-cache nginx supervisor su-exec \
+    && rm -rf /var/cache/apk/* \
+    && mkdir -p /run/nginx
+
+COPY --from=vendor /var/www/html/vendor ./vendor
+
+COPY . .
+
+# Autoload otimizado (com vendor --no-dev), diretórios graváveis e o symlink
+# public/storage -> ../storage/app/public (relativo: sobrevive ao volume).
+RUN composer dump-autoload --optimize --no-dev --no-interaction \
+    && mkdir -p \
+        storage/app/public \
+        storage/app/private/tarot \
+        storage/framework/cache/data \
+        storage/framework/sessions \
+        storage/framework/views \
+        storage/logs \
+        bootstrap/cache \
+    && rm -rf public/storage \
+    && ln -s ../storage/app/public public/storage \
+    && chown -R appuser:appuser storage bootstrap/cache
+
+COPY --from=assets /app/public/build ./public/build
+
+# php.ini de produção (memory_limit 128M, OPcache sem validate_timestamps),
+# pool ondemand de 5 filhos, limites de upload e nginx interno.
+COPY docker/php/production.ini /usr/local/etc/php/conf.d/zz-production.ini
+COPY docker/php/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
+COPY docker/php/www.conf /usr/local/etc/php-fpm.d/www.conf
+COPY docker/php/supervisord.prod.conf /etc/supervisord.conf
+COPY docker/nginx/default.prod.conf /etc/nginx/nginx.conf
+
+COPY docker/php/entrypoint.prod.sh /usr/local/bin/entrypoint
+RUN chmod +x /usr/local/bin/entrypoint
+
+ENV CONTAINER_ROLE=web
+
+# 80 = nginx interno (atrás do proxy), 8080 = Reverb.
+EXPOSE 80 8080
+
+ENTRYPOINT ["/usr/local/bin/entrypoint"]
+
+# Serviços `queue` e `reverb` sobrescrevem o CMD em docker-compose.prod.yml.
+CMD ["supervisord", "-c", "/etc/supervisord.conf"]

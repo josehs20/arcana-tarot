@@ -7,10 +7,20 @@ vendor
 public/build
 public/hot
 public/storage
-storage/logs
+storage
 *.log
 .env
 .env.backup
 .env.production
 *.sql
 *.sql.gz
+*.zip
+
+# Infra de produção e segredos: nunca entram na imagem.
+# (deploy/ guarda certificados TLS após a configuração do proxy.)
+deploy
+.ai
+.cursor
+.cursorrules
+AGENTS.md
+

@@ -31,3 +31,12 @@ Schedule::command('consultations:charge-minutes')
 Schedule::command('consultations:close-stale-calls')
     ->everyMinute()
     ->withoutOverlapping(10);
+
+/*
+ * Tokens Bearer expirados (config sanctum.expiration, padrão 30 dias) ficam na
+ * tabela até serem removidos. A limpeza diária evita crescimento indefinido;
+ * o comando é idempotente e pode rodar junto do cron já necessário na Hostoo.
+ */
+Schedule::command('sanctum:prune-expired --hours=24')
+    ->daily()
+    ->withoutOverlapping(10);

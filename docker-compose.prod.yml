@@ -1,0 +1,145 @@
+name: ${APP_SLUG:-arcana-tarot}
+
+# =============================================================================
+# Aplicação em PRODUÇÃO — uma instância por pasta (astros21, voz-arcana)
+# =============================================================================
+# Não há banco, Redis nem proxy aqui: eles vivem em
+# deploy/docker-compose.infra.yml (containers shared-mysql, shared-redis e
+# shared-proxy na rede externa `shared-net`).
+#
+# Pré-requisitos nesta pasta: `.env` preenchido (deploy/env/production.env.example)
+# e `storage/` com dono 1000:1000.
+#
+#   docker compose -f docker-compose.prod.yml build
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Variáveis lidas do `.env` desta pasta (o mesmo arquivo do Laravel) além das
+# usuais da aplicação:
+#   APP_SLUG    nome da instância; define os nomes dos containers que o proxy
+#               procura (`<slug>-web`, `<slug>-reverb`). Use `astros21` ou
+#               `voz-arcana` para casar com deploy/nginx/conf.d/*.conf.
+#   APP_IMAGE   tag da imagem (uma por instância, pois VITE_* é embutido no
+#               bundle: `arcana-tarot/app:astros21`).
+#
+# Orçamento por instância (limites rígidos): web 220M + queue 150M + reverb 150M
+# = 520M. Duas instâncias = 1040M; infra compartilhada = 462M; sobra ~500M para
+# o sistema operacional e picos. Ver deploy/DEPLOY.md.
+# =============================================================================
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-app: &app
+  image: ${APP_IMAGE:-arcana-tarot/app:prod}
+  restart: unless-stopped
+  working_dir: /var/www/html
+  volumes:
+    # Configuração e arquivos enviados ficam no host: a imagem é descartável.
+    - ./.env:/var/www/html/.env:ro
+    - ./storage:/var/www/html/storage
+  networks:
+    - shared-net
+  logging: *default-logging
+
+services:
+  # ---------------------------------------------------------------------------
+  # web: nginx interno + php-fpm (pool ondemand, 5 filhos) + schedule:work.
+  # Nenhuma porta é publicada: o único acesso externo é o shared-proxy.
+  # ---------------------------------------------------------------------------
+  web:
+    <<: *app
+    container_name: ${APP_SLUG:-arcana-tarot}-web
+    # Só o `web` constrói a imagem: `queue` e `reverb` usam a mesma tag
+    # (${APP_IMAGE}), evitando três builds idênticos em cada deploy.
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile.prod
+      args:
+        # Inlinados pelo Vite: precisam ser públicos (nada de REVERB_APP_SECRET).
+        VITE_APP_NAME: ${VITE_APP_NAME:-Arcana Tarot}
+        VITE_REVERB_APP_KEY: ${REVERB_APP_KEY:-}
+        VITE_REVERB_HOST: ${VITE_REVERB_HOST:-}
+        VITE_REVERB_PORT: ${VITE_REVERB_PORT:-443}
+        VITE_REVERB_SCHEME: ${VITE_REVERB_SCHEME:-https}
+    environment:
+      CONTAINER_ROLE: web
+      # 1 no primeiro deploy (roda `migrate --force` no boot). Depois volte a 0:
+      # duas instâncias subindo juntas não devem migrar o mesmo banco, e para
+      # migrar existe `docker compose run --rm web php artisan migrate`.
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-0}
+    mem_limit: 220m
+    deploy:
+      resources:
+        limits:
+          memory: 220M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/up || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+    stop_grace_period: 60s
+
+  # ---------------------------------------------------------------------------
+  # queue: um worker. `--memory=96` faz o worker sair sozinho antes de bater no
+  # teto do container; o `restart` o traz de volta em segundos.
+  # ---------------------------------------------------------------------------
+  queue:
+    <<: *app
+    container_name: ${APP_SLUG:-arcana-tarot}-queue
+    environment:
+      CONTAINER_ROLE: queue
+    command:
+      - php
+      - artisan
+      - queue:work
+      - redis
+      - --sleep=3
+      - --tries=3
+      - --max-time=3600
+      - --memory=96
+    mem_limit: 150m
+    deploy:
+      resources:
+        limits:
+          memory: 150M
+    stop_grace_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # reverb: WebSocket. O proxy encaminha /app/* do domínio para
+  # <slug>-reverb:8080 (ver deploy/nginx/conf.d/*.conf).
+  # ---------------------------------------------------------------------------
+  reverb:
+    <<: *app
+    container_name: ${APP_SLUG:-arcana-tarot}-reverb
+    environment:
+      CONTAINER_ROLE: reverb
+      REVERB_SERVER_HOST: 0.0.0.0
+      REVERB_SERVER_PORT: 8080
+    command: ["php", "artisan", "reverb:start", "--host=0.0.0.0", "--port=8080"]
+    mem_limit: 150m
+    deploy:
+      resources:
+        limits:
+          memory: 150M
+    # Cada aba aberta no painel/atendimento é uma conexão persistente.
+    ulimits:
+      nofile:
+        soft: 4096
+        hard: 8192
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 8080 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    stop_grace_period: 30s
+
+networks:
+  # Criada uma única vez no servidor: docker network create shared-net
+  shared-net:
+    external: true
+    name: shared-net

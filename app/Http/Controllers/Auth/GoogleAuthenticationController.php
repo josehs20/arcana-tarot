@@ -2,9 +2,8 @@
 
 namespace App\Http\Controllers\Auth;
 
-use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
-use App\Support\AttendantAvailabilityManager;
+use App\Support\AuthenticationLifecycleManager;
 use App\Support\AuthenticationSettings;
 use App\Support\FirstAccessBonus;
 use App\Support\GoogleAccountException;
@@ -48,7 +47,7 @@ class GoogleAuthenticationController extends Controller
         Request $request,
         GoogleAccountManager $accounts,
         FirstAccessBonus $bonus,
-        AttendantAvailabilityManager $availability,
+        AuthenticationLifecycleManager $authentication,
     ): RedirectResponse {
         if (! AuthenticationSettings::googleEnabled()) {
             return redirect()
@@ -100,14 +99,7 @@ class GoogleAuthenticationController extends Controller
         Auth::guard('web')->login($user, true);
         $request->session()->regenerate();
 
-        if ($user->role === UserRole::Attendant) {
-            try {
-                $availability->signIn($user);
-            } catch (Throwable $exception) {
-                // O status é um efeito colateral do login: nunca bloqueia.
-                report($exception);
-            }
-        }
+        $authentication->afterLogin($user);
 
         return redirect()
             ->route($user->dashboardRouteName())
