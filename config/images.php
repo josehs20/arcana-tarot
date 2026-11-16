@@ -6,7 +6,8 @@
  * O mesmo teto vale para cartas do catálogo, fotos de atendentes, logotipo,
  * favicon e mídia das seções. Depois de receber o arquivo, o servidor
  * normaliza a imagem (orientação do EXIF, redução para o perfil de saída,
- * recomposição em WebP/PNG e remoção de metadados) antes de gravá-la.
+ * recodificação no formato final do perfil — PNG/JPEG no CMS e WebP nas imagens
+ * internas — e remoção de metadados) antes de gravá-la.
  *
  * As dimensões e a qualidade de cada perfil de saída ficam em
  * `App\Support\Images\ImageProfile`; aqui estão apenas as guardas que valem

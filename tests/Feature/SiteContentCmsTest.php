@@ -12,6 +12,7 @@ use App\Support\SiteContent;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use Tests\TestCase;
 
 class SiteContentCmsTest extends TestCase
@@ -201,6 +202,31 @@ class SiteContentCmsTest extends TestCase
 
         $this->assertIsString($path);
         $this->assertStringStartsWith('site/', $path);
+        $this->assertSame('png', pathinfo($path, PATHINFO_EXTENSION));
+        Storage::disk('public')->assertExists($path);
+    }
+
+    #[RequiresPhpExtension('gd')]
+    public function test_webp_logo_is_converted_to_png_before_being_stored(): void
+    {
+        Storage::fake('public');
+
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)
+            ->patch(route('admin.site.identity.update'), [
+                'site_name' => 'Arcana CMS',
+                'site_description' => 'Descrição do site.',
+                'logo' => UploadedFile::fake()->image('logo.webp', 200, 100),
+            ])
+            ->assertRedirect(route('admin.site.index'))
+            ->assertSessionHasNoErrors();
+
+        $path = Setting::query()->where('key', 'site_logo_path')->value('value');
+
+        $this->assertIsString($path);
+        $this->assertSame('png', pathinfo($path, PATHINFO_EXTENSION));
+        $this->assertStringNotContainsString('webp', (string) $path);
         Storage::disk('public')->assertExists($path);
     }
 

@@ -119,10 +119,15 @@ class AdminAttendantSoundTest extends TestCase
         [$attendant, $profile] = $this->attendant();
         $profile->forceFill(['request_sound' => AttendantRequestSound::Bell->value])->save();
 
+        /*
+         * Sem MP3, o painel toca só o predefinido: nenhuma URL de arquivo é
+         * publicada, então não há uma segunda fonte para sobrepor.
+         */
         $this->actingAs($attendant)
             ->get(route('attendant.dashboard'))
             ->assertOk()
-            ->assertSee('data-request-sound="bell"', false);
+            ->assertSee('data-request-sound="bell"', false)
+            ->assertDontSee('data-request-sound-url', false);
 
         $client = User::factory()->create();
 

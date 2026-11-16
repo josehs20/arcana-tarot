@@ -5,8 +5,10 @@
  * foto de celular para depois ser reduzida desperdiça a conexão do operador e
  * pode esbarrar em `upload_max_filesize`. Para arquivos acima de 4 MB, o
  * navegador decodifica a imagem, reduz até o perfil do campo
- * (`data-image-max-width` / `data-image-max-height`), recomprime em WebP (ou
- * PNG no favicon) e substitui o arquivo no próprio input.
+ * (`data-image-max-width` / `data-image-max-height`) e substitui o arquivo no
+ * próprio input recodificado no formato final do perfil: PNG/JPEG nas imagens
+ * do CMS (`data-image-format`, com `data-image-preserve-png` mantendo PNG
+ * quando a origem é PNG) e WebP nas imagens internas do painel.
  *
  * Regras de segurança:
  * - só JPEG, PNG e WebP são tratados; HEIC e formatos que o navegador não
@@ -16,6 +18,11 @@
  */
 const OPTIMIZE_THRESHOLD_BYTES = 4 * 1024 * 1024;
 const SUPPORTED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const OUTPUT_TYPES = {
+    png: 'image/png',
+    jpeg: 'image/jpeg',
+    webp: 'image/webp',
+};
 
 const formatBytes = (bytes) => {
     if (bytes < 1024) {
@@ -38,7 +45,8 @@ const readConfig = (input) => {
         maxHeight: Number(data.imageMaxHeight) || 0,
         maxPixels: Number(data.imageMaxPixels) || 0,
         quality: Number(data.imageQuality) || 82,
-        format: data.imageFormat === 'png' ? 'image/png' : 'image/webp',
+        format: OUTPUT_TYPES[data.imageFormat] ?? 'image/webp',
+        preservePng: data.imagePreservePng === '1',
     };
 };
 
@@ -80,6 +88,14 @@ const renameTo = (name, extension) => {
     return `${base}.${extension}`;
 };
 
+const extensionFor = (mime) => {
+    if (mime === 'image/png') {
+        return 'png';
+    }
+
+    return mime === 'image/jpeg' ? 'jpg' : 'webp';
+};
+
 /**
  * Devolve um `File` menor ou `null` quando não há ganho.
  */
@@ -93,6 +109,9 @@ const optimizeFile = async (file, config) => {
 
         return null;
     }
+
+    // Perfis do CMS que preservam PNG mantêm a transparência da origem.
+    const mime = config.preservePng && file.type === 'image/png' ? 'image/png' : config.format;
 
     const scale = Math.min(
         1,
@@ -118,19 +137,24 @@ const optimizeFile = async (file, config) => {
 
     context.imageSmoothingEnabled = true;
     context.imageSmoothingQuality = 'high';
+
+    // O JPEG não tem canal alfa: áreas transparentes ganham fundo branco.
+    if (mime === 'image/jpeg') {
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, targetWidth, targetHeight);
+    }
+
     context.drawImage(bitmap, 0, 0, targetWidth, targetHeight);
     bitmap.close?.();
 
-    const blob = await canvasToBlob(canvas, config.format, config.quality / 100);
+    const blob = await canvasToBlob(canvas, mime, config.quality / 100);
 
     if (!blob || blob.size >= file.size) {
         return null;
     }
 
-    const extension = config.format === 'image/png' ? 'png' : 'webp';
-
-    return new File([blob], renameTo(file.name, extension), {
-        type: config.format,
+    return new File([blob], renameTo(file.name, extensionFor(mime)), {
+        type: mime,
         lastModified: file.lastModified,
     });
 };

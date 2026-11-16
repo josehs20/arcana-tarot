@@ -258,6 +258,17 @@
   - Arquivos antigos continuam intactos; a allowlist de entrega já aceitava JPEG/PNG/WebP. Sem GD/Imagick, o upload é gravado sem reprocessar e um aviso é registrado no log.
 - **Consequências**: novos uploads ficam menores em bytes e consistentes em orientação; a suíte de normalização exige GD (`RequiresPhpExtension`) e roda no container. HEIC continua fora de escopo — o navegador não o decodifica e o servidor o rejeita com mensagem clara. A conversão para WebP deve ser considerada ao gerar imagens em lote fora do painel.
 
+### D-029 — Imagens do CMS público gravadas somente em PNG/JPEG
+
+- **Status**: Aceita e implementada em novembro de 2026
+- **Contexto**: D-028 recodificava todo upload em WebP, com exceção do favicon. Com isso, qualquer imagem enviada em `/admin/conteudo` — logo, favicon e mídia das seções — era gravada como `.webp`, independentemente do arquivo escolhido. O logo também aparece nos e-mails transacionais e o favicon em abas/agregadores, consumidores que nem sempre decodificam WebP; além disso, o operador via o arquivo trocar de formato sem ter pedido.
+- **Decisão**:
+  - `ImageProfile::outputFormat(?string $sourceMime)` substitui `format()`: `site_logo` e `site_favicon` sempre em PNG; `site_section` em PNG quando a origem é PNG (preserva transparência) e em JPEG nas demais origens; `tarot_card` e `attendant_photo` seguem em WebP, porque só são exibidas dentro da aplicação.
+  - WebP continua aceito na entrada e é convertido antes de gravar. Sem GD/Imagick, um WebP nos perfis do CMS é recusado com erro de validação, em vez de ser gravado no formato errado.
+  - A conversão para JPEG compõe origens transparentes sobre fundo branco — JPEG não tem canal alfa.
+  - `resources/js/image-upload.js` acompanha o perfil (`data-image-format` e `data-image-preserve-png`) e o texto de ajuda do campo informa em que formato a imagem será salva.
+- **Consequências**: nenhum `.webp` novo entra em `storage/app/public/site`; arquivos WebP gravados antes continuam acessíveis (a entrega é estática) e são substituídos no próximo upload. Cartas do catálogo e fotos de atendentes não mudaram.
+
 ---
 
 ## 2. Dúvidas que precisam de confirmação
@@ -320,3 +331,4 @@
 | 2026-11-04 | Segurança do chat | Presença por aba, inatividade configurável, avisos de saída, encerramento no logout, compra de créditos com retorno e limites administrativos auditados; `docs/SEGURANCA_E_USABILIDADE_CHAT.md` criado |
 | 2026-11-06 | Preço por atendente | D-027 adicionada: `attendant_modality_prices` como fonte única do preço por minuto, edição em `/admin/modalidades`, snapshot em `consultations.price_per_minute_cents` e remoção da tarifa global de `/admin/financeiro`; D-018 e Q-02 atualizadas |
 | 2026-11-11 | Upload de imagens | D-028 adicionada: `intervention/image`, `ImageNormalizer`, perfis de saída, teto único de 25 MB, guardas de pixels/memória, normalização no navegador e limites PHP/Nginx alinhados; D-021 e Q-08 atualizadas |
+| 2026-11-15 | Imagens do CMS | D-029 adicionada: perfis do CMS público (`site_logo`, `site_favicon`, `site_section`) gravam somente PNG/JPEG, WebP enviado é convertido e o navegador acompanha o formato do perfil |

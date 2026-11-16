@@ -51,7 +51,8 @@ class ImageNormalizerTest extends TestCase
 
         $result = (new ImageNormalizer)->normalize($file, ImageProfile::SiteLogo, 'logo');
 
-        $this->assertContains($result->mime, ['image/png', 'image/webp']);
+        $this->assertSame('image/png', $result->mime);
+        $this->assertSame('png', $result->extension);
         $this->assertSame(1, $result->width);
         $this->assertSame(1, $result->height);
         $this->assertGreaterThan(0, $result->bytes());
@@ -78,12 +79,74 @@ class ImageNormalizerTest extends TestCase
         $this->assertSame('image/webp', $size['mime']);
     }
 
-    public function test_favicon_profile_keeps_png_as_the_output_format(): void
+    public function test_cms_profiles_never_produce_webp_files(): void
     {
-        $this->assertSame('png', ImageProfile::SiteFavicon->format());
+        $this->assertSame('png', ImageProfile::SiteFavicon->outputFormat());
+        $this->assertSame('png', ImageProfile::SiteLogo->outputFormat('image/jpeg'));
+        $this->assertSame('png', ImageProfile::SiteLogo->outputFormat('image/webp'));
+        $this->assertSame('png', ImageProfile::SiteSection->outputFormat('image/png'));
+        $this->assertSame('jpeg', ImageProfile::SiteSection->outputFormat('image/jpeg'));
+        $this->assertSame('jpeg', ImageProfile::SiteSection->outputFormat('image/webp'));
+        $this->assertSame('jpeg', ImageProfile::SiteSection->outputFormat());
+
+        $this->assertTrue(ImageProfile::SiteLogo->storesOnlyPngOrJpeg());
+        $this->assertTrue(ImageProfile::SiteFavicon->storesOnlyPngOrJpeg());
+        $this->assertTrue(ImageProfile::SiteSection->storesOnlyPngOrJpeg());
+        $this->assertFalse(ImageProfile::TarotCard->storesOnlyPngOrJpeg());
+        $this->assertFalse(ImageProfile::AttendantPhoto->storesOnlyPngOrJpeg());
+
+        $this->assertTrue(ImageProfile::SiteSection->preservesPngSource());
+        $this->assertFalse(ImageProfile::SiteLogo->preservesPngSource());
+
         $this->assertSame(512, ImageProfile::SiteFavicon->maxWidth());
         $this->assertSame(512, ImageProfile::SiteFavicon->maxHeight());
-        $this->assertSame('webp', ImageProfile::TarotCard->format());
+    }
+
+    public function test_internal_panel_profiles_keep_webp_as_the_output_format(): void
+    {
+        $this->assertSame('webp', ImageProfile::TarotCard->outputFormat());
+        $this->assertSame('webp', ImageProfile::AttendantPhoto->outputFormat('image/png'));
+    }
+
+    #[RequiresPhpExtension('gd')]
+    public function test_webp_uploads_for_the_cms_are_converted_instead_of_stored(): void
+    {
+        $file = UploadedFile::fake()->image('foto.webp', 600, 400);
+
+        $section = (new ImageNormalizer)->normalize($file, ImageProfile::SiteSection, 'image');
+
+        $this->assertSame('image/jpeg', $section->mime);
+        $this->assertSame('jpg', $section->extension);
+        $this->assertSame('image/jpeg', getimagesizefromstring($section->binary)['mime']);
+
+        $logo = (new ImageNormalizer)->normalize($file, ImageProfile::SiteLogo, 'logo');
+
+        $this->assertSame('image/png', $logo->mime);
+        $this->assertSame('png', $logo->extension);
+        $this->assertSame('image/png', getimagesizefromstring($logo->binary)['mime']);
+    }
+
+    #[RequiresPhpExtension('gd')]
+    public function test_section_images_uploaded_as_jpeg_stay_jpeg(): void
+    {
+        $file = UploadedFile::fake()->image('banner.jpg', 800, 600);
+
+        $result = (new ImageNormalizer)->normalize($file, ImageProfile::SiteSection, 'image');
+
+        $this->assertSame('image/jpeg', $result->mime);
+        $this->assertSame('jpg', $result->extension);
+        $this->assertSame('image/jpeg', getimagesizefromstring($result->binary)['mime']);
+    }
+
+    #[RequiresPhpExtension('gd')]
+    public function test_section_images_uploaded_as_png_keep_png(): void
+    {
+        $file = UploadedFile::fake()->image('banner.png', 800, 600);
+
+        $result = (new ImageNormalizer)->normalize($file, ImageProfile::SiteSection, 'image');
+
+        $this->assertSame('image/png', $result->mime);
+        $this->assertSame('png', $result->extension);
     }
 
     /**

@@ -7,10 +7,11 @@
     por uma consulta aberta não abria o modal nem tocava o toque de chamada.
 
     O bloco apenas publica os endpoints; `resources/js/user-channel.js` abre o
-    canal `user.{id}`, abre o modal de aceite/recusa e toca o som configurado
-    (sintetizado no navegador ou MP3 — o da plataforma ou o enviado pela
-    administração). Nenhuma decisão acontece no navegador: aceitar/recusar
-    chamam as rotas do servidor.
+    canal `user.{id}`, abre o modal de aceite/recusa e toca o som configurado.
+    O toque é sempre de uma fonte só: o MP3 do atendente quando existe (o da
+    plataforma ou o enviado pela administração) ou, sem MP3, o predefinido
+    sintetizado no navegador — os dois nunca soam ao mesmo tempo. Nenhuma
+    decisão acontece no navegador: aceitar/recusar chamam as rotas do servidor.
 --}}
 @php
     $realtimeUser = auth()->user();

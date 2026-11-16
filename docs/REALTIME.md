@@ -497,6 +497,15 @@ continua existindo como lista persistente e como fallback sem JavaScript.
 
 Detalhes do alerta sonoro:
 
+- **um toque por vez, de uma fonte só**: quando o atendente tem um MP3
+  configurado (`custom` ou `olha-o-gas`), só o arquivo é reproduzido; sem MP3,
+  o toque predefinido é sintetizado no navegador, com a sirene como padrão;
+- antes de cada repetição, o toque em curso é interrompido e um download
+  pendente é invalidado — um MP3 que termina de carregar depois de outro toque
+  começar é descartado, então dois sons nunca se sobrepõem;
+- se o MP3 configurado não puder ser baixado ou decodificado, o som padrão
+  (sirene) entra sozinho naquela repetição, para o atendente não ficar sem
+  aviso;
 - os toques predefinidos sintetizados (sirene, campainha, sino e bip) usam Web
   Audio API, sem arquivo de áudio no bundle; a sirene padrão varre 640–1180 Hz
   com filtro passa-baixa em 2,2 kHz;

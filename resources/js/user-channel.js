@@ -168,6 +168,9 @@ const userChannelState = {
     soundUrl: null,
     fileBuffer: null,
     fileLoadPromise: null,
+    // Identifica a reprodução atual: um MP3 que termina de baixar depois de
+    // outro toque ter começado é descartado em vez de soar por cima.
+    soundSequence: 0,
     alertNodes: [],
     alertTimer: null,
     alertStopTimer: null,
@@ -356,11 +359,12 @@ function leaveTo(url) {
 /*
  * Alerta sonoro de nova solicitação.
  *
- * Os toques predefinidos sintetizados são gerados no próprio navegador. Quando o
- * toque depende de um MP3 — o versionado em `public/olha-o-gas.mp3` ou o enviado
- * pela administração — o arquivo é baixado uma vez (a URL chega em
- * `data-request-sound-url`) e decodificado no AudioContext para tocar junto com
- * o mesmo mecanismo de repetição. A sirene continua sendo o padrão histórico.
+ * Um toque por vez, sempre de uma única fonte: quando o atendente tem um MP3
+ * configurado — o versionado em `public/olha-o-gas.mp3` ou o enviado pela
+ * administração — só o arquivo é reproduzido; sem MP3, o toque predefinido é
+ * sintetizado no navegador (padrão: sirene). As duas fontes nunca são somadas.
+ * Antes de iniciar uma repetição, qualquer reprodução em curso é interrompida e
+ * um download pendente é invalidado, então dois sons não se sobrepõem.
  *
  * Navegadores só liberam áudio depois de uma interação do usuário — e o Chrome
  * avisa no console quando um `AudioContext` nasce antes disso. Por isso o
@@ -375,8 +379,25 @@ function normalizeRequestSound(value) {
 }
 
 /**
+ * Fonte do toque que deve soar agora.
+ *
+ * Regra única do painel: quando existe MP3 configurado — o enviado pela
+ * administração (`custom`) ou o versionado da plataforma (`olha-o-gas`) — só o
+ * arquivo toca. Sem MP3, toca o toque predefinido do atendente, com a sirene
+ * como padrão. As duas fontes nunca são somadas na mesma chamada.
+ */
+function requestSoundSource(value) {
+    if (userChannelState.soundUrl) {
+        return { kind: 'file', url: userChannelState.soundUrl };
+    }
+
+    return { kind: 'tone', value: normalizeRequestSound(value) };
+}
+
+/**
  * Baixa e decodifica o MP3 uma única vez por URL. Se o download falhar, o
- * chamador simplesmente não toca o arquivo e o alerta visual continua ativo.
+ * chamador cai no som padrão daquela repetição e o alerta visual continua
+ * ativo.
  */
 function loadFileSound(url) {
     if (!url) {
@@ -486,8 +507,10 @@ function handleAudioReady() {
     updateAudioHint();
     channelLog('audio.liberado', { estado: userChannelState.audio?.state ?? null, alarmeAtivo: userChannelState.alertActive });
 
-    if (FILE_REQUEST_SOUNDS.has(userChannelState.sound) && userChannelState.soundUrl) {
-        void loadFileSound(userChannelState.soundUrl);
+    const preloaded = requestSoundSource(userChannelState.sound);
+
+    if (preloaded.kind === 'file') {
+        void loadFileSound(preloaded.url);
     }
 
     if (userChannelState.alertActive && Date.now() - userChannelState.alertLastPlayAt > 800) {
@@ -698,6 +721,31 @@ function bindAudioUnlock() {
     });
 }
 
+/**
+ * Interrompe o toque em curso e invalida downloads agendados.
+ *
+ * O contador de sequência é o que impede um MP3 que ainda estava baixando de
+ * soar depois de outro toque ter começado: cada reprodução registra a sequência
+ * atual e só toca se ela continuar sendo a última. Assim o painel nunca deixa
+ * dois toques — sintetizados ou arquivos — tocando ao mesmo tempo.
+ */
+function stopRequestSoundPlayback() {
+    userChannelState.soundSequence += 1;
+
+    userChannelState.alertNodes.forEach(({ oscillator }) => {
+        try {
+            // Vale para osciladores e para o buffer source do MP3: os dois
+            // expõem `stop()`, e o nó já encerrado lança — daí o `try`.
+            oscillator.stop();
+        } catch {
+            // Nó já encerrado pelo agendamento original.
+        }
+    });
+    userChannelState.alertNodes = [];
+
+    return userChannelState.soundSequence;
+}
+
 function scheduleTone(context, {
     frequency,
     start,
@@ -831,8 +879,8 @@ function playFileBuffer(buffer) {
     source.connect(gain).connect(context.destination);
     source.start();
 
-    // `stopAlert` encerra qualquer nó pelo campo `oscillator`; o buffer source
-    // expõe a mesma operação `stop()`.
+    // `stopRequestSoundPlayback` encerra qualquer nó pelo campo `oscillator`;
+    // o buffer source expõe a mesma operação `stop()`.
     const node = { oscillator: source, gain, filter: null };
 
     userChannelState.alertNodes.push(node);
@@ -845,26 +893,59 @@ function playFileBuffer(buffer) {
     return true;
 }
 
-function playFileRequestSound(url) {
+/**
+ * Toca o MP3 do toque — sozinho.
+ *
+ * A reprodução anterior é interrompida antes e a sequência do alerta é
+ * registrada: se outro toque começar enquanto o arquivo ainda está baixando,
+ * este download é descartado em vez de soar por cima do seguinte. É esse
+ * cuidado que impede dois sons simultâneos quando a chamada se repete antes de
+ * o MP3 terminar de carregar.
+ */
+function playFileRequestSound(url, { fallbackToDefault = true } = {}) {
     const context = userChannelState.audio;
 
     if (!context || context.state !== 'running' || !url) {
         return;
     }
 
+    const sequence = stopRequestSoundPlayback();
+
     if (userChannelState.fileBuffer && userChannelState.soundUrl === url) {
         playFileBuffer(userChannelState.fileBuffer);
+
         return;
     }
 
     loadFileSound(url).then((buffer) => {
+        if (sequence !== userChannelState.soundSequence) {
+            return;
+        }
+
         if (buffer && userChannelState.audio?.state === 'running') {
             playFileBuffer(buffer);
+
+            return;
+        }
+
+        /*
+         * MP3 indisponível (rede, arquivo removido ou formato inválido): o
+         * atendente não pode ficar sem aviso. O som padrão entra sozinho — o
+         * arquivo falhou, então não há duas fontes tocando ao mesmo tempo.
+         */
+        if (fallbackToDefault) {
+            playSyntheticTone(DEFAULT_REQUEST_SOUND);
         }
     });
 }
 
-function playSyntheticRequestSound(value) {
+/**
+ * Sintetiza o toque escolhido, sem tocar por cima de outro.
+ *
+ * Usado pela prévia administrativa e pelo fallback do MP3. O som padrão
+ * (`siren`) cobre valores desconhecidos.
+ */
+function playSyntheticTone(value) {
     switch (value) {
         case 'bell':
             playBell();
@@ -878,6 +959,15 @@ function playSyntheticRequestSound(value) {
         default:
             playSiren();
     }
+}
+
+function playSyntheticRequestSound(value) {
+    if (userChannelState.audio?.state !== 'running') {
+        return;
+    }
+
+    stopRequestSoundPlayback();
+    playSyntheticTone(value);
 }
 
 function playRequestSound(value) {
@@ -905,22 +995,30 @@ function playRequestSound(value) {
         return;
     }
 
-    const sound = normalizeRequestSound(value);
+    /*
+     * Uma fonte por toque: com MP3 configurado só o arquivo soa; sem MP3, soa o
+     * toque predefinido (padrão: sirene). A escolha não alterna nem soma.
+     */
+    const source = requestSoundSource(value);
 
     userChannelState.alertLastPlayAt = Date.now();
-    channelLog('sirene.toque', { som: sound, contexto: context.state });
+    channelLog('sirene.toque', {
+        som: source.kind === 'file' ? userChannelState.sound : source.value,
+        arquivo: source.kind === 'file' ? source.url : null,
+        contexto: context.state,
+    });
 
-    if (FILE_REQUEST_SOUNDS.has(sound)) {
-        playFileRequestSound(userChannelState.soundUrl);
+    if (source.kind === 'file') {
+        playFileRequestSound(source.url);
 
         return;
     }
 
-    playSyntheticRequestSound(sound);
+    playSyntheticRequestSound(source.value);
 }
 
 function alertRepeatMs() {
-    if (!FILE_REQUEST_SOUNDS.has(userChannelState.sound)) {
+    if (requestSoundSource(userChannelState.sound).kind !== 'file') {
         return ALERT_REPEAT_MS;
     }
 
@@ -993,15 +1091,9 @@ function stopAlert() {
     userChannelState.alertBlockedLogged = false;
     updateAudioHint();
 
-    // Corta o toque em curso: o pedido foi respondido ou o alerta silenciado.
-    userChannelState.alertNodes.forEach(({ oscillator }) => {
-        try {
-            oscillator.stop();
-        } catch {
-            // Oscilador já encerrado pelo agendamento original.
-        }
-    });
-    userChannelState.alertNodes = [];
+    // Corta o toque em curso — inclusive o MP3 — e invalida um download que
+    // ainda esteja em andamento: o pedido foi respondido ou o alerta silenciado.
+    stopRequestSoundPlayback();
 }
 
 /**
@@ -1009,7 +1101,9 @@ function stopAlert() {
  *
  * O clique no botão "Ouvir" é a interação que libera o AudioContext. Se o
  * navegador ainda estiver retomando o contexto, o toque é agendado para logo
- * depois do `resume`.
+ * depois do `resume`. Cada prévia interrompe a anterior: ouvir vários
+ * atendentes seguidos nunca sobrepõe dois sons, e um MP3 que falhe na prévia
+ * fica em silêncio em vez de tocar a sirene por engano.
  */
 export function previewRequestSound(value, url = null) {
     const context = primeAudio();
@@ -1021,7 +1115,8 @@ export function previewRequestSound(value, url = null) {
     const sound = normalizeRequestSound(value);
     const play = () => {
         if (FILE_REQUEST_SOUNDS.has(sound)) {
-            playFileRequestSound(url ?? userChannelState.soundUrl);
+            playFileRequestSound(url ?? userChannelState.soundUrl, { fallbackToDefault: false });
+
             return;
         }
 

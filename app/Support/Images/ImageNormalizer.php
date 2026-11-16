@@ -6,6 +6,8 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Intervention\Image\ImageManager;
+use Intervention\Image\Interfaces\EncodedImageInterface;
+use Intervention\Image\Interfaces\ImageInterface;
 use Throwable;
 
 /**
@@ -14,14 +16,16 @@ use Throwable;
  * O navegador pode adiantar o trabalho, mas a decisão final é sempre do
  * servidor: o conteúdo é identificado por `getimagesize()` (não pelo nome nem
  * pelo MIME declarado), a orientação do EXIF é aplicada, a imagem é reduzida
- * até caber no perfil de saída e recodificada em WebP/PNG. Recodificar também
- * descarta EXIF e GPS do original.
+ * até caber no perfil de saída e recodificada no formato final do perfil —
+ * PNG/JPEG nas imagens do CMS e WebP nas imagens internas do painel.
+ * Recodificar também descarta EXIF e GPS do original.
  *
  * Duas guardas evitam derrubar o processo: o teto de pixels (`max_pixels`) é
  * conferido antes da decodificação e o orçamento de memória é comparado com o
  * que a imagem exige. Sem GD/Imagick instalado, o arquivo original é mantido e
  * um aviso é registrado — o upload continua funcionando, apenas sem o ganho de
- * tamanho.
+ * tamanho; a exceção são os perfis do CMS, em que um WebP é recusado com erro
+ * de validação, porque esses arquivos nunca podem ser gravados nesse formato.
  */
 final class ImageNormalizer
 {
@@ -65,6 +69,14 @@ final class ImageNormalizer
         $this->ensureMemoryBudget($detected['width'], $detected['height'], $field);
 
         if (! $this->supportsProcessing()) {
+            // Sem GD/Imagick não há como trocar o formato. O WebP é recusado
+            // nos perfis do CMS, que nunca devem ser gravados nesse formato.
+            if ($profile->storesOnlyPngOrJpeg() && $detected['mime'] === 'image/webp') {
+                throw ValidationException::withMessages([
+                    $field => 'Este servidor não consegue converter imagens WebP. Envie o arquivo em JPEG ou PNG.',
+                ]);
+            }
+
             $binary = file_get_contents($source);
 
             if (! is_string($binary) || $binary === '') {
@@ -87,9 +99,12 @@ final class ImageNormalizer
             // Reduz apenas o que passa do teto; nunca amplia.
             $image->scaleDown($profile->maxWidth(), $profile->maxHeight());
 
-            $encoded = $profile->format() === 'png'
-                ? $image->toPng()
-                : $image->toWebp(quality: $profile->quality());
+            $encoded = $this->encode(
+                image: $image,
+                format: $profile->outputFormat($detected['mime']),
+                quality: $profile->quality(),
+                sourceMime: $detected['mime'],
+            );
 
             $binary = $encoded->toString();
             $mime = $encoded->mediaType();
@@ -115,6 +130,34 @@ final class ImageNormalizer
         }
 
         return new ProcessedImage($binary, $mime, $extension, $image->width(), $image->height());
+    }
+
+    /**
+     * Recodifica a imagem no formato final do perfil.
+     */
+    private function encode(ImageInterface $image, string $format, int $quality, string $sourceMime): EncodedImageInterface
+    {
+        return match ($format) {
+            'png' => $image->toPng(),
+            'jpeg' => $this->flattenOntoWhite($image, $sourceMime)->toJpeg(quality: $quality),
+            default => $image->toWebp(quality: $quality),
+        };
+    }
+
+    /**
+     * O JPEG não tem canal alfa: uma origem transparente (PNG/WebP) é composta
+     * sobre branco em vez de virar preta na conversão.
+     */
+    private function flattenOntoWhite(ImageInterface $image, string $sourceMime): ImageInterface
+    {
+        if ($sourceMime === 'image/jpeg') {
+            return $image;
+        }
+
+        return $this->manager()
+            ->create($image->width(), $image->height())
+            ->fill('#ffffff')
+            ->place($image);
     }
 
     /**

@@ -48,7 +48,8 @@
     data-image-max-height="{{ $profile->maxHeight() }}"
     data-image-max-pixels="{{ $maxPixels }}"
     data-image-quality="{{ $profile->quality() }}"
-    data-image-format="{{ $profile->format() }}"
+    data-image-format="{{ $profile->outputFormat() }}"
+    data-image-preserve-png="{{ $profile->preservesPngSource() ? '1' : '0' }}"
     @required($required)
     @if ($hasError)
         aria-invalid="true"
@@ -57,7 +58,7 @@
 >
 
 <div class="form-text" data-image-upload-hint>
-    JPEG, PNG ou WebP, até {{ intdiv($maxKb, 1024) }} MB. A imagem é redimensionada e otimizada automaticamente.
+    JPEG, PNG ou WebP, até {{ intdiv($maxKb, 1024) }} MB. A imagem é redimensionada e salva em {{ $profile->outputFormatLabel() }}.
     {{ $slot }}
 </div>
 

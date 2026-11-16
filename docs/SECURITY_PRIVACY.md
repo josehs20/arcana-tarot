@@ -87,8 +87,10 @@ duplicidade por e-mail/status.
 - Antes da gravação a imagem é normalizada (`ImageNormalizer`): orientação do
   EXIF aplicada, redução para o perfil da tela (cartas 1200×1800, fotos
   1200×1200, logo 1200×1200, favicon 512×512, seções 2400×1600) e
-  recompressão em WebP — o favicon permanece PNG. Recodificar descarta EXIF,
-  GPS e demais metadados do original.
+  recodificação no formato final do perfil: cartas e fotos de atendentes em
+  WebP; imagens do CMS público (logo, favicon e seções) somente em PNG ou JPEG,
+  para que nenhum arquivo WebP chegue às páginas públicas, aos e-mails e ao
+  favicon. Recodificar descarta EXIF, GPS e demais metadados do original.
 - Guardas de processamento: teto de `IMAGE_MAX_PIXELS` (40 MP) verificado no
   cabeçalho, antes da decodificação, e orçamento de memória conferido contra o
   `memory_limit` do processo (padrão 512 MB via `IMAGE_MEMORY_LIMIT`). Arquivos

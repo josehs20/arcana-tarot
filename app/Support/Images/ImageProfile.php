@@ -11,8 +11,11 @@ namespace App\Support\Images;
  * saída: `scaleDown()` nunca amplia uma imagem menor, então o perfil é um teto,
  * não um redimensionamento cego.
  *
- * O favicon é a exceção ao WebP: navegadores antigos e alguns agregadores
- * ainda esperam PNG quadrado para o ícone da aba.
+ * WebP só é gravado nas imagens internas do painel (cartas do catálogo e fotos
+ * de atendentes). As imagens do CMS público — logo, favicon e mídia das seções
+ * — ficam restritas a PNG/JPEG: o logo também aparece em clientes de e-mail e o
+ * favicon em abas e agregadores que nem sempre decodificam WebP, e o operador
+ * precisa reencontrar no site o mesmo tipo de arquivo que enviou.
  */
 enum ImageProfile: string
 {
@@ -51,11 +54,51 @@ enum ImageProfile: string
     }
 
     /**
-     * Formato final do arquivo gravado.
+     * Formato final do arquivo gravado (`png`, `jpeg` ou `webp`).
+     *
+     * Perfis do CMS nunca produzem WebP. Quando o MIME real da origem é
+     * informado, uma seção enviada em PNG continua PNG (preserva a
+     * transparência) e as demais origens viram JPEG. Logo e favicon são sempre
+     * PNG; sem o MIME de origem a seção usa JPEG, que é o formato das fotos.
      */
-    public function format(): string
+    public function outputFormat(?string $sourceMime = null): string
     {
-        return $this === self::SiteFavicon ? 'png' : 'webp';
+        return match ($this) {
+            self::SiteLogo, self::SiteFavicon => 'png',
+            self::SiteSection => $sourceMime === 'image/png' ? 'png' : 'jpeg',
+            self::TarotCard, self::AttendantPhoto => 'webp',
+        };
+    }
+
+    /**
+     * O perfil grava apenas PNG ou JPEG — nenhum arquivo WebP é salvo.
+     */
+    public function storesOnlyPngOrJpeg(): bool
+    {
+        return match ($this) {
+            self::SiteLogo, self::SiteFavicon, self::SiteSection => true,
+            self::TarotCard, self::AttendantPhoto => false,
+        };
+    }
+
+    /**
+     * O formato gravado acompanha a origem quando ela é PNG?
+     */
+    public function preservesPngSource(): bool
+    {
+        return $this === self::SiteSection;
+    }
+
+    /**
+     * Formato gravado escrito para o texto de ajuda do campo de upload.
+     */
+    public function outputFormatLabel(): string
+    {
+        return match ($this) {
+            self::SiteLogo, self::SiteFavicon => 'PNG',
+            self::SiteSection => 'PNG (quando enviada em PNG) ou JPEG',
+            self::TarotCard, self::AttendantPhoto => 'WebP',
+        };
     }
 
     /**

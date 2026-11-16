@@ -234,11 +234,16 @@ class AdminAttendantSoundUploadTest extends TestCase
             'request_sound_path' => $path,
         ])->save();
 
+        /*
+         * Com MP3, o painel recebe uma única fonte: o toque padrão não é
+         * publicado como alternativa, então os dois nunca soam juntos.
+         */
         $this->actingAs($attendant)
             ->get(route('attendant.dashboard'))
             ->assertOk()
             ->assertSee('data-request-sound="custom"', false)
             ->assertSee('data-request-sound-url=', false)
+            ->assertDontSee('data-request-sound="siren"', false)
             ->assertSee($path, false);
     }
 }

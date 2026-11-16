@@ -71,8 +71,9 @@ abrir `/up` (deve responder 200) e, depois, o próprio bootstrap da aplicação.
 ### 1.2 Limites de upload de imagem
 
 O painel aceita imagens de até **25 MB** (`IMAGE_UPLOAD_MAX_KB`) e normaliza
-tudo no servidor — orientação do EXIF, redução por perfil e recompressão em
-WebP — antes de gravar. Para fotos de celular chegarem à aplicação, o PHP do
+tudo no servidor — orientação do EXIF, redução por perfil e recodificação no
+formato final do perfil (PNG/JPEG no CMS e WebP nas imagens internas) — antes
+de gravar. Para fotos de celular chegarem à aplicação, o PHP do
 site (MultiPHP/`php.ini` do painel) precisa de:
 
 ```ini

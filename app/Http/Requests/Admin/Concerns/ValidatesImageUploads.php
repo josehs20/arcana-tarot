@@ -10,6 +10,10 @@ namespace App\Http\Requests\Admin\Concerns;
  * aqui é apenas a primeira barreira: o conteúdo real, as dimensões e a
  * recompressão são conferidos por `App\Support\Images\ImageNormalizer` antes de
  * qualquer arquivo ser gravado.
+ *
+ * WebP é aceito como entrada — o operador pode ter recebido a foto nesse
+ * formato —, mas as imagens do CMS são gravadas apenas em PNG/JPEG, conforme o
+ * perfil (`App\Support\Images\ImageProfile::outputFormat()`).
  */
 trait ValidatesImageUploads
 {

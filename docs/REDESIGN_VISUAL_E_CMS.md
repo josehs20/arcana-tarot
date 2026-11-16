@@ -114,14 +114,17 @@ A página inicial respeita `sort_order` e ignora seções despublicadas.
 ### Imagens
 
 Upload no disco `public`, diretório `storage/app/public/site` (configurável),
-com `php artisan storage:link` em produção. Formatos JPEG/PNG/WebP, teto único
-de 25 MB (`IMAGE_UPLOAD_MAX_KB`), MIME real validado e nome aleatório de 40
-caracteres com extensão derivada do formato processado. A imagem é reduzida
-para o perfil da tela (logo 1200×1200, favicon 512×512 em PNG, seções
-2400×1600) e recomprimida em WebP, o que também remove EXIF/GPS. O arquivo novo
-é gravado antes da transação e removido se o banco falhar; a imagem antiga só é
-apagada após o commit. A URL só é gerada se o arquivo existir. Detalhes em
-[SITE_CONTENT.md](SITE_CONTENT.md).
+com `php artisan storage:link` em produção. Formatos aceitos no envio:
+JPEG/PNG/WebP, teto único de 25 MB (`IMAGE_UPLOAD_MAX_KB`), MIME real validado e
+nome aleatório de 40 caracteres com extensão derivada do formato processado. A
+imagem é reduzida para o perfil da tela (logo 1200×1200, favicon 512×512,
+seções 2400×1600) e **gravada apenas em PNG ou JPEG**: logo e favicon sempre em
+PNG; seções em PNG quando o envio é PNG (preserva transparência) e em JPEG nos
+demais casos. WebP enviado é convertido antes de gravar — o CMS nunca publica
+`.webp`, formato que clientes de e-mail e navegadores antigos não exibem. O
+arquivo novo é gravado antes da transação e removido se o banco falhar; a
+imagem antiga só é apagada após o commit. A URL só é gerada se o arquivo
+existir. Detalhes em [SITE_CONTENT.md](SITE_CONTENT.md).
 
 ### Permissões e auditoria
 
@@ -166,5 +169,5 @@ Pint foi aplicado aos arquivos PHP alterados com
 3. Abra uma seção, altere os textos/CTAs, publique e ajuste a ordem.
 4. Use **Ver no site** para abrir a âncora correspondente.
 5. Gerencie links da navbar/rodapé e o FAQ nos respectivos menus.
-6. Faça upload de imagens em JPEG, PNG ou WebP (até 25 MB; o servidor reduz e converte para WebP automaticamente).
+6. Faça upload de imagens em JPEG, PNG ou WebP (até 25 MB; o servidor reduz e grava em PNG ou JPEG — WebP enviado é convertido).
 
