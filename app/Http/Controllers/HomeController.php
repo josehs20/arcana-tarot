@@ -6,6 +6,7 @@ use App\Models\AttendantProfile;
 use App\Models\Product;
 use App\Models\TarotDeck;
 use App\Support\ConsultationModalityCatalog;
+use App\Support\FirstAccessBonus;
 use App\Support\ProductCheckoutManager;
 use App\Support\PromotionManager;
 use App\Support\SiteContent;
@@ -18,6 +19,7 @@ class HomeController extends Controller
         SiteContent $site,
         PromotionManager $promotions,
         ProductCheckoutManager $productCheckout,
+        FirstAccessBonus $firstAccessBonus,
     ): View {
         $attendants = AttendantProfile::query()
             ->select(['id', 'user_id', 'display_name', 'bio', 'specialties', 'offered_modalities', 'photo_path', 'availability'])
@@ -47,6 +49,10 @@ class HomeController extends Controller
             'products' => $products,
             'productCheckoutEnabled' => $productCheckout->enabled(),
             'promotions' => $promotions->active(),
+            // Faixa de bônus exibida logo abaixo do topo da home. Segue o
+            // mesmo interruptor de /admin/financeiro/bonus e aparece para
+            // todos os visitantes.
+            'registrationBonus' => $firstAccessBonus->signupOffer(),
             'modalityOptions' => $attendants->mapWithKeys(
                 fn (AttendantProfile $profile): array => [
                     $profile->getKey() => $catalog->publicOptionsFor($profile),

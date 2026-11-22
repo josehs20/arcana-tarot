@@ -37,6 +37,7 @@ return [
 
     'section_labels' => [
         'hero' => 'Topo da home',
+        'registration_bonus' => 'Bônus de cadastro',
         'attendants' => 'Atendentes',
         'how_it_works' => 'Como funciona',
         'tarot_cards' => 'Cartas e baralhos',
@@ -63,6 +64,7 @@ return [
     // Aviso exibido no formulário da seção quando parte do conteúdo exibido na
     // home vem de outra área do painel, e não dos campos de texto desta tela.
     'section_hints' => [
+        'registration_bonus' => 'A quantidade de créditos e o valor equivalente vêm de Financeiro → Bônus de cadastro. Aqui você edita os textos, a imagem e o botão; a faixa aparece na home logo abaixo do topo assim que o bônus está ativo.',
         'attendants' => 'Os perfis listados vêm do diretório de atendentes. Aqui você edita o cabeçalho, o texto e a imagem da seção.',
         'tarot_cards' => 'Os baralhos listados são gerenciados em Baralhos. Aqui você edita o cabeçalho, o texto e a imagem da seção.',
         'products' => 'Os produtos listados são gerenciados em Produtos. Aqui você edita o cabeçalho, o texto e a imagem da seção; a seção não aparece quando não há produto ativo.',
@@ -82,6 +84,20 @@ return [
             'secondary_cta_label' => 'Entrar na conta',
             'secondary_cta_target' => 'login',
             'sort_order' => 10,
+        ],
+        'registration_bonus' => [
+            'eyebrow' => 'Bônus de cadastro',
+            'title' => 'Cadastre e ganhe créditos',
+            'subtitle' => 'Crie sua conta gratuita e receba créditos para a primeira leitura. O bônus é único por cliente e entra na carteira assim que o primeiro acesso é confirmado.',
+            'body' => null,
+            'image_alt' => null,
+            'primary_cta_label' => 'Criar conta e receber',
+            'primary_cta_target' => 'register',
+            'secondary_cta_label' => null,
+            'secondary_cta_target' => null,
+            // Logo abaixo do topo da home: é o primeiro argumento para quem
+            // ainda não tem conta, sem competir com a chamada principal.
+            'sort_order' => 15,
         ],
         'how_it_works' => [
             'eyebrow' => 'Como funciona',

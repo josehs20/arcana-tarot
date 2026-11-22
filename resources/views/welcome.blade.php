@@ -11,6 +11,7 @@
     // páginas dedicadas (como funciona, dúvidas e diretório).
     $sectionPartials = [
         'hero' => 'public.partials.sections.hero',
+        'registration_bonus' => 'public.partials.sections.registration-bonus',
         'attendants' => 'public.partials.sections.attendants',
         'how_it_works' => 'public.partials.sections.how-it-works',
         'tarot_cards' => 'public.partials.sections.tarot-cards',

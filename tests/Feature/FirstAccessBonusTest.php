@@ -73,6 +73,34 @@ class FirstAccessBonusTest extends TestCase
         ));
     }
 
+    public function test_signup_offer_follows_the_bonus_configuration(): void
+    {
+        $this->assertNull($this->bonus()->signupOffer());
+
+        $this->enableBonus(3);
+
+        $this->assertSame(
+            ['credits' => 3, 'amount_cents' => null],
+            app(FirstAccessBonus::class)->signupOffer(),
+            'Sem tarifa do crédito a oferta é exibida sem valor em reais.',
+        );
+
+        $this->setCreditUnitPrice(200);
+
+        $this->assertSame(
+            ['credits' => 3, 'amount_cents' => 600],
+            app(FirstAccessBonus::class)->signupOffer(),
+        );
+
+        $this->bonus()->save(true, 0);
+
+        $this->assertNull(app(FirstAccessBonus::class)->signupOffer(), 'Sem créditos não há oferta.');
+
+        $this->bonus()->save(false, 3);
+
+        $this->assertNull(app(FirstAccessBonus::class)->signupOffer());
+    }
+
     public function test_registration_without_the_bonus_keeps_the_wallet_empty(): void
     {
         config(['authentication.first_access_bonus.enabled' => false]);

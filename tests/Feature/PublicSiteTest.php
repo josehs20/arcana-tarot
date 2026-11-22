@@ -7,9 +7,11 @@ use App\Models\AttendantProfile;
 use App\Models\Consultation;
 use App\Models\Product;
 use App\Models\Promotion;
+use App\Models\Setting;
 use App\Models\TarotCard;
 use App\Models\TarotDeck;
 use App\Models\User;
+use App\Support\FirstAccessBonus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -29,6 +31,70 @@ class PublicSiteTest extends TestCase
         return AttendantProfile::factory()
             ->for($userModel)
             ->create($profile);
+    }
+
+    /**
+     * Liga o bônus de cadastro e define a tarifa do crédito usada para
+     * calcular o valor equivalente exibido na home.
+     */
+    private function enableRegistrationBonus(int $credits, int $unitPriceCents): void
+    {
+        app(FirstAccessBonus::class)->save(true, $credits);
+
+        Setting::query()->updateOrCreate(
+            ['key' => 'credit_unit_price_cents'],
+            ['value' => (string) $unitPriceCents, 'type' => 'integer'],
+        );
+    }
+
+    public function test_home_highlights_the_registration_bonus_for_visitors(): void
+    {
+        $this->enableRegistrationBonus(4, 150);
+
+        $this->get(route('home'))
+            ->assertOk()
+            ->assertSee('bonus-cadastro', false)
+            ->assertSee('Cadastre e ganhe créditos')
+            ->assertSee('créditos de presente')
+            ->assertSee('R$ 6,00 em créditos na sua carteira')
+            ->assertSee('Criar conta e receber')
+            // Faixa logo abaixo do topo da home, antes do diretório.
+            ->assertSeeInOrder(['id="inicio"', 'id="bonus-cadastro"', 'id="atendentes"'], false);
+    }
+
+    public function test_home_hides_the_registration_bonus_when_it_is_disabled(): void
+    {
+        Setting::query()->updateOrCreate(
+            ['key' => 'credit_unit_price_cents'],
+            ['value' => '150', 'type' => 'integer'],
+        );
+
+        $this->get(route('home'))
+            ->assertOk()
+            ->assertDontSee('bonus-cadastro', false);
+    }
+
+    public function test_home_shows_the_registration_bonus_without_a_credit_price(): void
+    {
+        app(FirstAccessBonus::class)->save(true, 4);
+
+        $this->get(route('home'))
+            ->assertOk()
+            ->assertSee('bonus-cadastro', false)
+            ->assertSee('créditos de presente')
+            // Sem tarifa do crédito, nenhum valor em reais é inventado.
+            ->assertDontSee('em créditos na sua carteira');
+    }
+
+    public function test_home_shows_the_registration_bonus_for_authenticated_users(): void
+    {
+        $this->enableRegistrationBonus(4, 150);
+
+        $this->actingAs(User::factory()->create())
+            ->get(route('home'))
+            ->assertOk()
+            ->assertSee('bonus-cadastro', false)
+            ->assertSee('Cadastre e ganhe créditos');
     }
 
     public function test_home_lists_only_online_published_attendants(): void

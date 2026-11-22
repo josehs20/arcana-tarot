@@ -79,6 +79,35 @@ final class FirstAccessBonus
     }
 
     /**
+     * Oferta exibida no destaque da home.
+     *
+     * Basta o bônus estar ativo com pelo menos um crédito configurado: é o
+     * mesmo interruptor de /admin/financeiro/bonus, então a faixa aparece
+     * assim que o administrador liga o benefício. O valor em centavos é
+     * opcional — sem a tarifa do crédito o destaque mostra apenas a
+     * quantidade de créditos, sem inventar um valor em reais.
+     *
+     * @return array{credits: int, amount_cents: int|null}|null
+     */
+    public function signupOffer(): ?array
+    {
+        if (! $this->isEnabled()) {
+            return null;
+        }
+
+        $credits = $this->credits();
+
+        if ($credits < 1) {
+            return null;
+        }
+
+        return [
+            'credits' => $credits,
+            'amount_cents' => $this->amountCents(),
+        ];
+    }
+
+    /**
      * Concede o bônus ao cliente, uma única vez.
      *
      * Retorna o lançamento criado ou null quando o bônus está desligado, não há

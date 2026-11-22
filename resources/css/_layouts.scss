@@ -556,6 +556,77 @@
     max-width: 100%;
 }
 
+// Faixa do bônus de cadastro (só para visitantes). O painel usa o gradiente
+// de CTA do tema ativo e o valor em créditos ganha o dourado da marca.
+.arcana-bonus__panel {
+    align-items: center;
+    background: var(--arcana-cta-bg);
+    border: 1px solid rgba(var(--arcana-gold-rgb), .32);
+    border-radius: $arcana-radius-lg;
+    display: grid;
+    gap: 2rem;
+    grid-template-columns: minmax(0, 1.5fr) minmax(16rem, 1fr);
+    padding: 2.5rem;
+
+    @media (max-width: 991.98px) {
+        gap: 1.5rem;
+        grid-template-columns: minmax(0, 1fr);
+        padding: 1.75rem;
+    }
+}
+
+.arcana-bonus__text {
+    min-width: 0;
+}
+
+.arcana-bonus__offer {
+    background: var(--arcana-surface);
+    border: 1px solid rgba(var(--arcana-gold-rgb), .28);
+    border-radius: $arcana-radius;
+    box-shadow: var(--arcana-shadow-sm);
+    padding: 1.75rem 1.5rem;
+    text-align: center;
+}
+
+.arcana-bonus__amount {
+    color: var(--arcana-gold);
+    font-family: $arcana-font-display;
+    font-size: clamp(2.5rem, 6vw, 3.5rem);
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: .35rem;
+}
+
+.arcana-bonus__amount-label {
+    color: var(--arcana-gold-light);
+    display: block;
+    font-family: $arcana-font-body;
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .14em;
+    margin-top: .5rem;
+    text-transform: uppercase;
+}
+
+.arcana-bonus__value {
+    color: var(--arcana-ivory-muted);
+    font-size: .9rem;
+    margin-bottom: .25rem;
+}
+
+.arcana-bonus__actions {
+    display: grid;
+    gap: .5rem;
+    margin-top: 1.25rem;
+}
+
+.arcana-bonus__note {
+    color: var(--arcana-ivory-dim);
+    font-size: .72rem;
+    line-height: 1.5;
+    margin: 1rem 0 0;
+}
+
 // Card de destaque (usado nas grades de conteúdo).
 .arcana-feature {
     background: var(--arcana-surface);
