@@ -20,6 +20,7 @@ Laravel 13 · PHP 8.4 · Docker Compose · Nginx · MySQL 8.4 · Redis · Larave
 - [Trabalhe conosco e ativação de atendente](docs/ATTENDANT_ONBOARDING.md)
 - [Segurança, privacidade e retenção](docs/SECURITY_PRIVACY.md)
 - [Implantação e operação](docs/DEPLOYMENT.md)
+- [Publicação automatizada (`deploy.sh`)](docs/DEPLOY_SCRIPT.md)
 
 ## Requisitos
 

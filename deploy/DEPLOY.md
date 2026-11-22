@@ -281,6 +281,17 @@ sem tráfego, veja "Diagnóstico" antes de divulgar o site.
 
 Dentro da pasta da instância:
 
+Atalho automatizado (build com cache, migrations, recriação só de web/queue/reverb,
+healthcheck e relatório — detalhes em
+[docs/DEPLOY_SCRIPT.md](../docs/DEPLOY_SCRIPT.md)):
+
+```bash
+./deploy.sh          # pede confirmação
+./deploy.sh --yes    # sem interação
+```
+
+Passo a passo manual, equivalente ao que o script faz:
+
 ```bash
 DC="docker compose -f docker-compose.prod.yml"
 
