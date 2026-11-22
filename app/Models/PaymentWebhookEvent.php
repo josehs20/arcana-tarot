@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
     'payment_id',
+    'purchase_id',
     'provider',
     'provider_event_id',
     'event_type',
@@ -40,5 +41,10 @@ class PaymentWebhookEvent extends Model
     public function payment(): BelongsTo
     {
         return $this->belongsTo(Payment::class);
+    }
+
+    public function purchase(): BelongsTo
+    {
+        return $this->belongsTo(Purchase::class);
     }
 }

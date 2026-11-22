@@ -38,6 +38,7 @@
 
         // Pagamentos
         'confirmed' => ['label' => 'Confirmado', 'dot' => 'online', 'text' => 'status-text--online'],
+        'paid' => ['label' => 'Pago', 'dot' => 'online', 'text' => 'status-text--online'],
         'failed' => ['label' => 'Falhou', 'dot' => 'offline', 'text' => 'status-text--offline'],
         'refunded' => ['label' => 'Estornado', 'dot' => 'offline', 'text' => 'status-text--offline'],
 

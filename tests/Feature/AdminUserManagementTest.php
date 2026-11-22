@@ -223,6 +223,30 @@ class AdminUserManagementTest extends TestCase
             ->assertSee('Comissão');
     }
 
+    /**
+     * O cadastro de atendente é acionado na seção Atendentes, não na de Usuários.
+     */
+    public function test_attendant_creation_entry_point_lives_in_the_attendants_section(): void
+    {
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)
+            ->get(route('admin.attendants.index'))
+            ->assertOk()
+            ->assertSee(route('admin.users.create'));
+
+        $this->actingAs($admin)
+            ->get(route('admin.users.index'))
+            ->assertOk()
+            ->assertDontSee(route('admin.users.create'));
+
+        $this->actingAs($admin)
+            ->get(route('admin.users.create'))
+            ->assertOk()
+            ->assertSee('Cadastrar atendente')
+            ->assertSee('Voltar aos atendentes');
+    }
+
     public function test_client_cannot_access_attendant_creation(): void
     {
         $client = User::factory()->create();

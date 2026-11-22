@@ -20,6 +20,7 @@
             'label' => 'Consultas',
             'links' => [
                 ['route' => 'client.credits.index', 'pattern' => 'client.credits.*', 'label' => 'Carteira e créditos', 'icon' => 'wallet'],
+                ['route' => 'client.purchases.index', 'pattern' => 'client.purchases.*', 'label' => 'Minhas compras', 'icon' => 'layers'],
                 ['route' => 'attendants.index', 'pattern' => 'attendants.*', 'label' => 'Atendentes', 'icon' => 'users'],
                 ['route' => 'client.testimonials.index', 'pattern' => 'client.testimonials.*', 'label' => 'Depoimentos', 'icon' => 'star'],
             ],

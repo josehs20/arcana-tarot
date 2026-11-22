@@ -14,6 +14,7 @@ use App\Support\InfinitePayCheckoutManager;
 use App\Support\PaymentLimits;
 use App\Support\PaymentManager;
 use App\Support\Payments\Exceptions\PixProviderException;
+use App\Support\PromotionManager;
 use DomainException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -33,6 +34,7 @@ class CreditPurchaseController extends Controller
         ActiveConsultationResolver $activeConsultations,
         InfinitePayCheckoutManager $checkout,
         PaymentLimits $limits,
+        PromotionManager $promotions,
     ): View {
         Gate::authorize('access-client-panel');
         Gate::authorize('viewAny', Payment::class);
@@ -59,6 +61,7 @@ class CreditPurchaseController extends Controller
             'operationId' => (string) Str::uuid(),
             'checkoutEnabled' => $checkout->enabled(),
             'packages' => $checkout->availablePackages(),
+            'promotions' => $promotions->active(),
             'sandboxEnabled' => $this->sandboxReady(),
             'minAmountCents' => $limits->minimumCents(),
             'maxAmountCents' => $limits->maximumCents(),

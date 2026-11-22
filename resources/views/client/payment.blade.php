@@ -14,6 +14,13 @@
     @if ($payment->status === \App\Enums\PaymentStatus::Confirmed)
         <x-ui.alert type="success" :dismissible="false" class="mb-4">
             Pagamento confirmado pelo provedor. O valor foi lançado no livro-razão imutável e já está disponível na carteira.
+            @if ($payment->promotion_bonus_credits > 0)
+                <span class="d-block mt-1">
+                    <strong>Bônus da promoção creditado:</strong>
+                    +{{ $payment->promotion_bonus_credits }} créditos
+                    ({{ \App\Support\Money::format($payment->promotion_bonus_cents) }}).
+                </span>
+            @endif
         </x-ui.alert>
     @elseif ($payment->status === \App\Enums\PaymentStatus::Pending)
         <x-ui.alert type="warning" :dismissible="false" class="mb-4">
@@ -57,6 +64,19 @@
 
                         <dt class="col-sm-5 text-ivory-muted fw-normal">Créditos</dt>
                         <dd class="col-sm-7">{{ $payment->credits }}</dd>
+
+                        @if ($payment->promotion_bonus_credits > 0)
+                            <dt class="col-sm-5 text-ivory-muted fw-normal">Bônus da promoção</dt>
+                            <dd class="col-sm-7">
+                                +{{ $payment->promotion_bonus_credits }} créditos
+                                ({{ \App\Support\Money::format($payment->promotion_bonus_cents) }})
+                            </dd>
+                        @elseif ($payment->status === \App\Enums\PaymentStatus::Pending && $payment->promotion !== null)
+                            <dt class="col-sm-5 text-ivory-muted fw-normal">Bônus previsto</dt>
+                            <dd class="col-sm-7">
+                                +{{ $payment->promotion->bonus_credits }} créditos, liberados junto com a confirmação
+                            </dd>
+                        @endif
 
                         <dt class="col-sm-5 text-ivory-muted fw-normal">Preço do crédito</dt>
                         <dd class="col-sm-7">{{ \App\Support\Money::format($payment->credit_unit_price_cents) }}</dd>
@@ -164,5 +184,56 @@
         A confirmação nunca depende de redirecionamento do navegador. Webhooks repetidos são registrados uma única vez e não
         duplicam créditos.
     </x-ui.alert>
+
+    @if ($payment->status === \App\Enums\PaymentStatus::Confirmed && $payment->promotion_bonus_credits > 0)
+        {{--
+            Comemoração do bônus: abre sozinha uma vez por sessão (a dispensa
+            fica em sessionStorage por pagamento) para não perseguir o cliente
+            a cada recarregamento. Sem JS, o alerta de sucesso acima continua
+            informando o bônus.
+        --}}
+        <div
+            class="modal fade"
+            id="promotion-bonus-modal"
+            tabindex="-1"
+            aria-labelledby="promotion-bonus-modal-title"
+            aria-hidden="true"
+            data-promotion-bonus-modal
+            data-payment-id="{{ $payment->getKey() }}"
+        >
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2 class="modal-title h5" id="promotion-bonus-modal-title">Bônus creditado</h2>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                    </div>
+
+                    <div class="modal-body">
+                        <p class="display-5 mb-2">+{{ $payment->promotion_bonus_credits }} créditos</p>
+                        <p class="text-ivory-dim">
+                            Os créditos extras da promoção entraram na sua carteira junto com a recarga de
+                            {{ $payment->credits }} créditos.
+                        </p>
+
+                        @if ($payment->promotion !== null)
+                            <p class="small text-ivory-dim mb-2">
+                                Promoção: <strong>{{ $payment->promotion->title ?: $payment->promotion->headline() }}</strong>
+                            </p>
+                        @endif
+
+                        <p class="small text-ivory-dim mb-0">
+                            Valor do bônus: {{ \App\Support\Money::format($payment->promotion_bonus_cents) }}. O lançamento
+                            aparece no extrato como “Bônus da promoção”.
+                        </p>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-ghost" data-bs-dismiss="modal">Fechar</button>
+                        <a class="btn btn-primary" href="{{ route('client.credits.index') }}">Ver saldo e extrato</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
 </x-layouts.panel>
 

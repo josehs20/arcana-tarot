@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Enums\AttendantAvailability;
 use App\Models\AttendantProfile;
 use App\Models\Consultation;
+use App\Models\Product;
+use App\Models\Promotion;
 use App\Models\TarotCard;
 use App\Models\TarotDeck;
 use App\Models\User;
@@ -386,5 +388,40 @@ class PublicSiteTest extends TestCase
             ->assertOk()
             ->assertSee('Fale com a equipe')
             ->assertSee('Página em preparação');
+    }
+
+    public function test_navigation_links_every_home_section_that_is_rendered(): void
+    {
+        Product::factory()->create(['title' => 'Pacote de teste']);
+        Promotion::factory()->create(['title' => 'Promoção de teste']);
+
+        $this->get(route('home'))
+            ->assertOk()
+            ->assertSee('>Início</a>', false)
+            ->assertSee('>Atendentes</a>', false)
+            ->assertSee('>Como funciona</a>', false)
+            ->assertSee('>Cartas</a>', false)
+            ->assertSee('>Loja</a>', false)
+            ->assertSee('>Promoções</a>', false)
+            ->assertSee('>Dúvidas</a>', false)
+            ->assertSee('>Trabalhe conosco</a>', false);
+    }
+
+    public function test_navigation_anchors_point_to_the_home_even_from_other_pages(): void
+    {
+        Product::factory()->create();
+
+        $this->get(route('attendants.index'))
+            ->assertOk()
+            ->assertSee('href="'.route('home').'#produtos"', false);
+    }
+
+    public function test_navigation_hides_anchors_for_sections_that_are_not_rendered(): void
+    {
+        $this->get(route('attendants.index'))
+            ->assertOk()
+            ->assertSee('href="'.route('home').'#cartas"', false)
+            ->assertDontSee('href="'.route('home').'#produtos"', false)
+            ->assertDontSee('href="'.route('home').'#promocoes"', false);
     }
 }

@@ -684,6 +684,32 @@
 // =====================================================================
 // Catálogo de Tarot (admin)
 // =====================================================================
+.product-thumb {
+    background: var(--arcana-surface-2);
+    border: 1px solid rgba(var(--arcana-gold-rgb), .18);
+    border-radius: .55rem;
+    flex-shrink: 0;
+    height: 3rem;
+    object-fit: cover;
+    width: 3rem;
+}
+
+.product-thumb--empty {
+    align-items: center;
+    color: var(--arcana-gold);
+    display: inline-flex;
+    justify-content: center;
+}
+
+.product-image-preview {
+    border: 1px solid rgba(var(--arcana-gold-rgb), .22);
+    border-radius: $arcana-radius;
+    max-height: 14rem;
+    max-width: 100%;
+    object-fit: cover;
+}
+
+
 .decimal-mark {
     align-items: center;
     background: rgba(var(--arcana-gold-rgb), .12);

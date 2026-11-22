@@ -4,9 +4,8 @@
         subtitle="Gerencie contas de clientes, atendentes e administradores."
     >
         <x-slot name="actions">
-            @can('create', \App\Models\User::class)
-                <a class="btn btn-primary btn-sm" href="{{ route('admin.users.create') }}">Novo atendente</a>
-            @endcan
+            {{-- O cadastro de atendente fica na seção Atendentes; aqui só contas em geral. --}}
+            <a class="btn btn-ghost btn-sm" href="{{ route('admin.attendants.index') }}">Atendentes</a>
             <a class="btn btn-ghost btn-sm" href="{{ route('admin.dashboard') }}">Voltar ao painel</a>
         </x-slot>
     </x-layouts.page-header>
@@ -27,7 +26,7 @@
                     >
                 </div>
 
-                <div class="col-md-3">
+                <div class="col-md-4">
                     <label class="form-label" for="role">Papel</label>
                     <select class="form-select" id="role" name="role">
                         <option value="">Todos</option>
@@ -44,7 +43,7 @@
                     </select>
                 </div>
 
-                <div class="col-md-3">
+                <div class="col-md-4">
                     <label class="form-label" for="status">Status</label>
                     <select class="form-select" id="status" name="status">
                         <option value="">Todos</option>
@@ -53,7 +52,23 @@
                     </select>
                 </div>
 
-                <div class="col-md-2 d-flex gap-2">
+                <div class="col-12 col-md-6 d-flex align-items-center">
+                    <div class="form-check mb-0">
+                        <input
+                            class="form-check-input"
+                            type="checkbox"
+                            id="recent"
+                            name="recent"
+                            value="1"
+                            @checked((bool) ($filters['recent'] ?? false))
+                        >
+                        <label class="form-check-label" for="recent">
+                            Usuários cadastrados nos últimos 30 dias
+                        </label>
+                    </div>
+                </div>
+
+                <div class="col-12 col-md-6 d-flex align-items-center justify-content-md-end gap-2">
                     <x-ui.button type="submit" variant="primary" size="sm">Filtrar</x-ui.button>
                     <a class="btn btn-ghost btn-sm" href="{{ route('admin.users.index') }}">Limpar</a>
                 </div>
@@ -76,6 +91,7 @@
                     <thead>
                         <tr>
                             <th scope="col">Usuário</th>
+                            <th scope="col">Cliente desde</th>
                             <th scope="col">Papel</th>
                             <th scope="col">Status</th>
                             <th scope="col">Presença</th>
@@ -90,6 +106,9 @@
                                 <td>
                                     <span class="fw-medium">{{ $user->name }}</span>
                                     <div class="form-text">{{ $user->email }}</div>
+                                </td>
+                                <td class="text-nowrap">
+                                    {{ $user->created_at?->format('d/m/Y') ?? '—' }}
                                 </td>
                                 <td>
                                     {{ match ($user->role->value) {

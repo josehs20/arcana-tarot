@@ -30,7 +30,9 @@
                 @foreach ($siteContent->navigation('primary') as $link)
                     @php
                         $routeName = $link['route_name'] ?? null;
-                        $isFragment = str_contains($link['url'], '#');
+                        // Âncoras apontam para uma seção da home; `SiteContent`
+                        // já omite as que não estão sendo renderizadas.
+                        $isFragment = ($link['anchor'] ?? null) !== null;
                         // Links de âncora não recebem estado ativo: o destino
                         // é uma seção da home, não uma página própria.
                         $isCurrent = ! $isFragment

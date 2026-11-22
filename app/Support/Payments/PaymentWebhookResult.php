@@ -5,6 +5,7 @@ namespace App\Support\Payments;
 use App\Enums\PaymentWebhookOutcome;
 use App\Models\Payment;
 use App\Models\PaymentWebhookEvent;
+use App\Models\Purchase;
 
 final readonly class PaymentWebhookResult
 {
@@ -13,5 +14,6 @@ final readonly class PaymentWebhookResult
         public ?Payment $payment = null,
         public ?PaymentWebhookEvent $event = null,
         public ?string $reason = null,
+        public ?Purchase $purchase = null,
     ) {}
 }

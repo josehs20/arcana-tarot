@@ -672,6 +672,144 @@
     margin: 0;
 }
 
+// Vitrine das promoções de créditos ("compre X, ganhe Y").
+.promo-card {
+    background: var(--arcana-surface);
+    border: 1px solid rgba(var(--arcana-gold-rgb), .18);
+    border-radius: $arcana-radius;
+    height: 100%;
+    padding: 1.5rem;
+    transition: border-color var(--arcana-transition), transform var(--arcana-transition),
+        box-shadow var(--arcana-transition);
+
+    &:hover {
+        border-color: rgba(var(--arcana-gold-rgb), .4);
+        box-shadow: var(--arcana-shadow);
+        transform: translateY(-2px);
+    }
+}
+
+.promo-card__bonus {
+    color: var(--arcana-gold);
+    font-family: $arcana-font-display;
+    font-size: clamp(1.6rem, 4vw, 2rem);
+    font-weight: 700;
+    line-height: 1.1;
+    margin-bottom: .35rem;
+}
+
+.promo-card__rule {
+    color: var(--arcana-ivory);
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin-bottom: .5rem;
+}
+
+.promo-card__title {
+    color: var(--arcana-ivory);
+    font-family: $arcana-font-display;
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin-bottom: .35rem;
+}
+
+.promo-card__text {
+    color: var(--arcana-ivory-muted);
+    font-size: .9rem;
+    margin-bottom: .75rem;
+}
+
+.promo-card__deadline {
+    color: var(--arcana-ivory-dim);
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .08em;
+    margin: 0;
+    text-transform: uppercase;
+}
+
+// Vitrine de produtos da loja.
+.product-card {
+    background: var(--arcana-surface);
+    border: 1px solid rgba(var(--arcana-gold-rgb), .18);
+    border-radius: $arcana-radius;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    transition: border-color var(--arcana-transition), transform var(--arcana-transition),
+        box-shadow var(--arcana-transition);
+
+    &:hover,
+    &:focus-within {
+        border-color: rgba(var(--arcana-gold-rgb), .4);
+        box-shadow: var(--arcana-shadow);
+        transform: translateY(-2px);
+    }
+}
+
+.product-card__image {
+    aspect-ratio: 16 / 10;
+    object-fit: cover;
+    width: 100%;
+}
+
+.product-card__image--empty {
+    align-items: center;
+    background: rgba(var(--arcana-gold-rgb), .08);
+    color: var(--arcana-gold);
+    display: flex;
+    font-family: $arcana-font-display;
+    font-size: 2.5rem;
+    justify-content: center;
+}
+
+.product-card__body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: .5rem;
+    padding: 1.35rem;
+}
+
+.product-card__credits {
+    color: var(--arcana-gold);
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .08em;
+    margin: 0;
+    text-transform: uppercase;
+}
+
+.product-card__title {
+    color: var(--arcana-ivory);
+    font-family: $arcana-font-display;
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.product-card__text {
+    color: var(--arcana-ivory-muted);
+    font-size: .9rem;
+    margin: 0;
+}
+
+.product-card__price {
+    color: var(--arcana-gold-light);
+    font-family: $arcana-font-display;
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: auto 0 .25rem;
+}
+
+.product-card__note {
+    color: var(--arcana-ivory-dim);
+    font-size: .82rem;
+}
+
+
+
 // =====================================================================
 // Página de erro
 // =====================================================================

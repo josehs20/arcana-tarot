@@ -5,6 +5,8 @@ namespace App\Support;
 use App\Enums\SiteLinkType;
 use App\Enums\SiteNavigationGroup;
 use App\Models\FaqItem;
+use App\Models\Product;
+use App\Models\Promotion;
 use App\Models\Setting;
 use App\Models\SiteNavigationLink;
 use App\Models\SiteSection;
@@ -44,6 +46,13 @@ final class SiteContent
      * @var array<string, string|null>|null
      */
     private ?array $settingCache = null;
+
+    /**
+     * Disponibilidade de cada âncora já verificada neste request.
+     *
+     * @var array<string, bool>
+     */
+    private array $anchorAvailability = [];
 
     /**
      * @return array<string, array<string, mixed>>
@@ -302,26 +311,85 @@ final class SiteContent
             $groupRows = $rows->filter(fn (SiteNavigationLink $link): bool => $link->group === $group);
 
             if ($groupRows->isEmpty()) {
-                $resolved[$group->value] = $this->defaultNavigation($group);
+                $resolved[$group->value] = $this->visibleLinks($this->defaultNavigation($group));
 
                 continue;
             }
 
-            $resolved[$group->value] = $groupRows
-                ->where('is_active', true)
-                ->map(fn (SiteNavigationLink $link): ?array => $this->resolveLink(
-                    label: $link->label,
-                    type: $link->target_type->value,
-                    target: $link->target,
-                    newTab: $link->opens_in_new_tab,
-                    order: $link->sort_order,
-                ))
-                ->filter()
-                ->values()
-                ->all();
+            $resolved[$group->value] = $this->visibleLinks(
+                $groupRows
+                    ->where('is_active', true)
+                    ->map(fn (SiteNavigationLink $link): ?array => $this->resolveLink(
+                        label: $link->label,
+                        type: $link->target_type->value,
+                        target: $link->target,
+                        newTab: $link->opens_in_new_tab,
+                        order: $link->sort_order,
+                    ))
+                    ->filter()
+                    ->values()
+                    ->all(),
+            );
         }
 
         return $this->navigationCache = $resolved;
+    }
+
+    /**
+     * Remove links de âncora cuja seção não está visível na home neste momento.
+     *
+     * Um item de menu só deve existir quando o destino existe: seções
+     * condicionais (loja e promoções) não são renderizadas sem registro ativo
+     * e uma seção despublicada no CMS também desaparece da home.
+     *
+     * @param  array<int, array<string, mixed>>  $links
+     * @return array<int, array<string, mixed>>
+     */
+    private function visibleLinks(array $links): array
+    {
+        return array_values(array_filter(
+            $links,
+            fn (array $link): bool => ($link['anchor'] ?? null) === null
+                || $this->anchorIsAvailable((string) $link['anchor']),
+        ));
+    }
+
+    /**
+     * Indica se a âncora da home tem uma seção visível para receber o clique.
+     */
+    public function anchorIsAvailable(string $target): bool
+    {
+        $slug = ltrim(trim($target), '#');
+
+        if ($slug === '') {
+            return false;
+        }
+
+        if (array_key_exists($slug, $this->anchorAvailability)) {
+            return $this->anchorAvailability[$slug];
+        }
+
+        /** @var array<int, string> $allowed */
+        $allowed = (array) config('site.allowed_anchors', []);
+
+        if (! in_array($slug, $allowed, true)) {
+            return $this->anchorAvailability[$slug] = false;
+        }
+
+        // A seção pode ter sido despublicada no CMS, mesmo existindo a âncora.
+        /** @var array<string, string> $sectionAnchors */
+        $sectionAnchors = (array) config('site.section_anchors', []);
+        $sectionKey = array_search($slug, $sectionAnchors, true);
+
+        if ($sectionKey !== false && ! $this->section((string) $sectionKey)['is_published']) {
+            return $this->anchorAvailability[$slug] = false;
+        }
+
+        return $this->anchorAvailability[$slug] = match ($slug) {
+            'produtos' => Product::query()->active()->exists(),
+            'promocoes' => Promotion::query()->active()->exists(),
+            default => true,
+        };
     }
 
     /**
@@ -351,7 +419,7 @@ final class SiteContent
     }
 
     /**
-     * @return array{label: string, url: string, route_name: string|null, external: bool, new_tab: bool, sort_order: int}|null
+     * @return array{label: string, url: string, route_name: string|null, anchor: string|null, external: bool, new_tab: bool, sort_order: int}|null
      */
     private function resolveLink(string $label, string $type, string $target, bool $newTab, int $order): ?array
     {
@@ -367,6 +435,7 @@ final class SiteContent
             'label' => $label,
             'url' => $url,
             'route_name' => $type === SiteLinkType::Route->value ? $target : null,
+            'anchor' => $type === SiteLinkType::Anchor->value ? ltrim($target, '#') : null,
             'external' => $external,
             'new_tab' => $newTab || $external,
             'sort_order' => $order,

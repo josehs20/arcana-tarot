@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureUserRole;
+use App\Http\Middleware\TrackSiteVisit;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -25,6 +26,13 @@ return Application::configure(basePath: dirname(__DIR__))
          * Redis. O canal web continua sem este middleware.
          */
         $middleware->throttleApi('api');
+
+        /*
+         * Registro de acessos: entra no fim do grupo `web`, depois da sessão e
+         * da autenticação, para saber quem está logado. O middleware só grava
+         * páginas HTML em GET e ignora o próprio painel administrativo.
+         */
+        $middleware->web(append: [TrackSiteVisit::class]);
 
         /*
          * Em hospedagem compartilhada o TLS termina no proxy do provedor. Sem

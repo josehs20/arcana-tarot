@@ -7,6 +7,7 @@ use App\Support\InfinitePayCheckoutManager;
 use App\Support\Payments\Exceptions\InfinitePayException;
 use App\Support\Payments\Exceptions\InfinitePayWebhookException;
 use App\Support\Payments\InfinitePay\InfinitePayGateway;
+use App\Support\ProductCheckoutManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -24,10 +25,15 @@ class InfinitePayWebhookController extends Controller
         Request $request,
         InfinitePayGateway $gateway,
         InfinitePayCheckoutManager $checkout,
+        ProductCheckoutManager $products,
     ): JsonResponse {
         try {
             $notification = $gateway->parseWebhook($request);
-            $result = $checkout->handleWebhook($notification);
+
+            // A referência decide o dono do pedido. Só quando nenhum dos dois
+            // fluxos reconhece a compra o evento é gravado como desconhecido.
+            $result = $products->handleWebhook($notification)
+                ?? $checkout->handleWebhook($notification);
         } catch (InfinitePayWebhookException $exception) {
             Log::warning('infinitepay.webhook_invalid', [
                 'reason' => $exception->getMessage(),

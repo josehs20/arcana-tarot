@@ -249,6 +249,51 @@ class DashboardAndUserManagementTest extends TestCase
             ->assertDontSee($attendant->email);
     }
 
+    public function test_admin_user_index_shows_registration_date_and_filters_recent_accounts(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $recentClient = User::factory()->create([
+            'name' => 'Cliente Recente',
+            'email' => 'cliente.recente@example.com',
+        ]);
+        $olderClient = User::factory()->create([
+            'name' => 'Cliente Antigo',
+            'email' => 'cliente.antigo@example.com',
+        ]);
+
+        $olderClient->forceFill(['created_at' => now()->subDays(31)])->saveQuietly();
+
+        $this->actingAs($admin)
+            ->get(route('admin.users.index'))
+            ->assertOk()
+            ->assertSee('Cliente desde')
+            ->assertSee('Usuários cadastrados nos últimos 30 dias')
+            ->assertSee($recentClient->created_at->format('d/m/Y'))
+            ->assertSee($olderClient->created_at->format('d/m/Y'));
+
+        $this->actingAs($admin)
+            ->get(route('admin.users.index', ['recent' => '1']))
+            ->assertOk()
+            ->assertSee($recentClient->email)
+            ->assertDontSee($olderClient->email);
+
+        $this->actingAs($admin)
+            ->get(route('admin.users.index', ['recent' => '0']))
+            ->assertOk()
+            ->assertSee($recentClient->email)
+            ->assertSee($olderClient->email);
+    }
+
+    public function test_admin_user_index_rejects_an_invalid_recent_filter(): void
+    {
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)
+            ->get(route('admin.users.index', ['recent' => 'talvez']))
+            ->assertRedirect()
+            ->assertSessionHasErrors('recent');
+    }
+
     public function test_admin_consultation_index_filters_by_status(): void
     {
         $admin = User::factory()->admin()->create();

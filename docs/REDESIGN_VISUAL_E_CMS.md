@@ -45,17 +45,23 @@ transições.
 - Navbar/footer: `layouts/partials/navbar-public.blade.php` e
   `footer-public.blade.php`; links vêm do CMS e usam rotas nomeadas ou âncoras
   resolvidas no servidor.
-- Home: hero, como funciona, atendentes em destaque, trabalhe conosco, FAQ e
-  chamada final. O conteúdo e a **ordem das seções** vêm de
-  `App\Support\SiteContent`; seções não publicadas não são renderizadas.
+- Home: hero, como funciona, atendentes em destaque, cartas e baralhos, loja,
+  promoções de créditos, trabalhe conosco, FAQ e chamada final. O conteúdo e a
+  **ordem das seções** vêm de `App\Support\SiteContent`; seções não publicadas
+  não são renderizadas e loja/promoções só aparecem com produto ou campanha
+  ativa.
 - Atendentes: diretório e perfil usam `components/public/attendant-card`,
   badges de presença e dados reais de especialidade/disponibilidade.
 - Trabalhe conosco, contato e páginas legais usam a mesma casca pública.
 - Login, cadastro e recuperação de senha usam `components/layouts/guest`.
 
-A home aceita âncoras estáveis (`#como-funciona`, `#atendentes`,
-`#trabalhe-conosco`, `#faq`) para a navbar e para o botão **Ver no site** do
-CMS. A ordem das seções pode mudar sem quebrar esses destinos.
+A home aceita âncoras estáveis (`#inicio`, `#como-funciona`, `#atendentes`,
+`#cartas`, `#produtos`, `#promocoes`, `#trabalhe-conosco`, `#faq`) para a
+navbar e para o botão **Ver no site** do CMS. A ordem das seções pode mudar sem
+quebrar esses destinos. O menu padrão (`config/site.navigation`) lista todas as
+seções renderizadas e `SiteContent` remove do menu a âncora cuja seção não está
+sendo exibida — sem produto ativo, sem promoção vigente ou com a seção
+despublicada o link não aparece.
 
 ## 3. Painéis e sidebars
 

@@ -24,12 +24,11 @@
             : 'Cadastre o profissional, defina a senha provisória e o preço por minuto de cada modalidade. O perfil entra offline até o atendente entrar no ar.'"
     >
         <x-slot name="actions">
-            <a class="btn btn-ghost btn-sm" href="{{ route('admin.users.index') }}">Voltar aos usuários</a>
-            @if ($editing)
-                <a class="btn btn-ghost btn-sm" href="{{ route('admin.users.create') }}">Novo atendente</a>
-                @if ($isAttendant)
-                    <a class="btn btn-ghost btn-sm" href="{{ route('admin.commissions.attendant', $user) }}">Extrato de comissão</a>
-                @endif
+            <a class="btn btn-ghost btn-sm" href="{{ route($editing ? 'admin.users.index' : 'admin.attendants.index') }}">
+                {{ $editing ? 'Voltar aos usuários' : 'Voltar aos atendentes' }}
+            </a>
+            @if ($editing && $isAttendant)
+                <a class="btn btn-ghost btn-sm" href="{{ route('admin.commissions.attendant', $user) }}">Extrato de comissão</a>
             @endif
         </x-slot>
     </x-layouts.page-header>
@@ -334,7 +333,7 @@
                             <x-ui.button type="submit" variant="primary">
                                 {{ $editing ? 'Salvar dados' : 'Cadastrar atendente' }}
                             </x-ui.button>
-                            <a class="btn btn-ghost" href="{{ route('admin.users.index') }}">Cancelar</a>
+                            <a class="btn btn-ghost" href="{{ route($editing ? 'admin.users.index' : 'admin.attendants.index') }}">Cancelar</a>
                         </div>
                     </form>
                 </x-ui.card-body>

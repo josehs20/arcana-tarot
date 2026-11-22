@@ -360,9 +360,10 @@ Hostoo (Cron Jobs) cadastre:
 
 Por que cada uma existe:
 
-- `schedule:run` dispara as quatro tarefas agendadas (`routes/console.php`):
+- `schedule:run` dispara as tarefas agendadas (`routes/console.php`):
   `consultations:expire-requests`, `consultations:interrupt-disconnected`,
-  `consultations:charge-minutes` e `consultations:close-stale-calls`;
+  `consultations:charge-minutes`, `consultations:close-stale-calls`, a limpeza
+  diária `sanctum:prune-expired` e o backup `arcana:backup` a cada seis horas;
 - `queue:work --stop-when-empty` drena a fila `database` e encerra sozinho —
   `--max-time=50` impede que um job trave e seja morto no meio do minuto
   seguinte, `--tries=3` evita job envenenado em loop;

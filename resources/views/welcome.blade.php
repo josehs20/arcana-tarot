@@ -14,6 +14,8 @@
         'attendants' => 'public.partials.sections.attendants',
         'how_it_works' => 'public.partials.sections.how-it-works',
         'tarot_cards' => 'public.partials.sections.tarot-cards',
+        'products' => 'public.partials.sections.products',
+        'promotions' => 'public.partials.sections.promotions',
         'faq' => 'public.partials.sections.faq',
         'work_with_us' => 'public.partials.sections.work-with-us',
         'final_cta' => 'public.partials.sections.final-cta',

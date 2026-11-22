@@ -7,12 +7,17 @@ use App\Http\Controllers\Admin\CommissionController as AdminCommissionController
 use App\Http\Controllers\Admin\ConsultationController as AdminConsultationController;
 use App\Http\Controllers\Admin\ConsultationSafetyController as AdminConsultationSafetyController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
+use App\Http\Controllers\Admin\DatabaseController as AdminDatabaseController;
 use App\Http\Controllers\Admin\EmailCampaignController as AdminEmailCampaignController;
 use App\Http\Controllers\Admin\FinanceController as AdminFinanceController;
 use App\Http\Controllers\Admin\ModalityController as AdminModalityController;
 use App\Http\Controllers\Admin\PaymentController as AdminPaymentController;
 use App\Http\Controllers\Admin\PaymentSettingsController as AdminPaymentSettingsController;
+use App\Http\Controllers\Admin\ProductController as AdminProductController;
+use App\Http\Controllers\Admin\PromotionController as AdminPromotionController;
+use App\Http\Controllers\Admin\PurchaseController as AdminPurchaseController;
 use App\Http\Controllers\Admin\RegistrationBonusController as AdminRegistrationBonusController;
+use App\Http\Controllers\Admin\SiteAccessController as AdminSiteAccessController;
 use App\Http\Controllers\Admin\SiteAppearanceController as AdminSiteAppearanceController;
 use App\Http\Controllers\Admin\SiteContentController as AdminSiteContentController;
 use App\Http\Controllers\Admin\SiteFaqController as AdminSiteFaqController;
@@ -39,6 +44,8 @@ use App\Http\Controllers\Client\CreditCheckoutController;
 use App\Http\Controllers\Client\CreditPurchaseController;
 use App\Http\Controllers\Client\DashboardController as ClientDashboardController;
 use App\Http\Controllers\Client\HistoryController as ClientHistoryController;
+use App\Http\Controllers\Client\ProductCheckoutController as ClientProductCheckoutController;
+use App\Http\Controllers\Client\PurchaseController as ClientPurchaseController;
 use App\Http\Controllers\Client\TestimonialController as ClientTestimonialController;
 use App\Http\Controllers\ConsultationCallController;
 use App\Http\Controllers\ConsultationController;
@@ -48,6 +55,7 @@ use App\Http\Controllers\InfinitePayWebhookController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\PanelEventsController;
 use App\Http\Controllers\PixWebhookController;
+use App\Http\Controllers\SiteVisitHeartbeatController;
 use App\Http\Controllers\TarotCardImageController;
 use App\Http\Controllers\TarotCardThumbnailController;
 use App\Http\Controllers\ThemePreferenceController;
@@ -55,6 +63,15 @@ use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', HomeController::class)->name('home');
+
+/*
+ * Heartbeat da visita: mantém o tempo no site atualizado enquanto a aba está
+ * visível. Fica fora do grupo `auth` porque visitantes sem conta também são
+ * acompanhados. Responde 204 e nunca devolve dados do visitante.
+ */
+Route::post('acessos/heartbeat', SiteVisitHeartbeatController::class)
+    ->middleware('throttle:60,1')
+    ->name('access.heartbeat');
 
 Route::get('atendentes', [AttendantDirectoryController::class, 'index'])->name('attendants.index');
 Route::get('atendentes/{attendant}', [AttendantDirectoryController::class, 'show'])
@@ -206,6 +223,23 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->whereNumber('payment')
         ->middleware('role:client')
         ->name('client.credits.payments.show');
+
+    /*
+     * Compras de produtos da vitrine. O POST cria o pedido no servidor; o GET
+     * de retorno apenas reconcilia o status junto ao provedor.
+     */
+    Route::get('minhas-compras', [ClientPurchaseController::class, 'index'])
+        ->middleware('role:client')
+        ->name('client.purchases.index');
+
+    Route::get('produtos/checkout/retorno', [ClientProductCheckoutController::class, 'return'])
+        ->middleware('role:client')
+        ->name('client.products.checkout.return');
+
+    Route::post('produtos/{product}/checkout', [ClientProductCheckoutController::class, 'store'])
+        ->whereNumber('product')
+        ->middleware(['role:client', 'throttle:credit-purchases'])
+        ->name('client.products.checkout.store');
 
     Route::patch('attendant/disponibilidade', [AttendantAvailabilityController::class, 'update'])
         ->middleware('role:attendant')
@@ -477,6 +511,38 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('role:admin')
         ->name('admin.audit.index');
 
+    /*
+     * Tela "Acessos": visitas ao site (gráfico + lista) com identificação
+     * anônima por cookie e IP apenas em hash. O painel em si não é rastreado.
+     */
+    Route::get('admin/acessos', [AdminSiteAccessController::class, 'index'])
+        ->middleware('role:admin')
+        ->name('admin.access.index');
+
+    /*
+     * Tela "Banco de dados": mostra o backup que está no disco, gera um novo e
+     * importa um dump `.sql`/`.sql.gz`.
+     */
+    Route::prefix('admin/banco-de-dados')
+        ->name('admin.database.')
+        ->middleware('role:admin')
+        ->group(function () {
+            Route::get('/', [AdminDatabaseController::class, 'index'])->name('index');
+
+            /*
+             * Backup manual: roda a mesma rotina do scheduler. O lock do
+             * comando impede que a execução agendada e esta disputem o diretório.
+             */
+            Route::post('backup', [AdminDatabaseController::class, 'backup'])->name('backup');
+
+            /*
+             * Importação destrutiva: apaga as tabelas do banco atual e executa o
+             * arquivo enviado. O controller grava o backup de segurança antes de
+             * qualquer remoção e encerra a sessão no fim.
+             */
+            Route::post('importar', [AdminDatabaseController::class, 'import'])->name('import');
+        });
+
     Route::prefix('admin/conteudo')
         ->name('admin.site.')
         ->middleware('role:admin')
@@ -582,6 +648,61 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::patch('bonus', [AdminRegistrationBonusController::class, 'update'])
                 ->name('bonus.update');
         });
+
+    /*
+     * Campanhas "Compre X créditos e ganhe Y". A promoção ativa aparece na home
+     * e na carteira; o bônus só entra no saldo quando o provedor confirma o
+     * pagamento, dentro da transação de confirmação (nunca pelo formulário).
+     */
+    Route::prefix('admin/promocoes')
+        ->name('admin.promotions.')
+        ->middleware('role:admin')
+        ->group(function () {
+            Route::get('/', [AdminPromotionController::class, 'index'])->name('index');
+            Route::get('nova', [AdminPromotionController::class, 'create'])->name('create');
+            Route::post('/', [AdminPromotionController::class, 'store'])->name('store');
+            Route::get('{promotion}/editar', [AdminPromotionController::class, 'edit'])
+                ->whereNumber('promotion')
+                ->name('edit');
+            Route::patch('{promotion}', [AdminPromotionController::class, 'update'])
+                ->whereNumber('promotion')
+                ->name('update');
+            Route::patch('{promotion}/status', [AdminPromotionController::class, 'updateStatus'])
+                ->whereNumber('promotion')
+                ->name('status');
+            Route::delete('{promotion}', [AdminPromotionController::class, 'destroy'])
+                ->whereNumber('promotion')
+                ->name('destroy');
+        });
+
+    /*
+     * Vitrine de produtos da home. Produtos com vendas registradas não podem
+     * ser removidos; a venda em si é somente leitura e só muda pelo webhook.
+     */
+    Route::prefix('admin/produtos')
+        ->name('admin.products.')
+        ->middleware('role:admin')
+        ->group(function () {
+            Route::get('/', [AdminProductController::class, 'index'])->name('index');
+            Route::get('novo', [AdminProductController::class, 'create'])->name('create');
+            Route::post('/', [AdminProductController::class, 'store'])->name('store');
+            Route::get('{product}/editar', [AdminProductController::class, 'edit'])
+                ->whereNumber('product')
+                ->name('edit');
+            Route::patch('{product}', [AdminProductController::class, 'update'])
+                ->whereNumber('product')
+                ->name('update');
+            Route::patch('{product}/status', [AdminProductController::class, 'updateStatus'])
+                ->whereNumber('product')
+                ->name('status');
+            Route::delete('{product}', [AdminProductController::class, 'destroy'])
+                ->whereNumber('product')
+                ->name('destroy');
+        });
+
+    Route::get('admin/vendas', [AdminPurchaseController::class, 'index'])
+        ->middleware('role:admin')
+        ->name('admin.purchases.index');
 
     Route::prefix('admin/atendimento')
         ->name('admin.consultations.')

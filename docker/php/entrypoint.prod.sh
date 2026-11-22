@@ -36,6 +36,7 @@ as_app() {
 mkdir -p \
     storage/app/public \
     storage/app/private/tarot \
+    storage/backups \
     storage/framework/cache/data \
     storage/framework/sessions \
     storage/framework/views \

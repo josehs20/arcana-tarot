@@ -40,3 +40,24 @@ Schedule::command('consultations:close-stale-calls')
 Schedule::command('sanctum:prune-expired --hours=24')
     ->daily()
     ->withoutOverlapping(10);
+
+/*
+ * Acessos: encerra sessões sem heartbeat recente e apaga o que passou da
+ * retenção (`access_log.retention_days`). Roda de madrugada, quando ninguém
+ * está navegando, para não competir com as rotinas de consulta.
+ */
+Schedule::command('arcana:prune-site-visits')
+    ->dailyAt('04:15')
+    ->withoutOverlapping(60);
+
+/*
+ * Backup do banco e do storage a cada seis horas, mantendo um único conjunto
+ * (`backup.keep`): quatro execuções por dia, com no máximo um diretório em
+ * `storage/backups`. O mutex vale 2 h — folga para um backup grande terminar e
+ * curto o bastante para um processo morto não bloquear a execução seguinte.
+ * Falha de uma execução não apaga o backup anterior, mas o comando retorna
+ * código 1 e o erro aparece no log do scheduler.
+ */
+Schedule::command('arcana:backup')
+    ->everySixHours()
+    ->withoutOverlapping(120);

@@ -8,6 +8,7 @@ use App\Models\CommissionLedgerEntry;
 use App\Models\Consultation;
 use App\Models\CreditLedgerEntry;
 use App\Models\Payment;
+use App\Models\SiteVisit;
 use App\Models\User;
 use App\Models\Wallet;
 use Carbon\CarbonImmutable;
@@ -108,6 +109,27 @@ final class DashboardTrend
             ]),
             $days,
         );
+    }
+
+    /**
+     * Visitas ao site iniciadas por dia. O filtro de tipo espelha a tela
+     * "Acessos" para que gráfico e lista contem a mesma população.
+     *
+     * @return array{labels: list<string>, values: list<int>, total: int, period: string}
+     */
+    public static function siteVisits(int $days = 14, ?string $audience = null): array
+    {
+        $query = SiteVisit::query()->where('started_at', '>=', self::start($days));
+
+        if ($audience === 'registered') {
+            $query->whereNotNull('user_id');
+        }
+
+        if ($audience === 'anonymous') {
+            $query->whereNull('user_id');
+        }
+
+        return self::fromTimestamps($query->get(['started_at'])->pluck('started_at'), $days);
     }
 
     /**

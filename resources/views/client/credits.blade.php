@@ -1,4 +1,9 @@
 <x-layouts.panel variant="panel" title="Carteira e créditos">
+    @php
+        // A view também é renderizada por fluxos antigos (sandbox) que não
+        // carregam a coleção; sem promoções o bloco de destaque desaparece.
+        $promotions = $promotions ?? collect();
+    @endphp
     <x-layouts.page-header
         title="Carteira e créditos"
         subtitle="Consulte seu saldo, o histórico de movimentações e as opções de recarga."
@@ -40,6 +45,25 @@
                     <h2 class="h6 mb-0">Recarga</h2>
                 </x-ui.card-header>
                 <x-ui.card-body>
+                    @if ($promotions->isNotEmpty())
+                        <x-ui.alert type="success" :dismissible="false" class="mb-3">
+                            <strong>Promoções ativas</strong>
+                            <ul class="mb-0 mt-1 ps-3 small">
+                                @foreach ($promotions as $promotion)
+                                    <li>
+                                        <strong>{{ $promotion->headline() }}</strong>
+                                        @if ($promotion->description)
+                                            — {{ $promotion->description }}
+                                        @endif
+                                        @if ($promotion->ends_at !== null)
+                                            <span class="text-nowrap">(até {{ $promotion->ends_at->format('d/m/Y') }})</span>
+                                        @endif
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </x-ui.alert>
+                    @endif
+
                     @if ($checkoutEnabled && $packages !== [])
                         <p class="mb-2">
                             Escolha um pacote de créditos. Cada crédito custa
@@ -49,6 +73,9 @@
 
                         <div class="d-grid gap-2">
                             @foreach ($packages as $package)
+                                @php
+                                    $packagePromotion = $promotions->firstWhere('buy_credits', $package['credits']);
+                                @endphp
                                 <form method="POST" action="{{ route('client.credits.checkout.store') }}">
                                     @csrf
                                     <input type="hidden" name="operation_id" value="{{ \Illuminate\Support\Str::uuid() }}">
@@ -57,6 +84,11 @@
                                         {{ $package['label'] }} —
                                         {{ \App\Support\Money::format($package['amount_cents']) }}
                                     </x-ui.button>
+                                    @if ($packagePromotion !== null)
+                                        <p class="form-text text-center mb-0 mt-1">
+                                            Este pacote rende +{{ $packagePromotion->bonus_credits }} créditos de bônus
+                                        </p>
+                                    @endif
                                 </form>
                             @endforeach
                         </div>

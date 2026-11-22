@@ -136,6 +136,27 @@ composer lint    # Pint --test (verificação de estilo)
 composer format  # Pint (formatação)
 ```
 
+## Backup
+
+O scheduler executa `php artisan arcana:backup` a cada seis horas: grava em
+`storage/backups` (ou `BACKUP_DIRECTORY`) o dump do banco (`database.sql.gz`) e
+os arquivos de `storage/app` (`files.tar.gz`), com `manifest.json` contendo
+hashes e contagens. A retenção padrão é de um único conjunto (`BACKUP_KEEP`).
+
+```bash
+php artisan arcana:backup                    # banco + storage
+php artisan arcana:backup --database-only    # só o banco
+```
+
+O mesmo backup pode ser gerado pelo painel em **Sistema → Banco de dados**, que
+também lista os conjuntos no servidor e permite importar um `.sql`/`.sql.gz` por
+cima do banco atual (com confirmação, backup de segurança em
+`storage/backups/pre-import` e limite `BACKUP_IMPORT_MAX_KB`).
+
+A execução manual, o destino em outro volume e o teste de restauração estão em
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#102-backup-automático-arcanabackup). O
+backup é local: copie o diretório para fora do servidor.
+
 ## Status
 
 MVP dos Prompts 01–20 implementado e testado, incluindo o redesign visual dos

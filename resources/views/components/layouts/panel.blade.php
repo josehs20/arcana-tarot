@@ -38,6 +38,9 @@
     <meta name="realtime-mode" content="{{ \App\Support\Realtime\RealtimeMode::current() }}">
     <meta name="theme-endpoint" content="{{ route('preferences.theme.update') }}">
     <meta name="robots" content="noindex, nofollow">
+    @unless ($isAdmin)
+        @include('layouts.partials.visit-heartbeat')
+    @endunless
     <title>{{ $pageTitle }}</title>
 
     @include('layouts.partials.theme-bootstrap')

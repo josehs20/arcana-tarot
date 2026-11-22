@@ -217,6 +217,9 @@ interrupção por inatividade e fechamento de chamadas órfãs). Sem ele, uma
 consulta inativa continua `active` no banco — a tela até encerra pelo próprio
 batimento, mas a rotina periódica não acontece. Não escale esse serviço: com mais
 de uma réplica, use `schedule:run` no cron do host para não duplicar execuções.
+Além das rotinas por minuto, o mesmo `schedule:run` dispara a limpeza diária de
+tokens do Sanctum e o backup automático `arcana:backup` a cada seis horas
+(seção 10.2) — sem o cron, não há backup.
 
 Produção deve gerenciar esses processos com supervisor/systemd/orquestrador de
 containers, com reinício automático, limite de memória e logs persistentes. Não
@@ -373,7 +376,68 @@ limpo, valide e só então troque a aplicação.
 Redis não é fonte de verdade persistente do domínio; não substitui backup do
 MySQL nem dos arquivos.
 
-### 10.2 Backup do banco
+### 10.2 Backup automático (arcana:backup)
+
+O scheduler roda `php artisan arcana:backup` a cada seis horas. O comando não
+depende de `mysqldump`/`sqlite3`: usa a própria conexão PDO, então funciona na
+imagem sem clientes de banco e em hospedagem que bloqueia `exec()`.
+
+Cada execução grava um diretório `arcana-backup-<AAAA-MM-DDThhmmssZ>/` em
+`storage/backups` (`BACKUP_DIRECTORY` muda o destino) com:
+
+- `database.sql.gz` — dump lógico (`CREATE TABLE` + `INSERT`s), lido em
+  transação de snapshot consistente no MySQL/MariaDB;
+- `files.tar.gz` — conteúdo de `storage/app` (imagens de catálogo, snapshots de
+  chat e anexos); `storage/logs` e o `.env` ficam de fora;
+- `manifest.json` — data, driver, contagens, `sha256` de cada arquivo e o
+  caminho de restauração.
+
+O padrão de retenção é **um conjunto** (`BACKUP_KEEP`): o novo backup é montado
+em um diretório temporário (`.building-*`) e só substitui o anterior depois do
+rename, então uma falha nunca deixa o servidor sem backup. Diretórios com outro
+nome no destino não são tocados.
+
+Operação:
+
+```bash
+php artisan arcana:backup                    # banco + storage
+php artisan arcana:backup --database-only    # só o banco (mais rápido)
+php artisan arcana:backup --keep=3           # sobrescreve BACKUP_KEEP
+php artisan schedule:list                    # confirma o agendamento
+```
+
+O comando segura um lock no cache: duas execuções simultâneas (agendada +
+manual) não disputam os mesmos arquivos, e a segunda apenas informa que há um
+backup em andamento. Falha retorna código 1 e aparece no log do scheduler — o
+conjunto anterior continua intacto.
+
+O backup é local: arquivo no mesmo disco do banco não protege contra perda do
+disco nem contra ransomware. Copie o diretório para fora do servidor (rsync,
+`rclone`, snapshot do provedor) na mesma janela de retenção — a cópia precisa
+estar pronta antes de o conjunto ser substituído.
+
+#### Pelo painel (Sistema → Banco de dados)
+
+A administração tem a mesma rotina em **Painel → Sistema → Banco de dados**:
+
+- lista o conjunto mais recente (data, tabelas, linhas, tamanho e `sha256` do
+  dump) e todos os conjuntos que estão no destino;
+- **Fazer backup agora** executa `arcana:backup` na hora, com o mesmo lock e a
+  mesma retenção do scheduler;
+- **Importar banco** recebe um `.sql` ou `.sql.gz` (o `database.sql.gz` do
+  próprio backup serve) e substitui o banco atual.
+
+A importação é destrutiva e o formulário pede confirmação explícita. Antes de
+apagar qualquer tabela o painel grava um backup de segurança em
+`<BACKUP_DIRECTORY>/pre-import` — diretório separado, com retenção de dois
+conjuntos, para não competir com o backup automático. A rotina também recusa um
+dump de outro driver (SQLite × MySQL), confere o `max_execution_time` da
+requisição e encerra a sessão do administrador no fim, porque os ids passam a ser
+os do arquivo importado. O tamanho aceito é `BACKUP_IMPORT_MAX_KB` (32 MB por
+padrão, alinhado ao `upload_max_filesize`); arquivos maiores devem ser
+restaurados pela linha de comando (seção 10.4).
+
+### 10.3 Backup do banco (manual, off-site)
 
 ```bash
 mkdir -p /var/backups/arcana
@@ -390,10 +454,11 @@ sha256sum /var/backups/arcana/*-${STAMP}.* > "/var/backups/arcana/checksums-${ST
 Restrinja permissões do diretório (`chmod 700`), criptografe em repouso e copie
 para local/off-site com retenção definida. Teste a cópia e monitore falhas do job.
 
-### 10.3 Teste de restauração (ambiente isolado)
+### 10.4 Teste de restauração (ambiente isolado)
 
 Nunca restaure por cima da produção para “testar”. Use banco/container
-descartável:
+descartável — a importação do painel (seção 10.2) substitui o banco em uso e
+também não serve para teste.
 
 ```bash
 # cria banco de teste
@@ -409,6 +474,27 @@ gunzip -c /var/backups/arcana/db-<STAMP>.sql.gz \
 docker compose exec -T mysql sh -c \
   'exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD" arcana_restore_test -e "SELECT COUNT(*) FROM users; SELECT COUNT(*) FROM consultations; SELECT COALESCE(SUM(CASE WHEN type=\'reversal\' THEN -commission_amount_cents ELSE commission_amount_cents END),0) FROM commission_ledger_entries;"'
 ```
+
+No caso do backup automático (seção 10.2), o dump e os arquivos estão no mesmo
+diretório `arcana-backup-<STAMP>`:
+
+```bash
+SET=$(ls -d storage/backups/arcana-backup-* | tail -1)
+
+gunzip -c "$SET/database.sql.gz" \
+  | docker compose exec -T mysql sh -c \
+    'exec mysql -uroot -p"$MYSQL_ROOT_PASSWORD" arcana_restore_test'
+
+mkdir -p /tmp/restore-files
+tar -xzf "$SET/files.tar.gz" -C /tmp/restore-files
+
+# confira com database.sha256 / files.sha256 do manifest antes de confiar
+sha256sum "$SET/database.sql.gz" "$SET/files.tar.gz"
+```
+
+O `manifest.json` registra o `sha256` de cada arquivo e as contagens de tabelas e
+linhas do momento do backup: use esses números para confirmar que a restauração
+trouxe tudo.
 
 Depois:
 

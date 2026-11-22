@@ -19,6 +19,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'credits',
     'credit_unit_price_cents',
     'package_key',
+    'promotion_id',
+    'promotion_bonus_credits',
+    'promotion_bonus_cents',
     'status',
     'raw_status',
     'pix_copy_paste',
@@ -44,6 +47,8 @@ class Payment extends Model
             'amount_cents' => 'integer',
             'credits' => 'integer',
             'credit_unit_price_cents' => 'integer',
+            'promotion_bonus_credits' => 'integer',
+            'promotion_bonus_cents' => 'integer',
             'pix_copy_paste' => 'encrypted',
             'expires_at' => 'datetime',
             'paid_at' => 'datetime',
@@ -54,6 +59,11 @@ class Payment extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function promotion(): BelongsTo
+    {
+        return $this->belongsTo(Promotion::class);
     }
 
     public function webhookEvents(): HasMany

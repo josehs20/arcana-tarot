@@ -37,6 +37,7 @@ final class PaymentManager
         private ConsultationPricing $pricing,
         private PaymentLimits $limits,
         private PixProvider $provider,
+        private PromotionManager $promotions,
     ) {}
 
     public function startRecharge(User $client, int $amountCents, string $operationId): Payment
@@ -84,6 +85,8 @@ final class PaymentManager
                 'amount_cents' => $amountCents,
                 'credits' => $credits,
                 'credit_unit_price_cents' => $unitPriceCents,
+                // A promoção é decidida no servidor e congelada no pedido.
+                'promotion_id' => $this->promotions->forPurchase($credits)?->getKey(),
                 'status' => PaymentStatus::Pending,
                 'idempotency_key' => $idempotencyKey,
             ]);
@@ -242,11 +245,19 @@ final class PaymentManager
                 'paid_at' => now(),
             ])->save();
 
+            // Bônus da promoção na mesma transação do crédito da compra.
+            $promotionEntry = $this->promotions->applyToPayment($payment);
+            $payment->refresh();
+
             $this->audit($payment, 'payment.confirmed', null, [
                 'user_id' => $payment->user_id,
                 'provider_event_id' => $event->eventId,
                 'amount_cents' => $payment->amount_cents,
                 'credits' => $payment->credits,
+                'promotion_id' => $payment->promotion_id,
+                'promotion_bonus_credits' => $payment->promotion_bonus_credits,
+                'promotion_bonus_cents' => $payment->promotion_bonus_cents,
+                'promotion_entry_id' => $promotionEntry?->getKey(),
                 'from' => $from->value,
                 'to' => PaymentStatus::Confirmed->value,
             ]);

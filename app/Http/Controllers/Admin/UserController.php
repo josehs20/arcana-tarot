@@ -36,13 +36,19 @@ use Throwable;
 /**
  * Contas pelo painel administrativo.
  *
- * A listagem é somente leitura de apoio; as rotas de cadastro e edição
- * concentram as regras: todo atendente criado aqui nasce offline, o perfil
- * público é editável na mesma tela e o saldo do cliente só muda pelo fluxo
- * auditado de ajuste de carteira.
+ * A listagem é somente leitura de apoio e aceita busca por nome/e-mail, papel,
+ * status e o recorte de contas criadas nos últimos 30 dias; as rotas de
+ * cadastro e edição concentram as regras: todo atendente criado aqui nasce
+ * offline, o perfil público é editável na mesma tela e o saldo do cliente só
+ * muda pelo fluxo auditado de ajuste de carteira.
  */
 class UserController extends Controller
 {
+    /**
+     * Janela, em dias, do atalho "cadastrados nos últimos 30 dias" da listagem.
+     */
+    private const RECENT_REGISTRATION_DAYS = 30;
+
     public function index(Request $request): View
     {
         Gate::authorize('viewAny', User::class);
@@ -51,6 +57,7 @@ class UserController extends Controller
             'q' => ['nullable', 'string', 'max:100'],
             'role' => ['nullable', Rule::enum(UserRole::class)],
             'status' => ['nullable', Rule::in(['active', 'inactive'])],
+            'recent' => ['nullable', 'boolean'],
         ]);
 
         $search = trim((string) ($filters['q'] ?? ''));
@@ -76,6 +83,14 @@ class UserController extends Controller
             ->when(
                 ($filters['status'] ?? null) === 'inactive',
                 fn ($query) => $query->where('is_active', false),
+            )
+            ->when(
+                (bool) ($filters['recent'] ?? false),
+                fn ($query) => $query->where(
+                    'created_at',
+                    '>=',
+                    now()->subDays(self::RECENT_REGISTRATION_DAYS),
+                ),
             )
             ->orderByRaw("case role when 'admin' then 0 when 'attendant' then 1 else 2 end")
             ->orderBy('name')

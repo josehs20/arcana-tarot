@@ -4,6 +4,9 @@
         subtitle="Cadastro dos profissionais, preferências do atendimento (como o som que avisa quando um cliente está aguardando) e comissão de cada atendente."
     >
         <x-slot name="actions">
+            @can('create', \App\Models\User::class)
+                <a class="btn btn-primary btn-sm" href="{{ route('admin.users.create') }}">Novo atendente</a>
+            @endcan
             <a class="btn btn-ghost btn-sm" href="{{ route('admin.modalities.index') }}">Modalidades</a>
             <a class="btn btn-ghost btn-sm" href="{{ route('admin.dashboard') }}">Voltar ao painel</a>
         </x-slot>
@@ -53,8 +56,16 @@
                 <x-ui.empty-state
                     icon="☾"
                     title="Nenhum atendente encontrado"
-                    text="Ajuste a busca ou habilite perfis profissionais."
-                />
+                    text="{{ $search === ''
+                        ? 'Cadastre o primeiro profissional para habilitar o diretório público.'
+                        : 'Ajuste a busca ou habilite perfis profissionais.' }}"
+                >
+                    @if ($search === '')
+                        @can('create', \App\Models\User::class)
+                            <a class="btn btn-primary btn-sm mt-3" href="{{ route('admin.users.create') }}">Novo atendente</a>
+                        @endcan
+                    @endif
+                </x-ui.empty-state>
             </x-ui.card-body>
         @else
             <div class="table-responsive">

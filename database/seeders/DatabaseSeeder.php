@@ -22,6 +22,7 @@ class DatabaseSeeder extends DemoSeeder
             ClientSeeder::class,
             AttendantApplicationSeeder::class,
             TarotDeckSeeder::class,
+            ProductSeeder::class,
             PaymentSeeder::class,
             WalletSeeder::class,
             ConsultationSeeder::class,

@@ -40,6 +40,7 @@ final class InfinitePayCheckoutManager
         private readonly CreditWalletManager $wallets,
         private readonly ConsultationPricing $pricing,
         private readonly CreditPackages $packages,
+        private readonly PromotionManager $promotions,
         private readonly InfinitePayGateway $gateway,
     ) {}
 
@@ -106,6 +107,8 @@ final class InfinitePayCheckoutManager
                 'credits' => $package['credits'],
                 'credit_unit_price_cents' => $package['credit_unit_price_cents'],
                 'package_key' => $package['key'],
+                // A promoção é decidida no servidor e congelada no pedido.
+                'promotion_id' => $this->promotions->forPurchase($package['credits'])?->getKey(),
                 'status' => PaymentStatus::Pending,
                 'idempotency_key' => $idempotencyKey,
                 'expires_at' => now()->addMinutes(max(5, (int) config('payments.infinitepay.charge_ttl_minutes', 1440))),
@@ -387,6 +390,10 @@ final class InfinitePayCheckoutManager
             'capture_method' => $check->captureMethod ?? $notification->captureMethod ?? $payment->capture_method,
         ])->save();
 
+        // Bônus da promoção na mesma transação do crédito da compra.
+        $promotionEntry = $this->promotions->applyToPayment($payment);
+        $payment->refresh();
+
         $this->audit($payment, 'payment.confirmed', null, [
             'user_id' => $payment->user_id,
             'provider_event_id' => $notification->eventId,
@@ -394,6 +401,10 @@ final class InfinitePayCheckoutManager
             'paid_amount_cents' => $check->paidAmountCents,
             'credits' => $payment->credits,
             'credit_entry_id' => $entry->getKey(),
+            'promotion_id' => $payment->promotion_id,
+            'promotion_bonus_credits' => $payment->promotion_bonus_credits,
+            'promotion_bonus_cents' => $payment->promotion_bonus_cents,
+            'promotion_entry_id' => $promotionEntry?->getKey(),
             'transaction_nsu' => $payment->transaction_nsu,
             'invoice_slug' => $payment->invoice_slug,
             'capture_method' => $payment->capture_method,

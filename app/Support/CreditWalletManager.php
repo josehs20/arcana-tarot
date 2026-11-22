@@ -38,15 +38,17 @@ final class CreditWalletManager
 
     /**
      * Credita um valor em centavos. A chave de idempotência é única e repetir
-     * a mesma operação retorna o lançamento já existente.
+     * a mesma operação retorna o lançamento já existente. O motivo opcional
+     * aparece no extrato do cliente (ex.: bônus de promoção).
      */
     public function credit(
         User $user,
         int $amountCents,
         string $idempotencyKey,
         Model $reference,
+        ?string $reason = null,
     ): CreditLedgerEntry {
-        return $this->record($user, LedgerEntryType::Credit, $amountCents, $idempotencyKey, $reference);
+        return $this->record($user, LedgerEntryType::Credit, $amountCents, $idempotencyKey, $reference, $reason);
     }
 
     /**

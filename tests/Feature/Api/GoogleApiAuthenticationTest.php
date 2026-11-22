@@ -31,7 +31,7 @@ class GoogleApiAuthenticationTest extends TestCase
     private const JWKS_URI = 'https://www.googleapis.com/oauth2/v3/certs';
 
     private static ?\OpenSSLAsymmetricKey $privateKey = null;
-w
+
     private static ?\OpenSSLAsymmetricKey $otherKey = null;
 
     /**

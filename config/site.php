@@ -29,6 +29,8 @@ return [
         'como-funciona',
         'atendentes',
         'cartas',
+        'promocoes',
+        'produtos',
         'trabalhe-conosco',
         'faq',
     ],
@@ -38,6 +40,8 @@ return [
         'attendants' => 'Atendentes',
         'how_it_works' => 'Como funciona',
         'tarot_cards' => 'Cartas e baralhos',
+        'products' => 'Produtos',
+        'promotions' => 'Promoções de créditos',
         'faq' => 'Perguntas frequentes',
         'work_with_us' => 'Trabalhe conosco',
         'final_cta' => 'Chamada final',
@@ -50,6 +54,8 @@ return [
         'attendants' => 'atendentes',
         'how_it_works' => 'como-funciona',
         'tarot_cards' => 'cartas',
+        'products' => 'produtos',
+        'promotions' => 'promocoes',
         'faq' => 'faq',
         'work_with_us' => 'trabalhe-conosco',
     ],
@@ -59,6 +65,8 @@ return [
     'section_hints' => [
         'attendants' => 'Os perfis listados vêm do diretório de atendentes. Aqui você edita o cabeçalho, o texto e a imagem da seção.',
         'tarot_cards' => 'Os baralhos listados são gerenciados em Baralhos. Aqui você edita o cabeçalho, o texto e a imagem da seção.',
+        'products' => 'Os produtos listados são gerenciados em Produtos. Aqui você edita o cabeçalho, o texto e a imagem da seção; a seção não aparece quando não há produto ativo.',
+        'promotions' => 'As campanhas listadas são gerenciadas em Promoções. Aqui você edita o cabeçalho, o texto e a imagem da seção; a seção não aparece quando não há promoção ativa.',
         'faq' => 'As perguntas listadas são gerenciadas em Perguntas frequentes. Aqui você edita o cabeçalho, o texto e a imagem da seção.',
     ],
 
@@ -123,6 +131,30 @@ return [
             'secondary_cta_target' => null,
             'sort_order' => 60,
         ],
+        'products' => [
+            'eyebrow' => 'Loja',
+            'title' => 'Pacotes para a sua próxima leitura',
+            'subtitle' => 'Escolha um pacote de créditos. O valor é o mesmo para todos os atendentes e o saldo entra na carteira assim que o pagamento é confirmado.',
+            'body' => 'Os créditos não expiram e podem ser usados em qualquer atendimento disponível no diretório.',
+            'image_alt' => null,
+            'primary_cta_label' => null,
+            'primary_cta_target' => null,
+            'secondary_cta_label' => null,
+            'secondary_cta_target' => null,
+            'sort_order' => 42,
+        ],
+        'promotions' => [
+            'eyebrow' => 'Promoções',
+            'title' => 'Compre créditos e ganhe bônus',
+            'subtitle' => 'Nas campanhas ativas, cada recarga rende créditos extras na carteira assim que o pagamento é confirmado.',
+            'body' => 'O bônus é calculado pelo servidor a partir da quantidade de créditos comprada e entra no extrato como um lançamento separado.',
+            'image_alt' => null,
+            'primary_cta_label' => null,
+            'primary_cta_target' => null,
+            'secondary_cta_label' => null,
+            'secondary_cta_target' => null,
+            'sort_order' => 45,
+        ],
         'faq' => [
             'eyebrow' => 'Dúvidas',
             'title' => 'Antes de perguntar',
@@ -149,11 +181,18 @@ return [
         ],
     ],
 
+    // O menu acompanha as seções exibidas na home. Páginas dedicadas usam a
+    // rota correspondente; seções que só existem na home (cartas, loja e
+    // promoções) usam a âncora. Links de âncora cuja seção não estiver sendo
+    // renderizada são omitidos por `SiteContent` para não gerar destino morto.
     'navigation' => [
         'primary' => [
             ['label' => 'Início', 'target_type' => 'route', 'target' => 'home'],
             ['label' => 'Atendentes', 'target_type' => 'route', 'target' => 'attendants.index'],
             ['label' => 'Como funciona', 'target_type' => 'route', 'target' => 'pages.how-it-works'],
+            ['label' => 'Cartas', 'target_type' => 'anchor', 'target' => '#cartas'],
+            ['label' => 'Loja', 'target_type' => 'anchor', 'target' => '#produtos'],
+            ['label' => 'Promoções', 'target_type' => 'anchor', 'target' => '#promocoes'],
             ['label' => 'Dúvidas', 'target_type' => 'route', 'target' => 'pages.faq'],
             ['label' => 'Trabalhe conosco', 'target_type' => 'route', 'target' => 'work-with-us.index'],
         ],
@@ -161,6 +200,9 @@ return [
             ['label' => 'Início', 'target_type' => 'route', 'target' => 'home'],
             ['label' => 'Atendentes', 'target_type' => 'route', 'target' => 'attendants.index'],
             ['label' => 'Como funciona', 'target_type' => 'route', 'target' => 'pages.how-it-works'],
+            ['label' => 'Cartas', 'target_type' => 'anchor', 'target' => '#cartas'],
+            ['label' => 'Loja', 'target_type' => 'anchor', 'target' => '#produtos'],
+            ['label' => 'Promoções', 'target_type' => 'anchor', 'target' => '#promocoes'],
             ['label' => 'Dúvidas frequentes', 'target_type' => 'route', 'target' => 'pages.faq'],
             ['label' => 'Trabalhe conosco', 'target_type' => 'route', 'target' => 'work-with-us.index'],
             ['label' => 'Contato', 'target_type' => 'route', 'target' => 'contact'],

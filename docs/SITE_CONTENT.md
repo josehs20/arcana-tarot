@@ -42,6 +42,21 @@ rejeitado na validação e, se já existir no banco, não é renderizado. Como a
 rotas internas são resolvidas por nome, o domínio pode mudar sem reconfigurar
 links.
 
+### Menu e seções exibidas
+
+O menu padrão de `config/site.navigation` cobre todas as seções da home: além
+das páginas dedicadas (Início, Atendentes, Como funciona, Dúvidas e Trabalhe
+conosco), lista **Cartas** (`#cartas`), **Loja** (`#produtos`) e **Promoções**
+(`#promocoes`) por âncora. As âncoras apontam para a home (`/<home>#produtos`),
+então funcionam também a partir das páginas internas.
+
+Antes de renderizar, `SiteContent::anchorIsAvailable()` confere se a seção
+existe naquele momento. Links de âncora para seções que não são exibidas —
+produto inativo, promoção vencida/desativada ou seção despublicada — são
+omitidos do menu (inclusive os criados manualmente no CMS) para não gerar
+destino morto. Loja e Promoções controlam a exibição pelos próprios registros
+em **Produtos** e **Promoções**, não pelos campos de texto da seção.
+
 ## Publicação e edição
 
 Não há fluxo separado de rascunho/pré-visualização: salvar já publica a

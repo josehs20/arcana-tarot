@@ -11,11 +11,12 @@ namespace App\Support\Images;
  * saída: `scaleDown()` nunca amplia uma imagem menor, então o perfil é um teto,
  * não um redimensionamento cego.
  *
- * WebP só é gravado nas imagens internas do painel (cartas do catálogo e fotos
- * de atendentes). As imagens do CMS público — logo, favicon e mídia das seções
- * — ficam restritas a PNG/JPEG: o logo também aparece em clientes de e-mail e o
- * favicon em abas e agregadores que nem sempre decodificam WebP, e o operador
- * precisa reencontrar no site o mesmo tipo de arquivo que enviou.
+ * WebP só é gravado nas imagens internas do painel (cartas do catálogo, fotos
+ * de atendentes e imagens de produtos). As imagens do CMS público — logo,
+ * favicon e mídia das seções — ficam restritas a PNG/JPEG: o logo também
+ * aparece em clientes de e-mail e o favicon em abas e agregadores que nem
+ * sempre decodificam WebP, e o operador precisa reencontrar no site o mesmo
+ * tipo de arquivo que enviou.
  */
 enum ImageProfile: string
 {
@@ -24,6 +25,7 @@ enum ImageProfile: string
     case SiteLogo = 'site_logo';
     case SiteFavicon = 'site_favicon';
     case AttendantPhoto = 'attendant_photo';
+    case Product = 'product';
 
     /**
      * Largura máxima em pixels (a proporção original é preservada).
@@ -36,6 +38,7 @@ enum ImageProfile: string
             self::SiteLogo => 1200,
             self::SiteFavicon => 512,
             self::AttendantPhoto => 1200,
+            self::Product => 1200,
         };
     }
 
@@ -50,6 +53,7 @@ enum ImageProfile: string
             self::SiteLogo => 1200,
             self::SiteFavicon => 512,
             self::AttendantPhoto => 1200,
+            self::Product => 1200,
         };
     }
 
@@ -66,7 +70,7 @@ enum ImageProfile: string
         return match ($this) {
             self::SiteLogo, self::SiteFavicon => 'png',
             self::SiteSection => $sourceMime === 'image/png' ? 'png' : 'jpeg',
-            self::TarotCard, self::AttendantPhoto => 'webp',
+            self::TarotCard, self::AttendantPhoto, self::Product => 'webp',
         };
     }
 
@@ -77,7 +81,7 @@ enum ImageProfile: string
     {
         return match ($this) {
             self::SiteLogo, self::SiteFavicon, self::SiteSection => true,
-            self::TarotCard, self::AttendantPhoto => false,
+            self::TarotCard, self::AttendantPhoto, self::Product => false,
         };
     }
 
@@ -97,7 +101,7 @@ enum ImageProfile: string
         return match ($this) {
             self::SiteLogo, self::SiteFavicon => 'PNG',
             self::SiteSection => 'PNG (quando enviada em PNG) ou JPEG',
-            self::TarotCard, self::AttendantPhoto => 'WebP',
+            self::TarotCard, self::AttendantPhoto, self::Product => 'WebP',
         };
     }
 
@@ -112,6 +116,7 @@ enum ImageProfile: string
             self::SiteLogo => 88,
             self::SiteFavicon => 90,
             self::AttendantPhoto => 85,
+            self::Product => 84,
         };
     }
 }
