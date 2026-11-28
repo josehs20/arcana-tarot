@@ -15,7 +15,7 @@
 | [SEGURANCA_E_USABILIDADE_CHAT.md](SEGURANCA_E_USABILIDADE_CHAT.md) | Presença, inatividade, avisos de saída, logout, compra de créditos e limites administrativos |
 | [MELHORIAS_CHAT_ATENDIMENTO.md](MELHORIAS_CHAT_ATENDIMENTO.md) | Cartões das partes, data de nascimento 18+, envio de várias cartas, rolagem do chat, aviso de retorno, saída acidental e erros de microfone/câmera |
 | [MONITORAMENTO_E_PROTECAO_CHAT.md](MONITORAMENTO_E_PROTECAO_CHAT.md) | Detecção e bloqueio de dado pessoal no chat, mascaramento, ocorrências e painel de histórico |
-| [REALTIME.md](REALTIME.md) | Reverb/Echo, canais privados, eventos, reconexão, portas e deploy |
+| [REALTIME.md](REALTIME.md) | Reverb/Echo, canais privados, eventos, suporte ao visitante, reconexão, portas e deploy |
 | [WALLET_LEDGER.md](WALLET_LEDGER.md) | Carteira, livro-razão imutável, idempotência e invariantes financeiras |
 | [PIX_SANDBOX.md](PIX_SANDBOX.md) | Contrato PIX, mock sandbox, webhook HMAC, estados e troca para produção |
 | [INTEGRACAO_INFINITEPAY.md](INTEGRACAO_INFINITEPAY.md) | Checkout Integrado InfinitePay: pacotes, `payment_check`, webhook, idempotência e operação |

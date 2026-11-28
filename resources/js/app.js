@@ -39,6 +39,8 @@ import './credit-packages';
 import './bulk-email';
 import './image-upload';
 import './panel-sidebar';
+import './support-widget';
+import './support-inbox';
 import './theme';
 import './appearance-editor';
 import './auth-verification';

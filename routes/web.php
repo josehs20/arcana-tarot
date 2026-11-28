@@ -22,6 +22,8 @@ use App\Http\Controllers\Admin\SiteAppearanceController as AdminSiteAppearanceCo
 use App\Http\Controllers\Admin\SiteContentController as AdminSiteContentController;
 use App\Http\Controllers\Admin\SiteFaqController as AdminSiteFaqController;
 use App\Http\Controllers\Admin\SiteNavigationController as AdminSiteNavigationController;
+use App\Http\Controllers\Admin\SupportConversationController as AdminSupportConversationController;
+use App\Http\Controllers\Admin\SupportMessageController as AdminSupportMessageController;
 use App\Http\Controllers\Admin\TarotCardController as AdminTarotCardController;
 use App\Http\Controllers\Admin\TarotDeckController as AdminTarotDeckController;
 use App\Http\Controllers\Admin\TestimonialController as AdminTestimonialController;
@@ -56,6 +58,9 @@ use App\Http\Controllers\PageController;
 use App\Http\Controllers\PanelEventsController;
 use App\Http\Controllers\PixWebhookController;
 use App\Http\Controllers\SiteVisitHeartbeatController;
+use App\Http\Controllers\Support\SupportBroadcastAuthController;
+use App\Http\Controllers\Support\SupportConversationController as VisitorSupportConversationController;
+use App\Http\Controllers\Support\SupportMessageController as VisitorSupportMessageController;
 use App\Http\Controllers\TarotCardImageController;
 use App\Http\Controllers\TarotCardThumbnailController;
 use App\Http\Controllers\ThemePreferenceController;
@@ -87,6 +92,35 @@ Route::get('duvidas', [PageController::class, 'faq'])->name('pages.faq');
 Route::get('termos', [PageController::class, 'terms'])->name('legal.terms');
 Route::get('privacidade', [PageController::class, 'privacy'])->name('legal.privacy');
 Route::get('contato', [PageController::class, 'contact'])->name('contact');
+
+/*
+ * Suporte ao visitante.
+ *
+ * O widget existe em todas as páginas públicas. A identidade vem de um cookie
+ * HttpOnly com UUID + token; o banco guarda só o hash. Nenhuma rota recebe o
+ * identificador da conversa por parâmetro, então não há token em URL, histórico
+ * do navegador ou log de acesso. O polling é o caminho de leitura padrão; com
+ * Reverb, o mesmo payload chega por evento e o polling vira rede de segurança.
+ */
+Route::prefix('suporte')
+    ->name('support.')
+    ->group(function (): void {
+        Route::get('conversa', [VisitorSupportConversationController::class, 'show'])
+            ->middleware('throttle:support-visitor-read')
+            ->name('conversation.show');
+        Route::post('conversa', [VisitorSupportConversationController::class, 'store'])
+            ->middleware('throttle:support-visitor-write')
+            ->name('conversation.store');
+        Route::post('mensagens', [VisitorSupportMessageController::class, 'store'])
+            ->middleware('throttle:support-visitor-write')
+            ->name('messages.store');
+        Route::post('mensagens/lidas', [VisitorSupportMessageController::class, 'markRead'])
+            ->middleware('throttle:support-visitor-read')
+            ->name('messages.read');
+        Route::post('transmissao/autorizacao', SupportBroadcastAuthController::class)
+            ->middleware('throttle:support-visitor-read')
+            ->name('broadcast.auth');
+    });
 
 /*
  * Webhook do provedor PIX. A autenticidade é validada pelo adaptador
@@ -778,6 +812,39 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('catalogo/cartas/{card}/miniatura', TarotCardThumbnailController::class)
         ->whereNumber('card')
         ->name('tarot.cards.thumb');
+
+    /*
+     * Central de suporte do painel: fila de conversas abertas, histórico
+     * encerrado recente, respostas e encerramento. O widget do painel usa
+     * exatamente estas rotas; não existe página separada de suporte.
+     */
+    Route::prefix('admin/suporte')
+        ->name('admin.support.')
+        ->middleware('role:admin')
+        ->group(function (): void {
+            Route::get('conversas', [AdminSupportConversationController::class, 'index'])
+                ->middleware('throttle:support-admin-read')
+                ->name('conversations.index');
+            Route::get('conversas/{conversation}', [AdminSupportConversationController::class, 'show'])
+                ->whereNumber('conversation')
+                ->middleware('throttle:support-admin-read')
+                ->name('conversations.show');
+            Route::post('conversas/{conversation}/mensagens', [AdminSupportMessageController::class, 'store'])
+                ->whereNumber('conversation')
+                ->middleware('throttle:support-admin-write')
+                ->name('messages.store');
+            Route::post('conversas/{conversation}/lidas', [AdminSupportMessageController::class, 'markRead'])
+                ->whereNumber('conversation')
+                ->middleware('throttle:support-admin-read')
+                ->name('messages.read');
+            Route::post('conversas/{conversation}/encerrar', [AdminSupportConversationController::class, 'close'])
+                ->whereNumber('conversation')
+                ->middleware('throttle:support-admin-write')
+                ->name('conversations.close');
+            Route::post('presenca', [AdminSupportConversationController::class, 'presence'])
+                ->middleware('throttle:support-presence')
+                ->name('presence');
+        });
 
     Route::prefix('admin/candidaturas')
         ->name('admin.applications.')

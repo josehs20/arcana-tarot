@@ -197,6 +197,35 @@ class AppServiceProvider extends ServiceProvider
                 ->by('panel-events:'.($request->user()?->getKey() ?? $request->ip()));
         });
 
+        /*
+         * Suporte ao visitante: leitura por polling e escrita separadas.
+         * O visitante não tem usuário; o limite é por IP e cobre várias abas.
+         * O painel usa limites por administrador para que uma sessão não
+         * consuma a cota de outra.
+         */
+        RateLimiter::for('support-visitor-read', function (Request $request): Limit {
+            return Limit::perMinute(240)->by('support-visitor-read:'.$request->ip());
+        });
+
+        RateLimiter::for('support-visitor-write', function (Request $request): Limit {
+            return Limit::perMinute(30)->by('support-visitor-write:'.$request->ip());
+        });
+
+        RateLimiter::for('support-admin-read', function (Request $request): Limit {
+            return Limit::perMinute(360)
+                ->by('support-admin-read:'.($request->user()?->getKey() ?? $request->ip()));
+        });
+
+        RateLimiter::for('support-admin-write', function (Request $request): Limit {
+            return Limit::perMinute(90)
+                ->by('support-admin-write:'.($request->user()?->getKey() ?? $request->ip()));
+        });
+
+        RateLimiter::for('support-presence', function (Request $request): Limit {
+            return Limit::perMinute(30)
+                ->by('support-presence:'.($request->user()?->getKey() ?? $request->ip()));
+        });
+
         // Atualização automática do histórico administrativo: mesmo intervalo do
         // feed do painel, isolado por administrador para não consumir a cota do
         // painel do cliente ou do atendente.

@@ -606,4 +606,88 @@ de teste (`diagnostics`). Publique com uma requisição assinada para
 → frame do evento. Se aparecer `pusher:error 4009`, o transporte está saudável e
 o problema é exclusivamente a lista de origens.
 
+---
 
+## 11. Suporte ao visitante (widget + central da administração)
+
+Chat de suporte para quem ainda não tem conta, com o mesmo transporte do chat de
+consultas: WebSocket quando o Reverb está disponível e polling HTTP quando não
+está. A conversa é persistida em `support_conversations`/`support_messages`.
+
+### 11.1 Identidade e rotas
+
+O visitante não tem sessão. Ao iniciar a conversa, o servidor grava apenas o
+hash SHA-256 de um token aleatório (`visitor_token_hash`) e devolve um cookie
+`HttpOnly` (`SUPPORT_COOKIE`, padrão `arcana_support`) com UUID + token. Nenhum
+endpoint aceita UUID vindo do corpo ou da URL: a conversa é sempre resolvida
+pelo cookie, e um token inválido significa perder o histórico naquele navegador.
+
+| Rota | Nome | Função |
+|---|---|---|
+| `GET /suporte/conversa` | `support.conversation.show` | histórico e estado; `after_id` para busca incremental |
+| `POST /suporte/conversa` | `support.conversation.store` | cria conversa (ou devolve a aberta) e grava o cookie |
+| `POST /suporte/mensagens` | `support.messages.store` | envia mensagem do visitante |
+| `POST /suporte/mensagens/lidas` | `support.messages.read` | zera as não lidas do visitante |
+| `POST /suporte/transmissao/autorizacao` | `support.broadcast.auth` | autoriza o canal privado do visitante pelo cookie |
+| `GET /admin/suporte/conversas` | `admin.support.conversations.index` | fila aberta ou histórico encerrado (`?status=closed`) |
+| `GET /admin/suporte/conversas/{conversation}` | `admin.support.conversations.show` | thread completa para a equipe |
+| `POST /admin/suporte/conversas/{conversation}/mensagens` | `admin.support.messages.store` | resposta da equipe |
+| `POST /admin/suporte/conversas/{conversation}/lidas` | `admin.support.messages.read` | zera as não lidas do painel |
+| `POST /admin/suporte/conversas/{conversation}/encerrar` | `admin.support.conversations.close` | encerra e libera a fila |
+| `POST /admin/suporte/presenca` | `admin.support.presence` | heartbeat de "Equipe online" |
+
+As rotas administrativas exigem `auth` + papel `admin`. O painel usa o endpoint
+padrão `/broadcasting/auth` (sessão web); o widget usa
+`/suporte/transmissao/autorizacao`, porque não existe sessão para o visitante.
+
+### 11.2 Canais e eventos
+
+| Canal | Quem entra | Eventos |
+|---|---|---|
+| `private-support.conversation.{uuid}` | visitante dono do cookie (somente conversa aberta) ou administrador ativo | `support.message`, `support.conversation` |
+| `private-support.inbox` | administrador ativo | `support.message`, `support.conversation` |
+
+- `SupportMessageSent` → `support.message` no canal da conversa. É a **visão do
+  visitante**: `sender_name` é `"Equipe Arcana"` para respostas da equipe e o
+  payload não contém `operator_message`, e-mail, token ou ID de administrador.
+- `SupportInboxMessageReceived` → `support.message` no canal `support.inbox`.
+  Carrega a visão do painel, com o nome real de quem respondeu, para que só
+  administradores vejam essa informação.
+- `SupportConversationUpdated` → `support.conversation` nos dois canais, com o
+  resumo público da conversa (status, `is_open`, `unread_count`, timestamps).
+  O widget usa esse evento para parar o polling e sair do canal quando a equipe
+  encerra a conversa.
+
+Separar o evento da caixa de entrada não é cosmético: um único evento com os
+dois payloads entregaria o nome do operador ao visitante, que só precisa saber
+que falou com a "Equipe Arcana".
+
+### 11.3 Polling e presença
+
+Sem WebSocket (`BROADCAST_CONNECTION=log` ou
+`CONSULTATION_WEBSOCKET_ENABLED=false`), `RealtimeMode::current()` devolve
+`poll` e os scripts usam os intervalos de `config/support.php`:
+
+- widget: `GET /suporte/conversa?after_id=` a cada `SUPPORT_POLL_VISITOR_MS`;
+- central: `GET /admin/suporte/conversas` e a thread ativa em
+  `SUPPORT_POLL_ADMIN_MS`/`SUPPORT_POLL_ADMIN_MESSAGES_MS`.
+
+Com Reverb conectado os mesmos endpoints continuam sendo consultados em
+`*_BACKUP_MS` como rede de segurança para reconexões. A presença é um cache
+heartbeat do painel: o visitante vê "Equipe online" enquanto algum
+administrador tiver batido o ponto dentro de `SUPPORT_PRESENCE_TTL_SECONDS`.
+
+### 11.4 Privacidade e limites
+
+- O payload do visitante nunca inclui `visitor_email` nem `visitor_token_hash`.
+- A equipe vê o e-mail apenas se o visitante o tiver informado.
+- Texto é renderizado com `textContent` no JavaScript e escaping no Blade.
+- Conversas encerradas ficam visíveis por `SUPPORT_CLOSED_HISTORY_DAYS`; o
+  expurgo definitivo é responsabilidade de rotina de manutenção.
+- Enviar mensagem em conversa encerrada responde `422`; sem cookie, `403`.
+
+`tests/Feature/SupportChatTest.php` cobre identidade por cookie, leitura/envio
+incremental, bloqueio de conversa encerrada, idempotência do início, fila e
+thread administrativas, presença, restrição a administradores, autorização dos
+dois canais privados e a separação dos payloads (nome do operador só no canal
+da equipe).

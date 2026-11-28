@@ -96,6 +96,11 @@
         @include('layouts.partials.realtime-alerts')
     @endunless
 
+    @if ($isAdmin)
+        {{-- Caixa de entrada do suporte em qualquer tela administrativa. --}}
+        @include('layouts.partials.support-inbox')
+    @endif
+
     @stack('scripts')
 </body>
 </html>

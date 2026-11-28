@@ -55,6 +55,8 @@
 
     @include('layouts.partials.footer-public')
 
+    @include('layouts.partials.support-widget')
+
     @stack('scripts')
 </body>
 </html>

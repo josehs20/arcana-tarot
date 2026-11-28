@@ -30,8 +30,12 @@ function realtimeMode() {
  * console. Quem chama recebe `null` e segue pela leitura periódica que já
  * existe em `chat.js`, `user-channel.js`, `consultation-workspace.js` e
  * `consultation-call.js`.
+ *
+ * `options.authEndpoint` permite que o visitante anônimo do suporte autorize o
+ * canal com o próprio cookie: `/broadcasting/auth` depende da sessão web e
+ * negaria o visitante. O restante do painel continua usando o endpoint padrão.
  */
-window.initializeEcho = () => {
+window.initializeEcho = (options = {}) => {
     if (realtimeMode() === 'poll') {
         return null;
     }
@@ -48,6 +52,7 @@ window.initializeEcho = () => {
 
     const scheme = import.meta.env.VITE_REVERB_SCHEME ?? 'https';
     const isSecure = scheme === 'https';
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
 
     echo = new Echo({
         broadcaster: 'reverb',
@@ -58,10 +63,11 @@ window.initializeEcho = () => {
         forceTLS: isSecure,
         enabledTransports: ['ws', 'wss'],
         disableStats: true,
-        authEndpoint: '/broadcasting/auth',
+        authEndpoint: options.authEndpoint ?? '/broadcasting/auth',
         auth: {
             headers: {
                 'X-Requested-With': 'XMLHttpRequest',
+                ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
             },
         },
     });
